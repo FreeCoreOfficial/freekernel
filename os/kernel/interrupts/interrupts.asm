@@ -1,22 +1,15 @@
-global irq0
-global irq1
 global idt_load
+global isr_stub
 
-extern irq_handler
+extern isr_handler
 
 idt_load:
     mov eax, [esp + 4]
     lidt [eax]
     ret
 
-irq0:
+isr_stub:
     pusha
-    call irq_handler
-    popa
-    iretd
-
-irq1:
-    pusha
-    call irq_handler
+    call isr_handler
     popa
     iretd

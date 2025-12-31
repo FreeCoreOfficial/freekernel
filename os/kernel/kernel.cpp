@@ -1,10 +1,10 @@
-extern "C" void gdt_init();
+extern "C" void idt_init();
 
-extern "C" void kernel_main() {
-    gdt_init();
+extern "C" void kernel_main()
+{
+    idt_init();
 
-    // deocamdată NU activăm întreruperi
-    // asm volatile("sti");
+    asm volatile("sti");
 
     while (1)
         asm volatile("hlt");

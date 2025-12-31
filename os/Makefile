@@ -20,6 +20,7 @@ OBJS = \
 	$(BUILD)/interrupts.o \
 	$(BUILD)/keyboard.o \
 	$(BUILD)/pic.o \
+	$(BUILD)/isr.o \
 	$(BUILD)/terminal.o
 
 
@@ -71,6 +72,9 @@ $(BUILD)/gdt.o: kernel/arch/i386/gdt.cpp | $(BUILD)
 
 $(BUILD)/gdt_flush.o: kernel/arch/i386/gdt.asm | $(BUILD)
 	$(AS) $(ASFLAGS) $< -o $@
+
+$(BUILD)/isr.o: kernel/interrupts/isr.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 
 
