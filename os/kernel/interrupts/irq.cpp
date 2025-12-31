@@ -1,5 +1,6 @@
 #include "../drivers/pic.h"
 #include "../terminal.h"
+#include "../drivers/pic.h"
 
 extern "C" void irq_handler(int irq)
 {

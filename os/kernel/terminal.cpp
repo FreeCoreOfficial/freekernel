@@ -1,9 +1,11 @@
+#include <stdint.h>
 #include "terminal.h"
 
 static uint16_t* vga = (uint16_t*)0xB8000;
 static int row = 0, col = 0;
 
-extern "C" void terminal_putchar(char c) {
+extern "C" void terminal_putchar(char c)
+{
     if (c == '\n') {
         row++;
         col = 0;
@@ -17,4 +19,10 @@ extern "C" void terminal_putchar(char c) {
         col = 0;
         row++;
     }
+}
+
+extern "C" void terminal_writestring(const char* str)
+{
+    while (*str)
+        terminal_putchar(*str++);
 }
