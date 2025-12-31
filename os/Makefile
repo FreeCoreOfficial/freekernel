@@ -18,6 +18,7 @@ OBJS = \
 	$(BUILD)/interrupts.o \
 	$(BUILD)/keyboard.o \
 	$(BUILD)/pic.o \
+	$(BUILD)/gdt.o \
 	$(BUILD)/terminal.o
 
 # -------------------------
@@ -62,6 +63,13 @@ $(BUILD)/interrupts.o: kernel/interrupts/interrupts.asm | $(BUILD)
 
 $(BUILD)/pic.o: kernel/drivers/pic.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/gdt.o: kernel/arch/i386/gdt.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/gdt_flush.o: kernel/arch/i386/gdt.asm | $(BUILD)
+	$(AS) $(ASFLAGS) $< -o $@
+
 
 
 
