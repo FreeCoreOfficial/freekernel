@@ -12,7 +12,11 @@ KERNEL = kernel.bin
 
 OBJS = \
 	$(BUILD)/boot.o \
-	$(BUILD)/kernel.o
+	$(BUILD)/kernel.o \
+	$(BUILD)/idt.o \
+	$(BUILD)/irq.o \
+	$(BUILD)/keyboard.o \
+	$(BUILD)/terminal.o
 
 # -------------------------
 # TARGETURI PRINCIPALE
@@ -25,17 +29,41 @@ all: $(ISO)/boot/$(KERNEL)
 $(BUILD):
 	mkdir -p $(BUILD)
 
+# -------------------------
+# ASSEMBLY
+# -------------------------
+
 $(BUILD)/boot.o: kernel/boot.asm | $(BUILD)
 	$(AS) $(ASFLAGS) $< -o $@
 
+# -------------------------
+# C++ OBJECTS
+# -------------------------
+
 $(BUILD)/kernel.o: kernel/kernel.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/idt.o: kernel/arch/i386/idt.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/irq.o: kernel/interrupts/irq.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/keyboard.o: kernel/drivers/keyboard.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/terminal.o: kernel/terminal.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+# -------------------------
+# LINK
+# -------------------------
 
 $(ISO)/boot/$(KERNEL): $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 
 # -------------------------
-# COMENZI UTILE
+# UTILITARE
 # -------------------------
 
 iso: all

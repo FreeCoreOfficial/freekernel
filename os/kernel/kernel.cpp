@@ -1,13 +1,10 @@
+extern "C" void idt_init();
+
 extern "C" void kernel_main() {
-    const char* msg = "Hello from Chrysalis OS!";
-    char* video = (char*)0xB8000;
+    idt_init();
 
-    for (int i = 0; msg[i] != 0; i++) {
-        video[i * 2] = msg[i];
-        video[i * 2 + 1] = 0x0F;
-    }
+    asm volatile("sti");
 
-    while (true) {
+    while (1)
         asm volatile("hlt");
-    }
 }
