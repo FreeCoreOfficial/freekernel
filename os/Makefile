@@ -26,7 +26,12 @@ OBJS = \
 	$(BUILD)/cmd_clear.o \
 	$(BUILD)/cmd_reboot.o \
 	$(BUILD)/cmd_shutdown.o \
-	$(BUILD)/cmd_registry.o
+	$(BUILD)/cmd_registry.o \
+	$(BUILD)/fs.o \
+	$(BUILD)/cmd_ls.o \
+	$(BUILD)/cmd_cat.o \
+	$(BUILD)/cmd_touch.o
+
 
 
 
@@ -97,6 +102,17 @@ $(BUILD)/cmd_shutdown.o: kernel/cmds/shutdown.cpp | $(BUILD)
 $(BUILD)/cmd_registry.o: kernel/cmds/registry.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/fs.o: kernel/fs/fs.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_ls.o: kernel/cmds/ls.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_cat.o: kernel/cmds/cat.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_touch.o: kernel/cmds/touch.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------
 # LINK
