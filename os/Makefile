@@ -15,6 +15,7 @@ OBJS = \
 	$(BUILD)/kernel.o \
 	$(BUILD)/idt.o \
 	$(BUILD)/irq.o \
+	$(BUILD)/interrupts.o \
 	$(BUILD)/keyboard.o \
 	$(BUILD)/terminal.o
 
@@ -54,6 +55,10 @@ $(BUILD)/keyboard.o: kernel/drivers/keyboard.cpp | $(BUILD)
 
 $(BUILD)/terminal.o: kernel/terminal.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/interrupts.o: kernel/interrupts/interrupts.asm | $(BUILD)
+	$(AS) $(ASFLAGS) $< -o $@
+
 
 # -------------------------
 # LINK

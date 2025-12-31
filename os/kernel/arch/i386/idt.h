@@ -14,4 +14,4 @@ struct IDTPointer {
     uint32_t base;
 } __attribute__((packed));
 
-void idt_init();
+extern "C" void idt_init();
