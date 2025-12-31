@@ -1,38 +1,33 @@
 #include "shell.h"
 #include "../terminal.h"
 
-static char input_buffer[128];
-static int input_len = 0;
+static char buffer[128];
+static int index = 0;
 
-static void shell_prompt() {
-    terminal_writestring("> ");
+void shell_init() {
+    index = 0;
 }
 
-extern "C" void shell_init() {
-    input_len = 0;
-    shell_prompt();
-}
-
-extern "C" void shell_handle_char(char c) {
+void shell_handle_char(char c) {
     if (c == '\n') {
-        terminal_putchar('\n');
+        buffer[index] = 0;
 
-        // momentan doar resetăm linia
-        input_len = 0;
-        shell_prompt();
+        terminal_putchar('\n');
+        terminal_putchar('>');
+        terminal_putchar(' ');
+
+        index = 0;
         return;
     }
 
     if (c == '\b') {
-        if (input_len > 0) {
-            input_len--;
-            terminal_putchar('\b');
-        }
+        if (index > 0) index--;
+        terminal_putchar('\b');
         return;
     }
 
-    if (input_len < 127) {
-        input_buffer[input_len++] = c;
+    if (index < 127) {
+        buffer[index++] = c;
         terminal_putchar(c);
     }
 }

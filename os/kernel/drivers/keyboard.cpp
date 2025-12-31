@@ -20,9 +20,7 @@ extern "C" void keyboard_handler()
         return;
 
     char c = keymap[scancode];
-    if (c)
-        terminal_putchar(c);
-    
+
     if (c)
     shell_handle_char(c);
 

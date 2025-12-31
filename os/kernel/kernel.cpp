@@ -2,6 +2,8 @@
 #include "drivers/pic.h"
 #include "arch/i386/gdt.h"
 #include "arch/i386/idt.h"
+#include "shell/shell.h"
+
 
 extern "C" void kernel_main() {
     gdt_init();

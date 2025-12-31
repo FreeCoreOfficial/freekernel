@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "keyboard.h"
 #include "../terminal.h"
+#include "../shell/shell.h"
 
 static const char keymap[128] = {
     0, 27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b',
@@ -20,5 +21,6 @@ extern "C" void keyboard_handler()
 
     char c = keymap[scancode];
     if (c)
-        terminal_putchar(c);
+    shell_handle_char(c);
+
 }
