@@ -1,14 +1,20 @@
+#include "terminal.h"
 #include "drivers/pic.h"
 #include "arch/i386/gdt.h"
 #include "arch/i386/idt.h"
 
-extern "C" void kernel_main()
-{
+extern "C" void kernel_main() {
     gdt_init();
     idt_init();
     pic_remap();
 
+    terminal_init();
+    terminal_writestring("Chrysalis OS\n");
+    terminal_writestring("Type commands below:\n> ");
+
     asm volatile("sti");
 
-    while (1);
+    while (1) {
+        asm volatile("hlt");
+    }
 }
