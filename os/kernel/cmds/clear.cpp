@@ -1,6 +1,6 @@
-#include "command.h"
+#include "clear.h"
 #include "../terminal.h"
 
-void cmd_clear(const char*) {
+extern "C" void cmd_clear(const char*) {
     terminal_clear();
 }
