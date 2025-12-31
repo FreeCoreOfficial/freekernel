@@ -1,0 +1,4 @@
+each command has :
+
+const char* name;
+void (*handler)(const char* args);

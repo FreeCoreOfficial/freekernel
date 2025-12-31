@@ -22,7 +22,12 @@ OBJS = \
 	$(BUILD)/pic.o \
 	$(BUILD)/shell.o \
 	$(BUILD)/isr.o \
-	$(BUILD)/terminal.o
+	$(BUILD)/terminal.o \
+	$(BUILD)/cmd_clear.o \
+	$(BUILD)/cmd_reboot.o \
+	$(BUILD)/cmd_shutdown.o \
+	$(BUILD)/cmd_registry.o
+
 
 
 # -------------------------
@@ -80,7 +85,17 @@ $(BUILD)/isr.o: kernel/interrupts/isr.cpp | $(BUILD)
 $(BUILD)/shell.o: kernel/shell/shell.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/cmd_clear.o: kernel/cmds/clear.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/cmd_reboot.o: kernel/cmds/reboot.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_shutdown.o: kernel/cmds/shutdown.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_registry.o: kernel/cmds/registry.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 
 # -------------------------
