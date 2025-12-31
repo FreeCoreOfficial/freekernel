@@ -9,6 +9,7 @@ extern "C" void kernel_main() {
     pic_remap();
 
     terminal_init();
+    shell_init();
     terminal_writestring("Chrysalis OS\n");
     terminal_writestring("Type commands below:\n> ");
 
