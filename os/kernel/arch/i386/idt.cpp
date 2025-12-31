@@ -22,8 +22,9 @@ extern "C" void idt_init() {
     for (int i = 0; i < 256; i++)
         set_gate(i, 0);
 
-    set_gate(32, (uint32_t)irq0);
-    set_gate(33, (uint32_t)irq1);
+set_gate(32, (uint32_t)irq0);
+set_gate(33, (uint32_t)irq1);
+
 
     idt_load((uint32_t)&idtp);
 }
