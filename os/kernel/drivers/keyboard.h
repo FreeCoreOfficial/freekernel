@@ -1,4 +1,12 @@
 #pragma once
 #include <stdint.h>
 
-void keyboard_handle(uint8_t scancode);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void keyboard_handler();
+
+#ifdef __cplusplus
+}
+#endif

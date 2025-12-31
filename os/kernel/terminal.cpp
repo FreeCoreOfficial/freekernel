@@ -13,12 +13,12 @@ static void scroll() {
             vga[(y - 1) * 80 + x] = vga[y * 80 + x];
 
     for (int x = 0; x < 80; x++)
-        vga[(24) * 80 + x] = ' ' | (color << 8);
+        vga[24 * 80 + x] = ' ' | (color << 8);
 
     row = 24;
 }
 
-void terminal_clear() {
+extern "C" void terminal_clear() {
     for (int i = 0; i < 80 * 25; i++)
         vga[i] = ' ' | (color << 8);
 
@@ -26,7 +26,7 @@ void terminal_clear() {
     col = 0;
 }
 
-void terminal_putchar(char c) {
+extern "C" void terminal_putchar(char c) {
     if (c == '\n') {
         row++;
         col = 0;
@@ -50,11 +50,11 @@ void terminal_putchar(char c) {
     }
 }
 
-void terminal_writestring(const char* s) {
+extern "C" void terminal_writestring(const char* s) {
     while (*s)
         terminal_putchar(*s++);
 }
 
-void terminal_init() {
+extern "C" void terminal_init() {
     terminal_clear();
 }

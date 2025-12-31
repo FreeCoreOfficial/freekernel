@@ -1,7 +1,6 @@
 #include <stdint.h>
-#include "terminal.h"
-
-extern "C" void keyboard_handler();
+#include "keyboard.h"
+#include "../terminal.h"
 
 static const char keymap[128] = {
     0, 27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b',
@@ -11,7 +10,8 @@ static const char keymap[128] = {
     0,'*',0,' '
 };
 
-extern "C" void keyboard_handler() {
+extern "C" void keyboard_handler()
+{
     uint8_t scancode;
     asm volatile("inb %1, %0" : "=a"(scancode) : "Nd"(0x60));
 
