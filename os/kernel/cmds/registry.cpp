@@ -1,13 +1,10 @@
-#include "command.h"
-
-extern "C" {
-
-void cmd_clear(const char*);
-void cmd_reboot(const char*);
-void cmd_shutdown(const char*);
-void cmd_ls(const char*);
-void cmd_cat(const char*);
-void cmd_touch(const char*);
+#include "registry.h"
+#include "clear.h"
+#include "reboot.h"
+#include "shutdown.h"
+#include "ls.h"
+#include "cat.h"
+#include "touch.h"
 
 Command command_table[] = {
     { "clear",    cmd_clear },
@@ -15,9 +12,7 @@ Command command_table[] = {
     { "shutdown", cmd_shutdown },
     { "ls",       cmd_ls },
     { "cat",      cmd_cat },
-    { "touch",    cmd_touch },
+    { "touch",    cmd_touch }
 };
 
 int command_count = sizeof(command_table) / sizeof(Command);
-
-}

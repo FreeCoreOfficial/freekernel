@@ -5,14 +5,14 @@
 static char buffer[128];
 static int index = 0;
 
-/* mini strcmp */
+/* mini strcmp 
 static int strcmp(const char* a, const char* b) {
     while (*a && (*a == *b)) {
         a++;
         b++;
     }
     return *(const unsigned char*)a - *(const unsigned char*)b;
-}
+}*/
 
 static void execute_command(const char* input) {
     for (int i = 0; i < command_count; i++) {
