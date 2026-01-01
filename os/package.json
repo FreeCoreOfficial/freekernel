@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
   "scripts": {
-    "all" : "clear ; make clean ; make ; make iso"
+    "all" : "clear ; make clean ; make ; make iso ; make run"
   }
 }
