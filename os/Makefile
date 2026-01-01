@@ -40,7 +40,7 @@ OBJS = \
 # TARGETURI PRINCIPALE
 # -------------------------
 
-.PHONY: all iso run clean help
+.PHONY: all iso run clean help consolerun
 
 all: $(ISO)/boot/$(KERNEL)
 
@@ -144,6 +144,12 @@ run: iso
 clean:
 	rm -rf build *.iso
 
+consolerun: iso
+	qemu-system-x86_64 \
+		-cdrom chrysalis.iso \
+		-nographic \
+		-serial stdio
+
 # -------------------------
 # HELP
 # -------------------------
@@ -157,4 +163,5 @@ help:
 	@echo "make run       -> ruleaza OS-ul in QEMU"
 	@echo "make clean     -> sterge fisierele generate"
 	@echo "make help      -> afiseaza acest mesaj"
+	@echo "make consolerun -> ruleaza in terminal qemu"
 	@echo ""
