@@ -7,28 +7,52 @@
 #include "shell/shell.h"
 #include "fs/fs.h"
 #include "bootlogo/bootlogo.h"
+#include "debug/load.h"
 
 extern "C" void kernel_main() {
+
+    load_begin("GDT");
     gdt_init();
+    load_ok();
+
+    load_begin("IDT");
     idt_init();
+    load_ok();
+
+    load_begin("PIC");
     pic_remap();
+    load_ok();
 
+    load_begin("Terminal");
     terminal_init();
+    load_ok();
+
+    load_begin("Boot logo");
     bootlogo_show();
+    load_ok();
 
+    load_begin("Filesystem");
     fs_init();
-    shell_init();
+    load_ok();
 
-    keyboard_init();   // IRQ1
-    pit_init(100);     // IRQ0
+    load_begin("Shell");
+    shell_init();
+    load_ok();
+
+    load_begin("Keyboard IRQ");
+    keyboard_init();
+    load_ok();
+
+    load_begin("PIT");
+    pit_init(100);
+    load_ok();
 
     asm volatile("sti");
 
-    terminal_writestring("Chrysalis OS\n");
-    terminal_writestring("Type commands below:\n> ");
+    terminal_writestring("\nSystem ready.\n> ");
 
-    while (1) {
+    while (1)
         asm volatile("hlt");
-    }
 }
+
 
