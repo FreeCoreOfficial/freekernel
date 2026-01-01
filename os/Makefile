@@ -37,7 +37,9 @@ OBJS = \
 	$(BUILD)/serial.o \
 	$(BUILD)/rtc.o \
 	$(BUILD)/clock.o \
-$(BUILD)/cmd_date.o
+$(BUILD)/cmd_date.o \
+$(BUILD)/speaker.o \
+$(BUILD)/cmd_beep.o \
 
 
 
@@ -143,6 +145,11 @@ $(BUILD)/clock.o: kernel/time/clock.cpp | $(BUILD)
 $(BUILD)/cmd_date.o: kernel/cmds/date.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/speaker.o: kernel/drivers/speaker.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_beep.o: kernel/cmds/beep.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------
 # LINK
@@ -159,7 +166,8 @@ iso: all
 	grub-mkrescue -o chrysalis.iso $(ISO)
 
 run: iso
-	qemu-system-x86_64 -cdrom chrysalis.iso
+	qemu-system-x86_64 -cdrom chrysalis.iso -soundhw pcspk
+
 
 clean:
 	rm -rf build *.iso
