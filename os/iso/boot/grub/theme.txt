@@ -1,0 +1,23 @@
+# =========================
+# Chrysalis OS GRUB Theme
+# =========================
+
+desktop-image: "background.png"
+
+title-text: "Chrysalis OS"
+title-font: "unicode"
+title-color: "#ffffff"
+title-text-align: "center"
+title-top: "10%"
+
++ boot_menu {
+    left = "35%"
+    top = "45%"
+    width = "30%"
+    height = "30%"
+
+    item_font = "unicode"
+    item_color = "#cccccc"
+    selected_item_color = "#ffffff"
+    selected_item_highlight = "yes"
+}

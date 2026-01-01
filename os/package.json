@@ -19,6 +19,9 @@
     "run-debug": "qemu-system-x86_64 -cdrom chrysalis.iso -serial stdio -d int",
 
     "//_run-gdb": "Porneste in mod asteptare pentru depanare cu GDB",
-    "run-gdb": "qemu-system-x86_64 -cdrom chrysalis.iso -s -S"
+    "run-gdb": "qemu-system-x86_64 -cdrom chrysalis.iso -s -S",
+
+    "//font-get": "face rost de fontu din grub",
+    "font-get": "grub-mkfont -s 24 -o iso/boot/grub/unicode.pf2 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
   }
 }
