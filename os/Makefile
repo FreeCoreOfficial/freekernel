@@ -166,8 +166,7 @@ iso: all
 	grub-mkrescue -o chrysalis.iso $(ISO)
 
 run: iso
-	qemu-system-x86_64 -cdrom chrysalis.iso -soundhw pcspk
-
+	qemu-system-x86_64 -cdrom chrysalis.iso
 
 clean:
 	rm -rf build *.iso
@@ -190,4 +189,5 @@ help:
 	@echo "make clean     -> sterge fisierele generate"
 	@echo "make help      -> afiseaza acest mesaj"
 	@echo "make consolerun -> ruleaza in terminal qemu"
+	@echo "npm run audiorun -> ruleaza audio in qemu"
 	@echo ""

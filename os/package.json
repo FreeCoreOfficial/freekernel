@@ -1,6 +1,7 @@
 {
   "version": "1.0.0",
   "scripts": {
-    "all" : "clear ; make clean ; make ; make iso ; make run"
+    "all" : "clear ; make clean ; make ; make iso",
+    "audiorun": "qemu-system-x86_64 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -cdrom chrysalis.iso"
   }
 }
