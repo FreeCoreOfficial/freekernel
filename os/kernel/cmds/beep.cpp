@@ -2,20 +2,13 @@
 #include "../drivers/shortcuts.h"
 #include "../terminal.h"
 
-extern "C" void cmd_beep(const char* args)
+extern "C" void cmd_beep(const char*)
 {
-    (void)args;
+    terminal_writestring("Beep (Ctrl+C to stop)\n");
 
-    terminal_writestring("Beep! (Ctrl+C to stop)\n");
-
-    shortcut_ctrl_c = false;
-
-    speaker_on(440);
-
-    while (!shortcut_ctrl_c) {
-        asm volatile("hlt");
+    while (!shortcut_ctrl_c()) {
+        speaker_on(440);
     }
 
     speaker_stop();
-    terminal_writestring("^C\n");
 }

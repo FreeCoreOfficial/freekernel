@@ -40,6 +40,8 @@ OBJS = \
 $(BUILD)/cmd_date.o \
 $(BUILD)/speaker.o \
 $(BUILD)/cmd_beep.o \
+$(BUILD)/audio.o \
+$(BUILD)/shortcuts.o
 
 
 
@@ -149,6 +151,12 @@ $(BUILD)/speaker.o: kernel/drivers/speaker.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/cmd_beep.o: kernel/cmds/beep.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/audio.o: kernel/drivers/audio/audio.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/shortcuts.o: kernel/drivers/shortcuts.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------
