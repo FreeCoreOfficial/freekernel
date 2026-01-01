@@ -13,6 +13,7 @@
 /* state flags */
 static int ctrl_pressed = 0;
 static int shift_pressed = 0;
+static int altgr_pressed = 0;   // <- adăugat
 
 /* trimite EOI la PIC */
 static inline void pic_send_eoi(void) {
@@ -46,6 +47,12 @@ extern "C" void keyboard_handler(registers_t* regs)
             handled = true;
         }
 
+        /* AltGr (Right Alt) release - simplificat */
+        if (sc == 0x38) {
+            altgr_pressed = 0;
+            handled = true;
+        }
+
         /* ignore other releases */
         if (!handled)
             handled = true;
@@ -63,9 +70,14 @@ extern "C" void keyboard_handler(registers_t* regs)
             ctrl_pressed = 1;
             handled = true;
         }
+        /* AltGr (Right Alt) press - simplificat */
+        else if (scancode == 0x38) {
+            altgr_pressed = 1;
+            handled = true;
+        }
         else {
-            /* translate scancode -> char using current keymap + shift flag */
-            char c = keymap_translate(scancode, shift_pressed);
+            /* translate scancode -> char using current keymap + shift + altgr flags */
+            char c = keymap_translate(scancode, shift_pressed, altgr_pressed);
 
             if (c) {
                 /* notify shortcuts about the produced character (ex: 'l') */

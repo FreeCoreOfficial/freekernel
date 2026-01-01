@@ -14,6 +14,7 @@
 #include "drivers/audio/audio.h"
 #include "drivers/mouse.h"
 #include "input/keyboard_buffer.h" // pentru kbd_buffer_init()
+#include "video/vga.h"
 
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
 #ifdef __cplusplus
@@ -24,8 +25,39 @@ void shell_poll_input(void);
 }
 #endif
 
+/* --- DEBUG: activează asta pentru test rapid VGA --- */
+/* Dacă vrei să rulezi testul VGA și apoi să blochezi, lasă VGA_TEST definit. */
+/* După verificare, elimină/dezactivează acest define pentru a reveni la fluxul normal. */
+#define VGA_TEST 1
+
 extern "C" void kernel_main() {
 
+#if VGA_TEST
+    /* Test VGA graphics mode (mode 13h) */
+    vga_init();
+    vga_clear(0); // culoare 0 = negru
+
+    /* desenăm o diagonală de test (culoare 15 = alb) */
+    for (int i = 0; i < 200; i++) {
+        vga_putpixel(i, i, 15);
+    }
+
+    /* desenăm și un chenar simplu pentru a confirma desenul pe ecran */
+    for (int x = 10; x < 310; x++) {
+        vga_putpixel(x, 10, 14);
+        vga_putpixel(x, 190, 14);
+    }
+    for (int y = 10; y < 190; y++) {
+        vga_putpixel(10, y, 14);
+        vga_putpixel(310, y, 14);
+    }
+
+    /* rămânem blocați aici pentru a putea verifica vizual rezultatul în QEMU */
+    for (;;)
+        asm volatile("hlt");
+
+#else
+    /* Revenire la inițializările normale (originale) */
     // load_begin("GDT");
     gdt_init();
     // load_ok();
@@ -89,4 +121,5 @@ extern "C" void kernel_main() {
         shell_poll_input();
         asm volatile("hlt");
     }
+#endif
 }
