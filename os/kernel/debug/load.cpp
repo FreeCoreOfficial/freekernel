@@ -1,6 +1,8 @@
 #include "load.h"
 #include "../terminal.h"
 
+extern "C" {
+
 static const char* current = nullptr;
 
 void load_begin(const char* name)
@@ -22,4 +24,6 @@ void load_fail()
     terminal_writestring("\r[FAIL] ");
     terminal_writestring(current);
     terminal_writestring("\n");
+}
+
 }
