@@ -31,7 +31,9 @@ OBJS = \
 	$(BUILD)/fs.o \
 	$(BUILD)/cmd_ls.o \
 	$(BUILD)/cmd_cat.o \
-	$(BUILD)/cmd_touch.o
+	$(BUILD)/cmd_touch.o \
+	$(BUILD)/pit.o
+
 
 
 
@@ -116,6 +118,9 @@ $(BUILD)/cmd_touch.o: kernel/cmds/touch.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/bootlogo.o: kernel/bootlogo/bootlogo.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/pit.o: kernel/drivers/pit.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------

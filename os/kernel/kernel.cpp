@@ -5,12 +5,14 @@
 #include "shell/shell.h"
 #include "fs/fs.h"
 #include "bootlogo/bootlogo.h"
+#include "drivers/pit.h"
 
 
 extern "C" void kernel_main() {
     gdt_init();
     idt_init();
     pic_remap();
+    
 
     terminal_init();
     bootlogo_show();
@@ -21,7 +23,15 @@ extern "C" void kernel_main() {
 
     asm volatile("sti");
 
+    pit_init(100); // 100 Hz = 10ms
+
     while (1) {
         asm volatile("hlt");
     }
 }
+extern "C" uint64_t pit_get_ticks();
+
+if (pit_get_ticks() % 100 == 0) {
+    terminal_writestring(".");
+}
+
