@@ -7,45 +7,50 @@
 #include "shell/shell.h"
 #include "fs/fs.h"
 #include "bootlogo/bootlogo.h"
-#include "debug/load.h"
+// #include "debug/load.h"   // dezactivat temporar
+#include "drivers/serial.h"
 
 extern "C" void kernel_main() {
 
-    load_begin("GDT");
+    // load_begin("GDT");
     gdt_init();
-    load_ok();
+    // load_ok();
 
-    load_begin("IDT");
+    // load_begin("IDT");
     idt_init();
-    load_ok();
+    // load_ok();
 
-    load_begin("PIC");
+    // load_begin("PIC");
     pic_remap();
-    load_ok();
+    // load_ok();
 
-    load_begin("Terminal");
+    // load_begin("Terminal");
     terminal_init();
-    load_ok();
+    // load_ok();
 
-    load_begin("Boot logo");
+    // load_begin("Boot logo");
     bootlogo_show();
-    load_ok();
+    // load_ok();
 
-    load_begin("Filesystem");
+    // load_begin("Filesystem");
     fs_init();
-    load_ok();
+    // load_ok();
 
-    load_begin("Shell");
+    // load_begin("Shell");
     shell_init();
-    load_ok();
+    // load_ok();
 
-    load_begin("Keyboard IRQ");
+    // load_begin("Keyboard IRQ");
     keyboard_init();
-    load_ok();
+    // load_ok();
 
-    load_begin("PIT");
+    // load_begin("PIT");
     pit_init(100);
-    load_ok();
+    // load_ok();
+
+    // serial debug (optional)
+    serial_init();
+    serial_write_string("=== Chrysalis OS serial online ===\r\n");
 
     asm volatile("sti");
 
@@ -54,5 +59,3 @@ extern "C" void kernel_main() {
     while (1)
         asm volatile("hlt");
 }
-
-
