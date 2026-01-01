@@ -34,7 +34,7 @@ void shell_poll_input(void);
 /* Debug/test flag:
    - dacă rămâne definit, kernel va încerca testul grafic, DAR doar dacă framebufferul e prezent și suficient.
 */
-#define VGA_TEST 1
+#define VGA_TEST 0 // la dracu cu video suport
 
 /* Minimal multiboot info (only fields we read) */
 typedef struct {
