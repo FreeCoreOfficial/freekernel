@@ -13,7 +13,7 @@
 | ✅      | Keyboard (IRQ1)     | funcționează                 |
 | ✅      | Terminal VGA (text) | stabil                       |
 | ✅     | Serial COM1         | stabil |
-| 🔲     | CMOS / RTC          | ușor, util                   |
+| ✅     | CMOS / RTC          | ușor, util                   |
 | 🔲     | PC Speaker          | simplu + fun                 |
 
 
