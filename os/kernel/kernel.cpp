@@ -10,6 +10,7 @@
 // #include "debug/load.h"   // dezactivat temporar
 #include "drivers/serial.h"
 #include "drivers/rtc.h"
+#include "time/clock.h"
 
 extern "C" void kernel_main() {
 
@@ -56,7 +57,13 @@ extern "C" void kernel_main() {
     asm volatile("sti");
 
     terminal_writestring("\nSystem ready.\n> ");
-rtc_print();
+
+
+    rtc_print();
+
+    time_init();
+time_set_timezone(2); // România
+
 
     while (1)
         asm volatile("hlt");
