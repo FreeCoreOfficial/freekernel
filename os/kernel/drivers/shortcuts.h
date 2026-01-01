@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 void shortcuts_handle_scancode(uint8_t scancode);
-int shortcut_ctrl_c();
+int shortcut_ctrl_c(void);
 
 #ifdef __cplusplus
 }

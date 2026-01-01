@@ -156,8 +156,10 @@ $(BUILD)/cmd_beep.o: kernel/cmds/beep.cpp | $(BUILD)
 $(BUILD)/audio.o: kernel/drivers/audio/audio.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
-$(BUILD)/shortcuts.o: kernel/drivers/shortcuts.cpp | $(BUILD)
+$(BUILD)/shortcuts.o: kernel/shortcuts/shortcuts.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+
 
 # -------------------------
 # LINK

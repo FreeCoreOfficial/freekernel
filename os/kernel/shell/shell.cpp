@@ -35,7 +35,9 @@ static void execute_command(const char* input) {
 
 void shell_init() {
     index = 0;
+    terminal_writestring("> ");
 }
+
 
 void shell_handle_char(char c) {
     if (c == '\n') {
@@ -62,3 +64,12 @@ void shell_handle_char(char c) {
         terminal_putchar(c);
     }
 }
+
+void shell_reset_input(void) {
+    index = 0;
+}
+
+void shell_prompt(void) {
+    terminal_writestring("> ");
+}
+

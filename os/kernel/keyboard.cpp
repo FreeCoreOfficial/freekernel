@@ -4,6 +4,7 @@
 #include "../interrupts/irq.h"
 #include "../terminal.h"
 #include "../shell/shell.h"
+#include "../drivers/shortcuts.h"
 
 /* US QWERTY keymap */
 static const char keymap[128] = {
@@ -15,10 +16,15 @@ static const char keymap[128] = {
 };
 
 /* IRQ1 handler */
-static void keyboard_irq(registers_t*) {
+static void keyboard_irq(registers_t*)
+{
     uint8_t scancode;
     asm volatile("inb %1, %0" : "=a"(scancode) : "Nd"(0x60));
 
+    /* trimite scancode către shortcut system (Ctrl+C etc) */
+    shortcuts_handle_scancode(scancode);
+
+    /* ignorăm key release */
     if (scancode & 0x80)
         return;
 
@@ -27,7 +33,7 @@ static void keyboard_irq(registers_t*) {
         shell_handle_char(c);
 }
 
-/* public init */
-void keyboard_init() {
+extern "C" void keyboard_init()
+{
     irq_install_handler(1, keyboard_irq);
 }

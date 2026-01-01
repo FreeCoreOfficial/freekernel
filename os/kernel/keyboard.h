@@ -1,3 +1,12 @@
 #pragma once
+#include <stdint.h>
 
-void keyboard_init();
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void keyboard_init(void);
+
+#ifdef __cplusplus
+}
+#endif
