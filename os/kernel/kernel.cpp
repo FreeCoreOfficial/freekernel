@@ -13,6 +13,16 @@
 #include "time/clock.h"
 #include "drivers/audio/audio.h"
 #include "drivers/mouse.h"
+#include "input/keyboard_buffer.h" // pentru kbd_buffer_init()
+
+/* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void shell_poll_input(void);
+#ifdef __cplusplus
+}
+#endif
 
 extern "C" void kernel_main() {
 
@@ -44,6 +54,9 @@ extern "C" void kernel_main() {
     shell_init();
     // load_ok();
 
+    // init keyboard buffer BEFORE keyboard init
+    kbd_buffer_init();
+
     // load_begin("Keyboard IRQ");
     keyboard_init();
     // load_ok();
@@ -63,16 +76,17 @@ extern "C" void kernel_main() {
 
     terminal_writestring("\nSystem ready.\n> ");
 
-
     rtc_print();
 
-time_init();
-time_set_timezone(2);
+    time_init();
+    time_set_timezone(2);
 
-datetime t;
-time_get_local(&t);
+    datetime t;
+    time_get_local(&t);
 
-
-    while (1)
+    /* main loop: procesăm input din buffer, apoi idle */
+    while (1) {
+        shell_poll_input();
         asm volatile("hlt");
+    }
 }

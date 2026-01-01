@@ -46,6 +46,7 @@ $(BUILD)/string.o \
 $(BUILD)/cmd_play.o \
 $(BUILD)/mlb.o \
 $(BUILD)/mouse.o \
+$(BUILD)/keyboard_buffer.o \
 
 
 
@@ -174,6 +175,9 @@ $(BUILD)/mlb.o: kernel/mlb/mlb.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/mouse.o: kernel/drivers/mouse.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+	
+$(BUILD)/keyboard_buffer.o: kernel/input/keyboard_buffer.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------

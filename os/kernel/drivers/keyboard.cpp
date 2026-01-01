@@ -4,6 +4,7 @@
 #include "../interrupts/irq.h"
 #include "../shell/shell.h"
 #include "../shortcuts/shortcuts.h"
+#include "../input/keyboard_buffer.h"
 
 static int ctrl_pressed = 0;
 
@@ -58,7 +59,7 @@ extern "C" void keyboard_handler(registers_t* regs)
         /* normal input */
         if (!handled) {
             if (c) {
-                shell_handle_char(c);
+                kbd_push(c);
                 handled = true;
             }
         }

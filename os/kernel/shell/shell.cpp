@@ -1,6 +1,7 @@
 #include "shell.h"
 #include "../terminal.h"
 #include "../cmds/registry.h"
+#include "../input/keyboard_buffer.h"
 
 static char buffer[128];
 static int index = 0;
@@ -38,7 +39,6 @@ void shell_init() {
     terminal_writestring("> ");
 }
 
-
 void shell_handle_char(char c) {
     if (c == '\n') {
         buffer[index] = 0;
@@ -65,6 +65,15 @@ void shell_handle_char(char c) {
     }
 }
 
+/* --- new: poll input from keyboard buffer and feed shell --- */
+void shell_poll_input(void)
+{
+    while (kbd_has_char()) {
+        char c = kbd_get_char();
+        shell_handle_char(c);
+    }
+}
+
 void shell_reset_input(void) {
     index = 0;
 }
@@ -72,4 +81,3 @@ void shell_reset_input(void) {
 void shell_prompt(void) {
     terminal_writestring("> ");
 }
-
