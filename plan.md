@@ -44,7 +44,7 @@
 | ✅     | Partition table (MBR) | necesar             |
 | ✅     | FAT12 / FAT16         | ușor                |
 | ✅     | FAT32                 | mai greu            |
-| 🔲     | VFS                   | arhitectură curată  |
+| ✅     | VFS                   | arhitectură curată  |
 
 🟣 NIVEL 4 — Memorie
 (fără asta nu există multitasking real)
