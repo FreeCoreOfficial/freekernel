@@ -8,6 +8,8 @@
 #include "date.h"
 #include "beep.h"
 #include "play.h"
+#include "uptime.h"
+#include "ticks.h"
 
 Command command_table[] = {
     { "beep",     cmd_beep},
@@ -18,7 +20,10 @@ Command command_table[] = {
     { "shutdown", cmd_shutdown },
     { "ls",       cmd_ls },
     { "cat",      cmd_cat },
-    { "touch",    cmd_touch }
+    { "touch",    cmd_touch },
+    { "uptime", cmd_uptime },
+    { "ticks",  cmd_ticks  },
+
 };
 
 int command_count = sizeof(command_table) / sizeof(Command);

@@ -1,4 +1,3 @@
-// kernel/time/timer.h
 #pragma once
 #include <stdint.h>
 
@@ -7,7 +6,15 @@ extern "C" {
 #endif
 
 void timer_init(uint32_t frequency);
+
+/* raw tick counter */
 uint64_t timer_ticks(void);
+
+/* uptime helpers (SAFE, no 64-bit division) */
+uint32_t timer_uptime_seconds(void);
+uint32_t timer_uptime_ms(void);
+
+/* sleep using PIT ticks */
 void sleep(uint32_t ms);
 
 #ifdef __cplusplus

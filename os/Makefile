@@ -52,6 +52,8 @@ $(BUILD)/keymap_us.o \
 $(BUILD)/keymap_ro.o \
 $(BUILD)/vga.o \
     $(BUILD)/timer.o \
+	$(BUILD)/cmd_uptime.o \
+	$(BUILD)/cmd_ticks.o \
 
 
 
@@ -197,6 +199,12 @@ $(BUILD)/vga.o: kernel/video/vga.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/timer.o: kernel/time/timer.c | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_uptime.o: kernel/cmds/uptime.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_ticks.o: kernel/cmds/ticks.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------
