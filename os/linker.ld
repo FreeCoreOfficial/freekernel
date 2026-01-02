@@ -1,36 +1,23 @@
-OUTPUT_FORMAT("elf32-i386")
+/* repaired linker.ld - simple, ld-friendly layout */
 ENTRY(_start)
-
-PHDRS {
-  text PT_LOAD FLAGS (r x);
-  data PT_LOAD FLAGS (r w);
-}
 
 SECTIONS
 {
-    /* load address: 1MiB (typical for simple kernels) */
+    /* load address: 1MiB */
     . = 1M;
 
-    /* executable/read-only segment */
-    .text : {
-        *(.multiboot)
-        *(.text*)
-    } :text
+    .multiboot : { *(.multiboot) }
 
-    /* place readonly data in the executable segment */
-    .rodata : {
-        *(.rodata*)
-    } :text
+    .text : { *(.text*) }
 
-    /* read-write segment (data + bss) */
-    .data : {
-        *(.data*)
-    } :data
+    .rodata : { *(.rodata*) }
+
+    .data : { *(.data*) }
 
     .bss (NOLOAD) : {
         *(.bss*)
         *(COMMON)
-    } :data
+    }
 
     /DISCARD/ : { *(.eh_frame) }
 }

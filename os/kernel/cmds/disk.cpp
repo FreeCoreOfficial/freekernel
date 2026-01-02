@@ -1,36 +1,22 @@
+/* repaired disk.cpp - freestanding-friendly (no <string.h>/<stdio.h>/<stdlib.h>) */
 #include "disk.h"
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdarg.h>
 
 #include "../storage/ata.h"
 #include "../terminal.h"
 
-/* Simple, self-contained disk command that implements:
- *  disk --list
- *  disk --usage / --help
- *  disk --init
- *  disk --assign <letter> <lba> <count>
- *  disk --format <letter>   (quick: write zeros to first part of partition)
- *  disk --test --write <lba>    (write pattern to lba)
- *  disk --test --output <lba>   (read and dump one sector)
- *  disk --test --see-raw <lba> <count>
- *
- * Notes:
- *  - This command uses the ATA layer (ata_identify, ata_read_sector,
- *    ata_write_sector). It assumes those functions are available and
- *    working (as in your kernel storage/ata).
- *  - MBR writes are protected by default. --init will explicitly enable
- *    MBR writes during the single write operation.
- *  - The arg parser is minimal and stack-based (no heap).
- */
+/* Minimal freestanding helpers (avoid host libc headers that pull in bits/...) */
+static size_t k_strlen(const char* s) {
+    const char* p = s; while (*p) ++p; return (size_t)(p - s);
+}
+static int k_strcmp(const char* a, const char* b) {
+    while (*a && *b && *a == *b) { ++a; ++b; }
+    return (unsigned char)*a - (unsigned char)*b;
+}
 
-/* Provide tiny replacements for memcpy/sprintf used here so the file links
- * correctly in a freestanding kernel build (where full libc may be absent).
- */
+/* Tiny memcpy / sprintf replacements for freestanding linking */
 static void* k_memcpy(void* dst, const void* src, size_t n)
 {
     unsigned char* d = (unsigned char*)dst;
@@ -41,7 +27,6 @@ static void* k_memcpy(void* dst, const void* src, size_t n)
 
 static char* u32_to_dec(char* out, uint32_t v)
 {
-    // writes decimal and returns pointer after end
     char tmp[12]; int ti = 0;
     if (v == 0) { out[0] = '0'; return out + 1; }
     while (v > 0) { tmp[ti++] = (char)('0' + (v % 10)); v /= 10; }
@@ -89,7 +74,6 @@ static int k_sprintf(char* out, const char* fmt, ...)
                 *p++ = '%'; break;
             }
             default: {
-                // unknown specifier: copy it literally
                 *p++ = '%'; *p++ = *f; break;
             }
         }
@@ -100,26 +84,22 @@ static int k_sprintf(char* out, const char* fmt, ...)
     return (int)(p - out);
 }
 
-// replace standard names used in this file
+/* map standard names used in this file to our implementations */
 #define memcpy k_memcpy
 #define sprintf k_sprintf
+#define strlen k_strlen
+#define strcmp k_strcmp
 
 /* Small helpers ----------------------------------------------------------*/
 static void println(const char* s) { terminal_writestring((char*)s); terminal_writestring("\n"); }
 static void print(const char* s)  { terminal_writestring((char*)s); }
 
-/* Lightweight decimal parser to avoid relying on <cstdlib>/atoi being
- * visible in this C++ freestanding environment. Accepts only positive
- * decimal integers.
- */
+/* Lightweight decimal parser (positive integers only) */
 static uint32_t parse_u32(const char* s)
 {
     if (!s) return 0;
     uint32_t v = 0;
-    while (*s >= '0' && *s <= '9') {
-        v = v * 10 + (uint32_t)(*s - '0');
-        s++;
-    }
+    while (*s >= '0' && *s <= '9') { v = v * 10 + (uint32_t)(*s - '0'); s++; }
     return v;
 }
 
@@ -141,15 +121,10 @@ static void hexdump(const uint8_t* buf, int count)
         hexdump_line(buf, i, (count - i) >= 16 ? 16 : (count - i));
 }
 
-/* Simple arg splitter: splits args string into argv[] (max 16 parts). Returns argc.
- * The returned argv[] points into a temporary buffer created on the stack via
- * a local copy of args. This is intentionally simple and acceptable for small
- * shell commands in kernel space.
- */
+/* Arg splitter (no heap) */
 static int split_args(const char* args_orig, char* argv[], int max_args, char* store, int store_size)
 {
     if (!args_orig || args_orig[0] == '\0') return 0;
-    // copy into store
     int n = strlen(args_orig);
     if (n + 1 > store_size) n = store_size - 1;
     memcpy(store, args_orig, n);
@@ -158,11 +133,9 @@ static int split_args(const char* args_orig, char* argv[], int max_args, char* s
     int argc = 0;
     char* p = store;
     while (argc < max_args && p && *p) {
-        // skip spaces
         while (*p == ' ') p++;
         if (!*p) break;
         argv[argc++] = p;
-        // find next space
         char* q = p;
         while (*q && *q != ' ') q++;
         if (*q) { *q = '\0'; p = q + 1; } else { p = NULL; }
@@ -210,10 +183,7 @@ static void cmd_list()
     }
 }
 
-/* Create a minimal MBR with one partition that spans the disk starting at 2048.
- * Partition type is set to 0x0B (FAT32 CHS/LBA). This is pragmatic for QEMU testing.
- * The function uses ata_write_sector and enables MBR writes around the single write.
- */
+/* Create a minimal MBR */
 static int create_minimal_mbr()
 {
     uint16_t idbuf[256];
@@ -228,7 +198,6 @@ static int create_minimal_mbr()
         return -2;
     }
 
-    // start at 2048 (common alignment)
     uint32_t start = 2048;
     if (start >= sectors) start = 1;
     uint32_t part_size = sectors - start;
@@ -236,41 +205,33 @@ static int create_minimal_mbr()
     uint8_t mbr[512];
     for (int i = 0; i < 512; ++i) mbr[i] = 0;
 
-    // Partition table entry at offset 446 (16 bytes)
     int off = 446;
-    mbr[off + 0] = 0x00; // boot flag
-    mbr[off + 1] = 0x00; // CHS begin (ignored)
+    mbr[off + 0] = 0x00;
+    mbr[off + 1] = 0x00;
     mbr[off + 2] = 0x00;
     mbr[off + 3] = 0x00;
-    mbr[off + 4] = 0x0B; // partition type (FAT32 CHS/LBA)
-    mbr[off + 5] = 0x00; // CHS end
+    mbr[off + 4] = 0x0B;
+    mbr[off + 5] = 0x00;
     mbr[off + 6] = 0x00;
     mbr[off + 7] = 0x00;
-    // LBA start (little endian)
     mbr[off + 8] = (uint8_t)(start & 0xFF);
     mbr[off + 9] = (uint8_t)((start >> 8) & 0xFF);
     mbr[off +10] = (uint8_t)((start >> 16) & 0xFF);
     mbr[off +11] = (uint8_t)((start >> 24) & 0xFF);
-    // size in sectors (little endian)
     mbr[off +12] = (uint8_t)(part_size & 0xFF);
     mbr[off +13] = (uint8_t)((part_size >> 8) & 0xFF);
     mbr[off +14] = (uint8_t)((part_size >> 16) & 0xFF);
     mbr[off +15] = (uint8_t)((part_size >> 24) & 0xFF);
 
-    // signature
     mbr[510] = 0x55;
     mbr[511] = 0xAA;
 
-    // perform write (enable MBR writes briefly)
     ata_set_allow_mbr_write(1);
     int w = ata_write_sector(0, mbr);
     ata_set_allow_mbr_write(0);
 
     if (w == 0) println("[disk] MBR written (partition created)");
-    else {
-        println("[disk] MBR write FAILED");
-        return -3;
-    }
+    else { println("[disk] MBR write FAILED"); return -3; }
     return 0;
 }
 
@@ -283,7 +244,6 @@ static int cmd_format_letter(char letter)
     uint32_t start = g_assigns[idx].lba;
     uint32_t count = g_assigns[idx].count;
 
-    // Quick format: zero first N sectors (we'll zero up to 128 sectors or the partition size, whichever smaller)
     uint32_t to_zero = count < 128 ? count : 128;
     uint8_t buf[512];
     for (int i = 0; i < 512; ++i) buf[i] = 0;
@@ -379,7 +339,6 @@ void cmd_disk(const char* args)
         }
     }
 
-    // fallback: unknown
     println("[disk] unknown command");
     cmd_usage();
 }

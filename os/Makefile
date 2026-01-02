@@ -220,8 +220,10 @@ $(BUILD)/event_queue.o: kernel/events/event_queue.c | $(BUILD)
 $(BUILD)/ata.o: kernel/storage/ata.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
-$(BUILD)/disk.o: kernel/cmds/disk.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(BUILD)/disk.o: kernel/cmds/disk.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+
 
 
 # -------------------------
