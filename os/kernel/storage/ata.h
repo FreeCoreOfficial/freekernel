@@ -31,6 +31,8 @@ int ata_decode_identify(const uint16_t* id_buf, char* model, size_t model_len, u
  */
 int ata_pio_read28(uint32_t lba, uint8_t* buffer);
 
+int ata_read_sector(uint32_t lba, uint8_t* buffer);
+
 #ifdef __cplusplus
 }
 #endif

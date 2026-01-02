@@ -34,6 +34,27 @@
 #define ATA_SR_DRQ  0x08
 #define ATA_SR_ERR  0x01
 
+static void ata_dump_hex(const uint8_t* buf, int count)
+{
+    const char hex[] = "0123456789ABCDEF";
+
+    for (int i = 0; i < count; i++) {
+        uint8_t b = buf[i];
+
+        char out[4];
+        out[0] = hex[b >> 4];
+        out[1] = hex[b & 0xF];
+        out[2] = ' ';
+        out[3] = 0;
+
+        terminal_writestring(out);
+
+        if ((i + 1) % 16 == 0)
+            terminal_writestring("\n");
+    }
+}
+
+
 /* small io wait (400ns) - 4 reads of alt status */
 static inline void ata_io_wait(void)
 {
@@ -66,7 +87,7 @@ static uint8_t ata_wait_bsy_clear(void)
 }
 
 /* ata_init: simple probe (calls ata_identify internally) */
-void ata_init(void)
+/*void ata_init(void)
 {
     terminal_writestring("[ATA] init\n");
 
@@ -78,7 +99,38 @@ void ata_init(void)
     } else {
         terminal_writestring("[ATA] no device\n");
     }
+}*/
+
+
+int ata_read_sector(uint32_t lba, uint8_t* buffer)
+{
+    return ata_pio_read28(lba, buffer);
 }
+
+
+
+void ata_init(void)
+{
+    terminal_writestring("[ATA] init\n");
+
+    static uint8_t sector[512];
+
+    if (ata_read_sector(0, sector) != 0) {
+        terminal_writestring("[ATA] read sector 0 FAILED\n");
+        return;
+    }
+
+    terminal_writestring("[ATA] sector 0 read OK\n");
+
+    ata_dump_hex(sector, 128);
+
+    /* semnătura MBR */
+    if (sector[510] == 0x55 && sector[511] == 0xAA)
+        terminal_writestring("\n[ATA] MBR signature OK (55 AA)\n");
+    else
+        terminal_writestring("\n[ATA] MBR signature MISSING\n");
+}
+
 
 /* IDENTIFY DEVICE implementation */
 int ata_identify(uint16_t* buffer)
