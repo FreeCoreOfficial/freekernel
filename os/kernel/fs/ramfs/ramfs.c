@@ -26,7 +26,7 @@ static int ramfs_write(struct vnode* n, uint32_t off, const uint8_t* buf, uint32
 static int ramfs_readdir(struct vnode* dir, uint32_t index, struct vnode** out)
 {
     (void)dir; (void)index;
-    if (out) *out = NULL;
+    if (out) *out = 0;
     return 0; /* no entries */
 }
 

@@ -1,5 +1,4 @@
-#include <types.h>
-
+#include "types.h"
 
 #include "terminal.h"
 #include "drivers/pic.h"
@@ -20,6 +19,9 @@
 #include "time/timer.h"
 #include "events/event_queue.h"
 #include "storage/ata.h"
+#include "fs/vfs/mount.h"
+#include "fs/ramfs/ramfs.h"
+
 /*#include "debug/debug.h"*/
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
 #ifdef __cplusplus
@@ -102,8 +104,22 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     pic_remap();
     terminal_init();
     bootlogo_show();
+
     fs_init();
+
+    /* =======================
+       VFS INIT (AICI)
+       ======================= */
+    vfs_mount("/", ramfs_root());
+
+    vnode_t* v = vfs_resolve("/");
+    if (v)
+        terminal_writestring("[vfs] root mounted OK\n");
+    else
+        terminal_writestring("[vfs] mount FAILED\n");
+
     shell_init();
+
 
     kbd_buffer_init();
     keyboard_init();

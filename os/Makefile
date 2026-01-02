@@ -13,8 +13,6 @@ CXXFLAGS = $(COMMON_FLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld
 
-
-
 BUILD = build
 ISO = iso
 KERNEL = kernel.bin
@@ -42,37 +40,35 @@ OBJS = \
 	$(BUILD)/cmd_cat.o \
 	$(BUILD)/cmd_touch.o \
 	$(BUILD)/pit.o \
-    $(BUILD)/load.o \
+	$(BUILD)/load.o \
 	$(BUILD)/serial.o \
 	$(BUILD)/rtc.o \
 	$(BUILD)/clock.o \
-$(BUILD)/cmd_date.o \
-$(BUILD)/speaker.o \
-$(BUILD)/cmd_beep.o \
-$(BUILD)/audio.o \
-$(BUILD)/shortcuts.o \
-$(BUILD)/string.o \
-$(BUILD)/cmd_play.o \
-$(BUILD)/mlb.o \
-$(BUILD)/mouse.o \
-$(BUILD)/keyboard_buffer.o \
-$(BUILD)/keymap.o \
-$(BUILD)/keymap_us.o \
-$(BUILD)/keymap_ro.o \
-$(BUILD)/vga.o \
-    $(BUILD)/timer.o \
+	$(BUILD)/cmd_date.o \
+	$(BUILD)/speaker.o \
+	$(BUILD)/cmd_beep.o \
+	$(BUILD)/audio.o \
+	$(BUILD)/shortcuts.o \
+	$(BUILD)/string.o \
+	$(BUILD)/cmd_play.o \
+	$(BUILD)/mlb.o \
+	$(BUILD)/mouse.o \
+	$(BUILD)/keyboard_buffer.o \
+	$(BUILD)/keymap.o \
+	$(BUILD)/keymap_us.o \
+	$(BUILD)/keymap_ro.o \
+	$(BUILD)/vga.o \
+	$(BUILD)/timer.o \
 	$(BUILD)/cmd_uptime.o \
 	$(BUILD)/cmd_ticks.o \
-$(BUILD)/cmd_help.o \
-$(BUILD)/event_queue.o \
-$(BUILD)/ata.o \
-    $(BUILD)/disk.o \
-$(BUILD)/fat_fs.o \
-$(BUILD)/cmd_fat.o
-
-
-
-
+	$(BUILD)/cmd_help.o \
+	$(BUILD)/event_queue.o \
+	$(BUILD)/ata.o \
+	$(BUILD)/disk.o \
+	$(BUILD)/fat_fs.o \
+	$(BUILD)/cmd_fat.o \
+	$(BUILD)/vfs.o \
+	$(BUILD)/ramfs.o
 
 # -------------------------
 # TARGETURI PRINCIPALE
@@ -90,6 +86,12 @@ $(BUILD):
 # -------------------------
 
 $(BUILD)/boot.o: kernel/boot.asm | $(BUILD)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(BUILD)/gdt_flush.o: kernel/arch/i386/gdt.asm | $(BUILD)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(BUILD)/interrupts.o: kernel/interrupts/interrupts.asm | $(BUILD)
 	$(AS) $(ASFLAGS) $< -o $@
 
 # -------------------------
@@ -111,17 +113,11 @@ $(BUILD)/keyboard.o: kernel/drivers/keyboard.cpp | $(BUILD)
 $(BUILD)/terminal.o: kernel/terminal.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
-$(BUILD)/interrupts.o: kernel/interrupts/interrupts.asm | $(BUILD)
-	$(AS) $(ASFLAGS) $< -o $@
-
 $(BUILD)/pic.o: kernel/drivers/pic.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/gdt.o: kernel/arch/i386/gdt.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
-
-$(BUILD)/gdt_flush.o: kernel/arch/i386/gdt.asm | $(BUILD)
-	$(AS) $(ASFLAGS) $< -o $@
 
 $(BUILD)/isr.o: kernel/interrupts/isr.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
@@ -228,22 +224,27 @@ $(BUILD)/cmd_help.o: kernel/cmds/help.cpp | $(BUILD)
 $(BUILD)/event_queue.o: kernel/events/event_queue.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
-$(BUILD)/ata.o: kernel/storage/ata.c | $(BUILD)
-	$(CC) $(CFLAGS) -m32 -c $< -o $@
-
-
 $(BUILD)/disk.o: kernel/cmds/disk.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
-
-$(BUILD)/fat_fs.o: kernel/fs/fat/fat.c | $(BUILD)
-	$(CC) $(CFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/cmd_fat.o: kernel/cmds/fat.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/vfs.o: kernel/fs/vfs/vfs.c | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/ramfs.o: kernel/fs/ramfs/ramfs.c | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
+# -------------------------
+# C OBJECTS (folosim gcc)
+# -------------------------
 
+$(BUILD)/ata.o: kernel/storage/ata.c | $(BUILD)
+	$(CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/fat_fs.o: kernel/fs/fat/fat.c | $(BUILD)
+	$(CC) $(CFLAGS) -m32 -c $< -o $@
 
 # -------------------------
 # LINK
@@ -253,21 +254,20 @@ $(ISO)/boot/$(KERNEL): $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $(OBJS)
 
 # -------------------------
-# UTILITARE
+# ISO & RUN
 # -------------------------
 
 iso: all
 	grub-mkrescue -o chrysalis.iso $(ISO)
 
 run: iso
-	qemu-system-x86_64 -cdrom chrysalis.iso
-
-clean:
-	rm -rf build *.iso
+	qemu-system-x86_64 -cdrom chrysalis.iso -m 512
 
 consolerun: iso
 	qemu-system-x86_64 -cdrom chrysalis.iso -nographic
 
+clean:
+	rm -rf $(BUILD) *.iso $(ISO)/boot/$(KERNEL)
 
 # -------------------------
 # HELP
@@ -277,11 +277,10 @@ help:
 	@echo ""
 	@echo "Chrysalis OS - Makefile commands"
 	@echo "--------------------------------"
-	@echo "make           -> compileaza kernelul"
-	@echo "make iso       -> creeaza imaginea bootabila ISO"
-	@echo "make run       -> ruleaza OS-ul in QEMU"
-	@echo "make clean     -> sterge fisierele generate"
-	@echo "make help      -> afiseaza acest mesaj"
-	@echo "make consolerun -> ruleaza in terminal qemu"
-	@echo "npm run audiorun -> ruleaza audio in qemu"
+	@echo "make           -> compilează kernelul"
+	@echo "make iso       -> creează imaginea bootabilă ISO"
+	@echo "make run       -> rulează OS-ul în QEMU (cu grafică)"
+	@echo "make consolerun-> rulează OS-ul în QEMU (doar consolă)"
+	@echo "make clean     -> șterge fișierele generate"
+	@echo "make help      -> afișează acest mesaj"
 	@echo ""
