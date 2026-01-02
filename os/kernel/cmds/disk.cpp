@@ -363,6 +363,75 @@ static int cmd_format_letter(char letter)
     return 0;
 }
 
+static void cmd_scan()
+{
+    uint8_t mbr[512];
+
+    if (ata_read_sector(0, mbr) != 0) {
+        println("[disk] failed to read MBR");
+        return;
+    }
+
+    if (mbr[510] != 0x55 || mbr[511] != 0xAA) {
+        println("[disk] invalid MBR signature");
+        return;
+    }
+
+    println("[disk] scanning MBR...");
+
+    int assigned = 0;
+
+    for (int i = 0; i < 4; ++i) {
+        int off = 446 + i * 16;
+
+        uint8_t type = mbr[off + 4];
+        uint32_t lba =
+            (uint32_t)mbr[off + 8] |
+            ((uint32_t)mbr[off + 9] << 8) |
+            ((uint32_t)mbr[off +10] << 16) |
+            ((uint32_t)mbr[off +11] << 24);
+
+        uint32_t count =
+            (uint32_t)mbr[off +12] |
+            ((uint32_t)mbr[off +13] << 8) |
+            ((uint32_t)mbr[off +14] << 16) |
+            ((uint32_t)mbr[off +15] << 24);
+
+        if (type == 0 || count == 0)
+            continue;
+
+        int slot = -1;
+        for (int j = 0; j < 26; ++j) {
+            if (!g_assigns[j].used) {
+                slot = j;
+                break;
+            }
+        }
+
+        if (slot < 0) {
+            println("[disk] no free letter slots");
+            break;
+        }
+
+        g_assigns[slot].used = 1;
+        g_assigns[slot].letter = 'a' + slot;
+        g_assigns[slot].lba = lba;
+        g_assigns[slot].count = count;
+
+        char tmp[96];
+        sprintf(tmp,
+            "[disk] partition %d: type=0x%02x start=%u count=%u -> assigned '%c'\n",
+            i, type, lba, count, g_assigns[slot].letter);
+        print(tmp);
+
+        assigned++;
+    }
+
+    if (assigned == 0)
+        println("[disk] no usable partitions found");
+}
+
+
 /* cmd_disk: main entrypoint called by shell */
 void cmd_disk(const char* args)
 {
@@ -389,6 +458,12 @@ void cmd_disk(const char* args)
         create_minimal_mbr();
         return;
     }
+
+    if (strcmp(argv[0], "--scan") == 0) {
+    cmd_scan();
+    return;
+}
+
 
     if (strcmp(argv[0], "--assign") == 0) {
         if (argc < 4) { println("usage: disk --assign <letter> <lba> <count>"); return; }
