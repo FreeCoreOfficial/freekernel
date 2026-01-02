@@ -7,16 +7,22 @@ extern "C" {
 #endif
 
 /* Partition assign table (volatile, only in-memory) */
-struct part_assign { int used; char letter; uint32_t lba; uint32_t count; };
+struct part_assign {
+    int used;
+    char letter;
+    uint32_t lba;
+    uint32_t count;
+};
+
 extern struct part_assign g_assigns[26];
 
-/* Shell command entrypoint. Adapt this to your shell command registration.
-* Example: register_command("disk", cmd_disk);
-* The shell should call cmd_disk(arg_string) where arg_string is the rest
-* of the user input (may be NULL or empty).
-*/
-void cmd_disk(const char* args);
+/* Declarații externe pentru funcțiile folosite și în fat.cpp */
+extern int create_minimal_mbr(void);
+extern void cmd_scan(void);
+extern int cmd_format_letter(char letter);
 
+/* Shell command entrypoint - stil VECHI */
+void cmd_disk(const char* args);
 
 #ifdef __cplusplus
 }
