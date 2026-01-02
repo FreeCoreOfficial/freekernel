@@ -40,8 +40,8 @@
 | ✅      | Detectare HDD         | identify            |
 | ✅     | Read sector           | milestone major     |
 | ✅     | Write sector          | atenție la corupere |
-| 🔲     | Cache simplu          | performanță         |
-| 🔲     | Partition table (MBR) | necesar             |
+| [N]     | Cache simplu          | performanță         |
+| ✅     | Partition table (MBR) | necesar             |
 | 🔲     | FAT12 / FAT16         | ușor                |
 | 🔲     | FAT32                 | mai greu            |
 | 🔲     | VFS                   | arhitectură curată  |
