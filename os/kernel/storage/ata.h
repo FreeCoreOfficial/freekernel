@@ -25,13 +25,20 @@ int ata_identify(uint16_t* buffer);
  */
 int ata_decode_identify(const uint16_t* id_buf, char* model, size_t model_len, uint32_t* lba28_sectors);
 
-/* Read single sector (512 bytes) using LBA28 PIO.
- * buffer must be at least 512 bytes.
- * returns 0 on success, negative on error
- */
+/* Low-level PIO read (LBA28), reads 1 sector (512 bytes) */
 int ata_pio_read28(uint32_t lba, uint8_t* buffer);
 
+/* Convenience read wrapper */
 int ata_read_sector(uint32_t lba, uint8_t* buffer);
+
+/* Low-level PIO write (LBA28), writes 1 sector (512 bytes).
+ * Returns 0 on success, negative on error.
+ * Be careful: sector 0 (MBR) is protected unless you enable it with ata_set_allow_mbr_write().
+ */
+int ata_write_sector(uint32_t lba, const uint8_t* buffer);
+
+/* Enable/disable writing to MBR (sector 0). Default: disabled. */
+void ata_set_allow_mbr_write(int enabled);
 
 #ifdef __cplusplus
 }

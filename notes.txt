@@ -2,3 +2,20 @@ each command has :
 
 const char* name;
 void (*handler)(const char* args);
+
+
+disk --usage — ajutor
+
+disk --list — afișează model și număr de sectoare (folosește ata_identify + ata_decode_identify)
+
+disk --init — scrie un MBR minimal (partition start = 2048). Folosește ata_set_allow_mbr_write(1) temporar.
+
+disk --assign <letter> <lba> <count> — asignează litere (în memorie)
+
+disk --format <letter> — quick-format (zeroize primele ~128 sectoare din partiție)
+
+disk --test --write <lba> — scrie pattern 0..255 repeated în sector
+
+disk --test --output <lba> — citește + hexdump un sector
+
+disk --test --see-raw <lba> <count> — hexdump pentru mai multe sectoare

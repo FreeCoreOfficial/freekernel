@@ -11,22 +11,23 @@
 #include "uptime.h"
 #include "ticks.h"
 #include "help.h"
+#include "disk.h"
+
 
 Command command_table[] = {
-    { "beep",     cmd_beep},
-    { "play",     cmd_play},
+    { "beep",     cmd_beep },
+    { "cat",      cmd_cat },
     { "clear",    cmd_clear },
-    { "date",     cmd_date},
+    { "date",     cmd_date },
+    { "disk",     cmd_disk },
+    { "help",     cmd_help },
+    { "ls",       cmd_ls },
+    { "play",     cmd_play },
     { "reboot",   cmd_reboot },
     { "shutdown", cmd_shutdown },
-    { "ls",       cmd_ls },
-    { "cat",      cmd_cat },
+    { "ticks",    cmd_ticks },
     { "touch",    cmd_touch },
-    { "uptime", cmd_uptime },
-    { "ticks",  cmd_ticks  },
-    { "help", cmd_help },
-
-
+    { "uptime",   cmd_uptime },
 };
 
 int command_count = sizeof(command_table) / sizeof(Command);

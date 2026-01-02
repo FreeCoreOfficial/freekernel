@@ -25,8 +25,10 @@
 #define ATA_CTRL_DEVICECTL 0x02
 
 /* commands */
-#define ATA_CMD_IDENTIFY   0xEC
-#define ATA_CMD_READ_PIO   0x20
+#define ATA_CMD_IDENTIFY     0xEC
+#define ATA_CMD_READ_PIO     0x20
+#define ATA_CMD_WRITE_PIO    0x30
+#define ATA_CMD_CACHE_FLUSH  0xE7
 
 /* status bits */
 #define ATA_SR_BSY  0x80
@@ -34,26 +36,8 @@
 #define ATA_SR_DRQ  0x08
 #define ATA_SR_ERR  0x01
 
-static void ata_dump_hex(const uint8_t* buf, int count)
-{
-    const char hex[] = "0123456789ABCDEF";
-
-    for (int i = 0; i < count; i++) {
-        uint8_t b = buf[i];
-
-        char out[4];
-        out[0] = hex[b >> 4];
-        out[1] = hex[b & 0xF];
-        out[2] = ' ';
-        out[3] = 0;
-
-        terminal_writestring(out);
-
-        if ((i + 1) % 16 == 0)
-            terminal_writestring("\n");
-    }
-}
-
+/* global MBR write protection flag (default disabled) */
+static int g_allow_mbr_write = 0;
 
 /* small io wait (400ns) - 4 reads of alt status */
 static inline void ata_io_wait(void)
@@ -86,51 +70,36 @@ static uint8_t ata_wait_bsy_clear(void)
     return status;
 }
 
-/* ata_init: simple probe (calls ata_identify internally) */
-/*void ata_init(void)
+/* simple hex dumper for debug */
+static void ata_dump_hex(const uint8_t* buf, int count)
 {
-    terminal_writestring("[ATA] init\n");
+    const char hex[] = "0123456789ABCDEF";
+    char out[4];
 
-    static uint16_t identify_buf[256];
-    int r = ata_identify(identify_buf);
+    for (int i = 0; i < count; i++) {
+        uint8_t b = buf[i];
+        out[0] = hex[b >> 4];
+        out[1] = hex[b & 0xF];
+        out[2] = ' ';
+        out[3] = 0;
+        terminal_writestring(out);
 
-    if (r == 0) {
-        terminal_writestring("[ATA] device detected\n");
-    } else {
-        terminal_writestring("[ATA] no device\n");
+        if ((i + 1) % 16 == 0)
+            terminal_writestring("\n");
     }
-}*/
+}
 
+/* wrapper to expose MBR write control */
+void ata_set_allow_mbr_write(int enabled)
+{
+    g_allow_mbr_write = enabled ? 1 : 0;
+}
 
+/* Convenience wrapper */
 int ata_read_sector(uint32_t lba, uint8_t* buffer)
 {
     return ata_pio_read28(lba, buffer);
 }
-
-
-
-void ata_init(void)
-{
-    terminal_writestring("[ATA] init\n");
-
-    static uint8_t sector[512];
-
-    if (ata_read_sector(0, sector) != 0) {
-        terminal_writestring("[ATA] read sector 0 FAILED\n");
-        return;
-    }
-
-    terminal_writestring("[ATA] sector 0 read OK\n");
-
-    ata_dump_hex(sector, 128);
-
-    /* semnătura MBR */
-    if (sector[510] == 0x55 && sector[511] == 0xAA)
-        terminal_writestring("\n[ATA] MBR signature OK (55 AA)\n");
-    else
-        terminal_writestring("\n[ATA] MBR signature MISSING\n");
-}
-
 
 /* IDENTIFY DEVICE implementation */
 int ata_identify(uint16_t* buffer)
@@ -263,4 +232,82 @@ int ata_pio_read28(uint32_t lba, uint8_t* buffer)
     /* final status check (optional) */
     ata_io_wait();
     return 0;
+}
+
+/* write single sector using LBA28 PIO */
+int ata_write_sector(uint32_t lba, const uint8_t* buffer)
+{
+    if (!buffer)
+        return -1;
+
+    if (lba & 0xF0000000)
+        return -2;
+
+    /* protecție MBR */
+    if (lba == 0 && !g_allow_mbr_write)
+        return -100;
+
+    ata_select_master();
+
+    outb(ATA_PRIMARY_IO + ATA_REG_SECCOUNT0, 1);
+
+    outb(ATA_PRIMARY_IO + ATA_REG_LBA0, (uint8_t)(lba & 0xFF));
+    outb(ATA_PRIMARY_IO + ATA_REG_LBA1, (uint8_t)((lba >> 8) & 0xFF));
+    outb(ATA_PRIMARY_IO + ATA_REG_LBA2, (uint8_t)((lba >> 16) & 0xFF));
+
+    outb(ATA_PRIMARY_IO + ATA_REG_HDDEVSEL,
+         0xE0 | ((lba >> 24) & 0x0F));
+
+    ata_io_wait();
+
+    /* issue write command */
+    outb(ATA_PRIMARY_IO + ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
+
+    uint8_t status = ata_wait_bsy_clear();
+    if (status & ATA_SR_ERR)
+        return -3;
+
+    while (!(status & ATA_SR_DRQ)) {
+        status = ata_read_status();
+        if (status & ATA_SR_ERR)
+            return -4;
+    }
+
+    /* write 256 words */
+    for (int i = 0; i < 256; i++) {
+        uint16_t w =
+            ((uint16_t)buffer[i * 2 + 1] << 8) |
+             (uint16_t)buffer[i * 2 + 0];
+
+        outw(ATA_PRIMARY_IO + ATA_REG_DATA, w);
+    }
+
+    /* flush cache */
+    outb(ATA_PRIMARY_IO + ATA_REG_COMMAND, ATA_CMD_CACHE_FLUSH);
+    ata_wait_bsy_clear();
+
+    return 0;
+}
+
+/* init + test (reads sector 0 and dumps first 128 bytes) */
+void ata_init(void)
+{
+    terminal_writestring("[ATA] init\n");
+
+    static uint8_t sector[512];
+
+    if (ata_read_sector(0, sector) != 0) {
+        terminal_writestring("[ATA] read sector 0 FAILED\n");
+        return;
+    }
+
+    terminal_writestring("[ATA] sector 0 read OK\n");
+
+    ata_dump_hex(sector, 128);
+
+    /* semnătura MBR */
+    if (sector[510] == 0x55 && sector[511] == 0xAA)
+        terminal_writestring("\n[ATA] MBR signature OK (55 AA)\n");
+    else
+        terminal_writestring("\n[ATA] MBR signature MISSING\n");
 }
