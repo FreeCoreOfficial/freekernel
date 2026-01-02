@@ -56,6 +56,7 @@ $(BUILD)/vga.o \
 	$(BUILD)/cmd_ticks.o \
 $(BUILD)/cmd_help.o \
 $(BUILD)/event_queue.o \
+$(BUILD)/ata.o
 
 
 
@@ -213,6 +214,9 @@ $(BUILD)/cmd_help.o: kernel/cmds/help.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/event_queue.o: kernel/events/event_queue.c | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/ata.o: kernel/storage/ata.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------
