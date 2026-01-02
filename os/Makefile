@@ -54,6 +54,7 @@ $(BUILD)/vga.o \
     $(BUILD)/timer.o \
 	$(BUILD)/cmd_uptime.o \
 	$(BUILD)/cmd_ticks.o \
+$(BUILD)/cmd_help.o \
 
 
 
@@ -205,6 +206,9 @@ $(BUILD)/cmd_uptime.o: kernel/cmds/uptime.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/cmd_ticks.o: kernel/cmds/ticks.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_help.o: kernel/cmds/help.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------

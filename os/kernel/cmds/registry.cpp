@@ -10,6 +10,7 @@
 #include "play.h"
 #include "uptime.h"
 #include "ticks.h"
+#include "help.h"
 
 Command command_table[] = {
     { "beep",     cmd_beep},
@@ -23,6 +24,8 @@ Command command_table[] = {
     { "touch",    cmd_touch },
     { "uptime", cmd_uptime },
     { "ticks",  cmd_ticks  },
+    { "help", cmd_help },
+
 
 };
 
