@@ -40,49 +40,83 @@ static char* i32_to_dec(char* out, int32_t v)
     return u32_to_dec(out, (uint32_t)v);
 }
 
+/* enhanced k_sprintf using k_memcpy (no libc dependency) */
 static int k_sprintf(char* out, const char* fmt, ...)
 {
     va_list ap; va_start(ap, fmt);
     char* p = out;
     const char* f = fmt;
+
     while (*f) {
         if (*f != '%') { *p++ = *f++; continue; }
         f++; // skip '%'
-        switch (*f) {
-            case 'u': {
-                unsigned int v = va_arg(ap, unsigned int);
-                p = u32_to_dec(p, (uint32_t)v);
-                break;
+
+        /* parse optional zero-pad + width */
+        int zero_pad = 0;
+        int width = 0;
+        if (*f == '0') { zero_pad = 1; f++; }
+        while (*f >= '0' && *f <= '9') { width = width * 10 + (*f - '0'); f++; }
+
+        char spec = *f++;
+        if (spec == '\0') break;
+
+        if (spec == 'u') {
+            unsigned int v = va_arg(ap, unsigned int);
+            char tmp[16]; char *q = tmp;
+            q = u32_to_dec(tmp, (uint32_t)v);
+            int len = (int)(q - tmp);
+            int pad = width - len;
+            char fill = zero_pad ? '0' : ' ';
+            for (int i = 0; i < pad; ++i) *p++ = fill;
+            k_memcpy(p, tmp, (size_t)len); p += len;
+        } else if (spec == 'd') {
+            int v = va_arg(ap, int);
+            char tmp[16];
+            char *q = tmp;
+            if (v < 0) { *q++ = '-'; q = u32_to_dec(q, (uint32_t)(-v)); }
+            else { q = u32_to_dec(q, (uint32_t)v); }
+            int len = (int)(q - tmp);
+            int pad = width - len;
+            char fill = zero_pad ? '0' : ' ';
+            for (int i = 0; i < pad; ++i) *p++ = fill;
+            k_memcpy(p, tmp, (size_t)len); p += len;
+        } else if (spec == 'x' || spec == 'X') {
+            unsigned int v = va_arg(ap, unsigned int);
+            char tmp[16]; int ti = 0;
+            if (v == 0) tmp[ti++] = '0';
+            else {
+                while (v) {
+                    int d = v & 0xF;
+                    tmp[ti++] = (char)(d < 10 ? ('0' + d) : ((spec == 'x' ? 'a' : 'A') + (d - 10)));
+                    v >>= 4;
+                }
             }
-            case 'd': {
-                int v = va_arg(ap, int);
-                p = i32_to_dec(p, v);
-                break;
-            }
-            case 'c': {
-                int c = va_arg(ap, int);
-                *p++ = (char)c;
-                break;
-            }
-            case 's': {
-                const char* s = va_arg(ap, const char*);
-                if (!s) s = "(null)";
-                while (*s) *p++ = *s++;
-                break;
-            }
-            case '%': {
-                *p++ = '%'; break;
-            }
-            default: {
-                *p++ = '%'; *p++ = *f; break;
-            }
+            int len = ti;
+            int pad = width - len;
+            char fill = zero_pad ? '0' : ' ';
+            for (int i = 0; i < pad; ++i) *p++ = fill;
+            for (int i = len - 1; i >= 0; --i) *p++ = tmp[i];
+        } else if (spec == 'c') {
+            int c = va_arg(ap, int);
+            *p++ = (char)c;
+        } else if (spec == 's') {
+            const char* s = va_arg(ap, const char*);
+            if (!s) s = "(null)";
+            while (*s) *p++ = *s++;
+        } else if (spec == '%') {
+            *p++ = '%';
+        } else {
+            /* unknown: emit literally */
+            *p++ = '%';
+            *p++ = spec;
         }
-        f++;
     }
+
     *p = '\0';
     va_end(ap);
     return (int)(p - out);
 }
+
 
 /* map standard names used in this file to our implementations */
 #define memcpy k_memcpy
@@ -159,7 +193,7 @@ static void cmd_usage()
     println("disk --test --see-raw <lba> <count> : dump raw sectors");
 }
 
-static void cmd_list()
+static void cmd_list(int debug)
 {
     uint16_t idbuf[256];
     int r = ata_identify(idbuf);
@@ -170,9 +204,37 @@ static void cmd_list()
     ata_decode_identify(idbuf, model, sizeof(model), &sectors);
 
     print("[disk] model: "); print(model); print("\n");
-    char tmp[64];
+    char tmp[128];
     sprintf(tmp, "[disk] LBA28 sectors: %u\n", sectors);
     print(tmp);
+
+    if (debug) {
+        /* debug: print return code and several identify words */
+        sprintf(tmp, "[disk-debug] ata_identify rc=%d\n", r); print(tmp);
+
+        for (int i = 0; i < 12; ++i) {
+            sprintf(tmp, "id[%02d]=0x%04x ", i, idbuf[i]);
+            print(tmp);
+            if ((i & 3) == 3) print("\n");
+        }
+        print("\n");
+
+        /* words relevant for LBA28 */
+        for (int i = 60; i <= 63; ++i) {
+            sprintf(tmp, "id[%02d]=0x%04x ", i, idbuf[i]);
+            print(tmp);
+            if ((i & 3) == 3) print("\n");
+        }
+        print("\n");
+
+        /* words often used for LBA48 / extended fields */
+        for (int i = 100; i <= 103; ++i) {
+            sprintf(tmp, "id[%02d]=0x%04x ", i, idbuf[i]);
+            print(tmp);
+            if ((i & 3) == 3) print("\n");
+        }
+        print("\n");
+    }
 
     println("[disk] assignments:");
     for (int i = 0; i < 26; ++i) {
@@ -183,21 +245,50 @@ static void cmd_list()
     }
 }
 
-/* Create a minimal MBR */
+
+/* robust create_minimal_mbr: decode LBA28/LBA48 directly and fallback to debug printing */
 static int create_minimal_mbr()
 {
     uint16_t idbuf[256];
-    uint32_t sectors = 0;
     if (ata_identify(idbuf) != 0) {
         println("[disk] identify failed - cannot init MBR");
         return -1;
     }
-    ata_decode_identify(idbuf, NULL, 0, &sectors);
+
+    /* decode LBA28 (words 60..61) */
+    uint32_t lba28 = ((uint32_t)idbuf[61] << 16) | (uint32_t)idbuf[60];
+
+    /* decode LBA48 (words 100..103) into 64-bit */
+    uint64_t lba48 = (uint64_t)idbuf[100]
+                   | ((uint64_t)idbuf[101] << 16)
+                   | ((uint64_t)idbuf[102] << 32)
+                   | ((uint64_t)idbuf[103] << 48);
+
+    uint32_t sectors = 0;
+    if (lba28 != 0) sectors = lba28;
+    else if (lba48 != 0) {
+        if (lba48 > 0xFFFFFFFFULL) sectors = 0xFFFFFFFFU;
+        else sectors = (uint32_t)lba48;
+    } else {
+        sectors = 0;
+    }
+
     if (sectors == 0) {
-        println("[disk] identify returned 0 sectors");
+        /* give useful debug info instead of silent failure */
+        println("[disk] identify returned 0 sectors (detailed identify dump):");
+        char tmp[128];
+        sprintf(tmp, "id[60]=0x%04x id[61]=0x%04x  (LBA28)\n", idbuf[60], idbuf[61]); print(tmp);
+        sprintf(tmp, "id[100]=0x%04x id[101]=0x%04x id[102]=0x%04x id[103]=0x%04x  (LBA48)\n",
+                idbuf[100], idbuf[101], idbuf[102], idbuf[103]); print(tmp);
+
+        /* also show a short header + first words to help debugging */
+        sprintf(tmp, "id[00]=0x%04x id[01]=0x%04x id[10]=0x%04x id[11]=0x%04x\n",
+                idbuf[0], idbuf[1], idbuf[10], idbuf[11]); print(tmp);
+
         return -2;
     }
 
+    /* start at 2048 (common alignment) */
     uint32_t start = 2048;
     if (start >= sectors) start = 1;
     uint32_t part_size = sectors - start;
@@ -205,35 +296,44 @@ static int create_minimal_mbr()
     uint8_t mbr[512];
     for (int i = 0; i < 512; ++i) mbr[i] = 0;
 
+    /* Partition table entry at offset 446 (16 bytes) */
     int off = 446;
-    mbr[off + 0] = 0x00;
-    mbr[off + 1] = 0x00;
+    mbr[off + 0] = 0x00; /* boot flag */
+    mbr[off + 1] = 0x00; /* CHS begin (ignored) */
     mbr[off + 2] = 0x00;
     mbr[off + 3] = 0x00;
-    mbr[off + 4] = 0x0B;
-    mbr[off + 5] = 0x00;
+    mbr[off + 4] = 0x0B; /* partition type (FAT32 CHS/LBA) */
+    mbr[off + 5] = 0x00; /* CHS end */
     mbr[off + 6] = 0x00;
     mbr[off + 7] = 0x00;
+    /* LBA start (little endian) */
     mbr[off + 8] = (uint8_t)(start & 0xFF);
     mbr[off + 9] = (uint8_t)((start >> 8) & 0xFF);
     mbr[off +10] = (uint8_t)((start >> 16) & 0xFF);
     mbr[off +11] = (uint8_t)((start >> 24) & 0xFF);
+    /* size in sectors (little endian) */
     mbr[off +12] = (uint8_t)(part_size & 0xFF);
     mbr[off +13] = (uint8_t)((part_size >> 8) & 0xFF);
     mbr[off +14] = (uint8_t)((part_size >> 16) & 0xFF);
     mbr[off +15] = (uint8_t)((part_size >> 24) & 0xFF);
 
+    /* signature */
     mbr[510] = 0x55;
     mbr[511] = 0xAA;
 
+    /* perform write (enable MBR writes briefly) */
     ata_set_allow_mbr_write(1);
     int w = ata_write_sector(0, mbr);
     ata_set_allow_mbr_write(0);
 
     if (w == 0) println("[disk] MBR written (partition created)");
-    else { println("[disk] MBR write FAILED"); return -3; }
+    else {
+        println("[disk] MBR write FAILED");
+        return -3;
+    }
     return 0;
 }
+
 
 static int cmd_format_letter(char letter)
 {
@@ -274,7 +374,15 @@ void cmd_disk(const char* args)
 
     if (strcmp(argv[0], "--usage") == 0) { cmd_usage(); return; }
     if (strcmp(argv[0], "--help") == 0) { cmd_usage(); return; }
-    if (strcmp(argv[0], "--list") == 0) { cmd_list(); return; }
+
+
+    if (strcmp(argv[0], "--list") == 0) {
+    int debug = 0;
+    if (argc >= 2 && strcmp(argv[1], "--debug") == 0) debug = 1;
+    cmd_list(debug);
+    return;
+}
+
 
     if (strcmp(argv[0], "--init") == 0) {
         println("[disk] initializing (write MBR) ...");
