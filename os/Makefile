@@ -1,18 +1,18 @@
 CXX = g++
-AS = nasm
-LD = ld
+CC  = gcc
+AS  = nasm
+LD  = ld
 
-CXXFLAGS = -ffreestanding -O2 -Wall -Wextra -fno-exceptions -fno-rtti
+# flags comune
+COMMON_FLAGS = -ffreestanding -O2 -Wall -Wextra -Ikernel/include
 
-# compiler pentru fișiere C
-CC = gcc
-
-# Include path freestanding pentru header-ele kernelului
-CFLAGS   += -Ikernel/include
-CXXFLAGS += -Ikernel/include
+# C / C++
+CFLAGS   = $(COMMON_FLAGS)
+CXXFLAGS = $(COMMON_FLAGS) -fno-exceptions -fno-rtti
 
 ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld
+
 
 
 BUILD = build
@@ -67,7 +67,8 @@ $(BUILD)/cmd_help.o \
 $(BUILD)/event_queue.o \
 $(BUILD)/ata.o \
     $(BUILD)/disk.o \
-$(BUILD)/fat.o
+$(BUILD)/fat_fs.o \
+$(BUILD)/cmd_fat.o
 
 
 
@@ -228,13 +229,18 @@ $(BUILD)/event_queue.o: kernel/events/event_queue.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/ata.o: kernel/storage/ata.c | $(BUILD)
-	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+	$(CC) $(CFLAGS) -m32 -c $< -o $@
+
 
 $(BUILD)/disk.o: kernel/cmds/disk.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
-$(BUILD)/fat.o: kernel/fs/fat/fat.c | $(BUILD)
+$(BUILD)/fat_fs.o: kernel/fs/fat/fat.c | $(BUILD)
 	$(CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_fat.o: kernel/cmds/fat.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
 
 
 

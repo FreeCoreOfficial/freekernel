@@ -1,8 +1,13 @@
+/* kernel/storage/ata.c */
 #include "ata.h"
 #include <stdint.h>
 #include <stddef.h>
 #include "../arch/i386/io.h"        /* inb/outb/inw/outw */
 #include "../terminal.h"  /* terminal_writestring() for simple debug */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Primary bus */
 #define ATA_PRIMARY_IO   0x1F0
@@ -42,10 +47,10 @@ static int g_allow_mbr_write = 0;
 /* small io wait (400ns) - 4 reads of alt status */
 static inline void ata_io_wait(void)
 {
-    inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
-    inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
-    inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
-    inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
+    (void)inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
+    (void)inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
+    (void)inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
+    (void)inb(ATA_PRIMARY_CTRL + ATA_CTRL_ALTSTATUS);
 }
 
 /* helper: read status */
@@ -311,3 +316,7 @@ void ata_init(void)
     else
         terminal_writestring("\n[ATA] MBR signature MISSING\n");
 }
+
+#ifdef __cplusplus
+}
+#endif

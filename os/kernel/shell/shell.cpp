@@ -10,27 +10,45 @@
 static char buffer[128];
 static int index = 0;
 
-/* mini strcmp 
-static int strcmp(const char* a, const char* b) {
-    while (*a && (*a == *b)) {
-        a++;
-        b++;
-    }
-    return *(const unsigned char*)a - *(const unsigned char*)b;
-}*/
+/* mini strcmp (fără libc) */
+static int str_eq(const char* a, const char* b) {
+    while (*a && *b && *a == *b) { a++; b++; }
+    return *a == *b;
+}
 
 static void execute_command(const char* input) {
-    for (int i = 0; i < command_count; i++) {
-        const char* name = command_table[i].name;
+    /* copiem input într-un buffer modificabil */
+    char tmp[128];
+    int i = 0;
+    while (input[i] && i < (int)sizeof(tmp) - 1) { tmp[i] = input[i]; i++; }
+    tmp[i] = '\0';
 
-        int j = 0;
-        while (name[j] && input[j] && name[j] == input[j])
-            j++;
+    /* tokenizare simplă pe spațiu */
+    char *argv[16];
+    int argc = 0;
+    char *p = tmp;
 
-        /* potrivire exactă sau cu argument */
-        if (name[j] == 0 && (input[j] == 0 || input[j] == ' ')) {
-            const char* args = (input[j] == ' ') ? input + j + 1 : "";
-            command_table[i].func(args);
+    /* skip leading spaces */
+    while (*p == ' ') p++;
+
+    while (*p && argc < (int)(sizeof(argv)/sizeof(argv[0]))) {
+        argv[argc++] = p;
+        /* avansăm la următorul spațiu */
+        while (*p && *p != ' ') p++;
+        if (*p == ' ') {
+            *p = '\0';
+            p++;
+            while (*p == ' ') p++; /* skip multiple spaces */
+        }
+    }
+
+    if (argc == 0) return; /* linie goală */
+
+    /* caută comanda în tabel și apelează-o */
+    for (int j = 0; j < command_count; ++j) {
+        if (str_eq(argv[0], command_table[j].name)) {
+            /* apelăm funcția comenzii */
+            command_table[j].func(argc, argv);
             return;
         }
     }
@@ -87,7 +105,7 @@ void shell_poll_input(void)
         /* future: handle EVENT_MOUSE, EVENT_TIMER, etc. */
     }
 
-    /* 2) fallback: consume legacy keyboard buffer (compat) 
+    /* 2) fallback: consume legacy keyboard buffer (compat)
     while (kbd_has_char()) {
         char c = kbd_get_char();
         shell_handle_char(c);

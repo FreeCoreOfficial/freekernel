@@ -4,7 +4,8 @@
 extern "C" {
 #endif
 
-typedef void (*command_fn)(const char*);
+/* tipul funcției comenzii: returnează int (opțional), primește argc, argv */
+typedef int (*command_fn)(int argc, char **argv);
 
 typedef struct {
     const char* name;

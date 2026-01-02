@@ -25,6 +25,12 @@
     "run-gdb": "clear ; qemu-system-x86_64 -cdrom chrysalis.iso -s -S",
 
     "//font-get": "face rost de fontu din grub",
-    "font-get": "clear ; grub-mkfont -s 24 -o iso/boot/grub/unicode.pf2 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    "font-get": "clear ; grub-mkfont -s 24 -o iso/boot/grub/unicode.pf2 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+
+    "nm:ata": "nm -g build/ata.o | grep ata_read_sector || true",
+    "nm:fat": "nm -u build/fat_fs.o | grep ata_read_sector || true",
+
+    "nm:check-ata": "echo '== ata.o ==' && nm -g build/ata.o | grep ata_read_sector || true && echo '== fat_fs.o ==' && nm -u build/fat_fs.o | grep ata_read_sector || true"
+
   }
 }
