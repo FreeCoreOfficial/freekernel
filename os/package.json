@@ -4,7 +4,7 @@
   "//_general": "Scripturi pentru dezvoltarea Chrysalis OS de catre Mihai209",
   "scripts": {
     "//_all": "Curata, compileaza si creeaza imaginea ISO",
-    "all": "make clean && make && make iso",
+    "all": "clear ; make clean && make && make iso",
 
     "//_run": "Ruleaza OS-ul in mod standard VGA",
     "run": "qemu-system-x86_64 -cdrom chrysalis.iso",

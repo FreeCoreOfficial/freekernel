@@ -51,6 +51,7 @@ $(BUILD)/keymap.o \
 $(BUILD)/keymap_us.o \
 $(BUILD)/keymap_ro.o \
 $(BUILD)/vga.o \
+    $(BUILD)/timer.o \
 
 
 
@@ -194,6 +195,10 @@ $(BUILD)/keymap_ro.o: kernel/keyboard/keymap_ro.c | $(BUILD)
 
 $(BUILD)/vga.o: kernel/video/vga.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/timer.o: kernel/time/timer.c | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
 # -------------------------
 # LINK
 # -------------------------

@@ -18,6 +18,7 @@
 #include "drivers/mouse.h"
 #include "input/keyboard_buffer.h" // pentru kbd_buffer_init()
 #include "video/vga.h"
+#include "time/timer.h"
 
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
 #ifdef __cplusplus
@@ -72,11 +73,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     try_init_framebuffer_from_multiboot(magic, addr);
 
 #if VGA_TEST
-    /* Initialize driver (will fall back to legacy 0xA0000 if no fb provided) */
+    /* Initialize driver (does NOT call BIOS). */
     vga_init();
 
-    /* Only run the visual graphics test if we actually have a framebuffer of at least 320x200.
-       Otherwise continue with normal initialisation so you get the shell/terminal. */
     if (vga_has_framebuffer() && vga_get_width() >= 320 && vga_get_height() >= 200) {
         vga_clear(0);
         for (int i = 0; i < 200 && i < (int)vga_get_width(); i++) {
@@ -91,12 +90,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
             vga_putpixel(310, y, 14);
         }
 
-        /* stay here to inspect result */
         for (;;)
             asm volatile("hlt");
-    } else {
-        /* No usable framebuffer → fallback to normal boot path (text mode) */
-        /* Continue to normal init below (no infinite-hlt) */
     }
 #endif
 
@@ -111,7 +106,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     kbd_buffer_init();
     keyboard_init();
-    pit_init(100);
+
+    /* Initialize timer abstraction (installs PIT + IRQ handler).
+       NOTE: interrupts are still disabled here — we will enable them (sti)
+       only after all IRQ handlers (keyboard, timer, etc.) are installed. */
+    timer_init(100);
 
     audio_init();
     mouse_init();
@@ -119,7 +118,18 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     serial_init();
     serial_write_string("=== Chrysalis OS serial online ===\r\n");
 
+    /* --- KEY CHANGE: enable interrupts NOW (after IRQ handlers installed) --- */
     asm volatile("sti");
+
+    /* Now it's safe to use sleep() and expect hardware IRQs (PIT, keyboard) to work. */
+    terminal_writestring("Sleeping 1 second...\n");
+    sleep(1000);
+    terminal_writestring("Done!\n");
+
+    for (int i = 0; i < 5; i++) {
+        terminal_writestring("tick\n");
+        sleep(500);
+    }
 
     terminal_writestring("\nSystem ready.\n> ");
 
