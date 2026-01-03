@@ -52,7 +52,7 @@
 | Status | Componentă              | Note          |
 | ------ | ----------------------- | ------------- |
 | ✅     | Physical Memory Manager | bitmap        |
-| 🔲     | Paging x86              | schimbă jocul |
+| ✅      | Paging x86              | schimbă jocul |
 | 🔲     | Virtual Memory          | izolare       |
 | 🔲     | Heap kernel (`kmalloc`) | obligatoriu   |
 | 🔲     | slab / buddy            | optimizare    |
