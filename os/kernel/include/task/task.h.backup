@@ -1,0 +1,26 @@
+#pragma once
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define KSTACK_SIZE 8192
+
+typedef struct task {
+    int pid;
+    uint32_t *kstack_ptr;
+    uint32_t cr3;
+    uint8_t kstack[KSTACK_SIZE] __attribute__((aligned(16)));
+    struct task *next;
+} task_t;
+
+/* API public folosit din kernel C/C++ */
+void task_init_scheduler(void);
+void yield(void);
+task_t *task_create(void (*entry)(void), int pid);
+extern task_t *current_task;
+
+#ifdef __cplusplus
+}
+#endif

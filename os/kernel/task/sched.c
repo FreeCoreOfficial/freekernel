@@ -1,35 +1,83 @@
-/* kernel/task/sched.c */
-#include "sched.h"
-#include "task.h"
+/* kernel/task/sched.c
+ *
+ * Defensive scheduler fallback (weak symbols).
+ *
+ * This file marks its public functions as weak so that if another translation
+ * unit (e.g. task.c fallback) provides a strong implementation linker will
+ * prefer the strong one and there will be no multiple-definition error.
+ *
+ * Behavior:
+ * - If you provide an assembly context switch named `switch_to(prev,next)`
+ *   we call it. If you provide `context_switch(&prev->kstack_ptr,&next->kstack_ptr)`
+ *   we call that. If neither exists, we advance current_task only (bookkeeping).
+ */
 
-/* assembly context switch */
-extern void switch_to(task_t *prev, task_t *next);
+#include <stdint.h>
+#include <stddef.h>
 
+/* Minimal task type to compile even if header not included.
+   This must be compatible with your task fallback in task.c. */
+#ifndef __SCHED_TASK_TYPE_DEFINED
+#define __SCHED_TASK_TYPE_DEFINED
+
+#ifndef KSTACK_SIZE
+#define KSTACK_SIZE 8192
+#endif
+
+typedef struct task {
+    int pid;
+    uint32_t *kstack_ptr;
+    uint32_t cr3;
+    uint8_t  kstack[KSTACK_SIZE] __attribute__((aligned(16)));
+    struct task *next;
+} task_t;
+
+#endif /* __SCHED_TASK_TYPE_DEFINED */
+
+/* External references (may be provided elsewhere) */
+extern task_t *current_task; /* provided by task implementation or fallback */
+
+/* Optional assembly routines (weak): */
+extern void switch_to(task_t *prev, task_t *next) __attribute__((weak));
+extern void context_switch(void *prev_kstack_ptr_addr, void *next_kstack_ptr_addr) __attribute__((weak));
+
+/* Weak schedule implementation: if a strong one exists elsewhere linker picks it. */
+void schedule(void) __attribute__((weak));
 void schedule(void)
 {
     if (!current_task) return;
-
-    /* trivial round-robin: pick next ready task */
     task_t *prev = current_task;
-    task_t *next = current_task->next;
+    task_t *next = prev->next;
 
-    /* find next runnable (simple) */
-    while (next && next != current_task && next->state != TASK_READY) {
-        next = next->next;
-    }
+    if (!next || next == prev) return; /* nothing to do or malformed list */
 
-    if (!next || next == current_task) {
-        /* nothing to do */
+    /* Prefer an asm-level switch if available */
+    if (switch_to) {
+        /* update bookkeeping before calling switch */
+        current_task = next;
+        switch_to(prev, next);
         return;
     }
 
-    /* mark states */
-    prev->state = TASK_READY;
-    next->state = TASK_RUNNING;
+    if (context_switch) {
+        context_switch(&prev->kstack_ptr, &next->kstack_ptr);
+        current_task = next;
+        return;
+    }
+
+    /* No real context switch available: just advance pointer for bookkeeping. */
     current_task = next;
+}
 
-    /* context switch: save prev->esp, load next->esp */
-    switch_to(prev, next);
+/* Weak yield wrappers */
+void yield(void) __attribute__((weak));
+void yield(void) { schedule(); }
 
-    /* when we return here, we've been switched back to this task */
+void task_yield(void) __attribute__((weak));
+void task_yield(void) { schedule(); }
+
+/* Small helper so runtime can detect fallback scheduler if needed (weak) */
+int scheduler_is_fallback(void) __attribute__((weak));
+int scheduler_is_fallback(void) {
+    return (switch_to == NULL && context_switch == NULL) ? 1 : 0;
 }

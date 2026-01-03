@@ -36,3 +36,15 @@ nm build/mem/kmalloc.o | grep kmalloc_init || true
 > mem slab
 > mem buddy
 > mem kmalloc 128
+
+
+[EDI]
+[ESI]
+[EBP]
+[ESP_saved]
+[EBX]
+[EDX]
+[ECX]
+[EAX]
+[EFLAGS]
+[RETURN_EIP]

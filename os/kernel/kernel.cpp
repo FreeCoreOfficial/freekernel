@@ -39,13 +39,56 @@
 #include "panic_sys.h"
 #include "panic.h"
 
-// ===== TASK SUBSYSTEM =====
-// Include the task and scheduler headers for the cooperative scheduler.
-// These headers are C-compatible (extern "C" guards inside), so they can be
-// included directly from C++.
-#include "task/task.h"
-#include "task/sched.h"
+// ===== TASK SUBSYSTEM FALLBACK (in-file, no external headers) =====
+//
+// This block provides a *safe* in-file fallback implementation of the minimal
+// task API used by kernel_main. Symbols are marked weak so a full task
+// implementation (in kernel/task/*.o) will override them at link time.
+//
+// The fallback purpose:
+//  - avoid compiler errors due to missing headers/signatures
+//  - keep TASKS disabled by default so we don't attempt context switching
+//    without a verified arch switch.S.
+//
+// If you enable TASKS_ENABLED=1, ensure you have a working arch/i386/switch.S
+// and a proper task implementation in your task/*.c/.o files.
 
+#define KSTACK_SIZE 8192
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct task {
+    int pid;
+    uint32_t *kstack_ptr;
+    uint32_t cr3;
+    uint8_t kstack[KSTACK_SIZE] __attribute__((aligned(16)));
+    struct task *next;
+} task_t;
+
+/* Weak stubs: if you have a real implementation in task/*.o these get replaced. */
+__attribute__((weak)) void task_init(void) { /* fallback: no-op */ }
+__attribute__((weak)) void task_init_scheduler(void) { task_init(); }
+
+/* Old API used by kernel.cpp: task_create(const char* name, void(*entry)) */
+__attribute__((weak)) task_t *task_create(const char * /*name*/, void (*entry)(void)) {
+    (void)entry; /* fallback does not create real tasks */
+    return (task_t*)0;
+}
+
+/* yield / aliases */
+__attribute__((weak)) void task_yield(void) { /* fallback: no-op */ }
+/* also provide yield() symbol (sometimes used) */
+__attribute__((weak)) void yield(void) { task_yield(); }
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
+// ===== end fallback =====
+
+// ===== other forward declarations / externs =====
 /* If shell.h doesn't declare shell_poll_input(), provide a local fallback */
 #ifdef __cplusplus
 extern "C" {
@@ -227,6 +270,10 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // 9) Input drivers: keyboard buffer + raw keyboard driver
     kbd_buffer_init();
     keyboard_init();
+
+    /* === NEW === */
+    /* Use task_init() which is a safe weak symbol fallback (no-op if no task impl). */
+    task_init();
 
     // 10) Timer abstraction (PIT) - install handlers but keep interrupts disabled
     timer_init(100);
