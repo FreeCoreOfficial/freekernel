@@ -63,7 +63,7 @@
 
 | Status | Componentă            |               |
 | ------ | --------------------- | ------------- |
-| 🔲     | task struct           | baza          |
+| ✅     | task struct           | baza          |
 | 🔲     | context switch        | greu dar fain |
 | 🔲     | scheduler RR          | simplu        |
 | 🔲     | kernel threads        |               |
