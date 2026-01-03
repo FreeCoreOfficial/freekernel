@@ -23,6 +23,9 @@
 #include "fs/ramfs/ramfs.h"
 #include "memory/pmm.h"
 #include "paging.h"
+#include "user/user.h"
+
+
 //#include <cstdio.h>
 /*#include "debug/debug.h"*/
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
@@ -123,7 +126,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     else
         terminal_writestring("[vfs] mount FAILED\n");
 
-    
+    user_init();
 
     shell_init();
     pmm_init((void*)addr);

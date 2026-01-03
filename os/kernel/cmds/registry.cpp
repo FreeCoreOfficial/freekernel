@@ -17,7 +17,7 @@
 #include "fat.h"    // stil nou: int cmd_fat(int, char**)
 #include "vfs.h"
 #include "pmm.h"
-
+#include "login.h"
 
 // Definiri manuale freestanding
 #ifndef NULL
@@ -84,7 +84,7 @@ static int wrap_cmd_shutdown(int argc, char **argv) { return old_style_wrapper(c
 static int wrap_cmd_ticks(int argc, char **argv)    { return old_style_wrapper(cmd_ticks,    argc, argv); }
 static int wrap_cmd_touch(int argc, char **argv)    { return old_style_wrapper(cmd_touch,    argc, argv); }
 static int wrap_cmd_uptime(int argc, char **argv)   { return old_style_wrapper(cmd_uptime,   argc, argv); }
-
+//static int wrap_cmd_login_main(int argc, char **argv) { return old_style_wrapper(cmd_login_main, argc, argv); }
 /* Tabelul final de comenzi */
 Command command_table[] = {
     { "beep",     (command_fn)wrap_cmd_beep },
@@ -96,6 +96,7 @@ Command command_table[] = {
     { "fat",      (command_fn)cmd_fat },           // stil nou → direct
     { "help",     (command_fn)wrap_cmd_help },
     { "ls",       (command_fn)wrap_cmd_ls },
+    { "login",    (command_fn)cmd_login_main},
     { "pmm",      (command_fn)cmd_pmm},
     { "play",     (command_fn)wrap_cmd_play },
     { "reboot",   (command_fn)wrap_cmd_reboot },

@@ -73,8 +73,8 @@ OBJS = \
 	$(BUILD)/pmm.o \
 	$(BUILD)/cmd_pmm.o \
 	$(BUILD)/paging.o \
-
-
+	$(BUILD)/user.o \
+	$(BUILD)/cmd_login.o \
 
 
 # -------------------------
@@ -244,6 +244,12 @@ $(BUILD)/ramfs.o: kernel/fs/ramfs/ramfs.c | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 $(BUILD)/cmd_vfs.o: kernel/cmds/vfs.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/user.o: kernel/user/user.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_login.o: kernel/cmds/login.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------

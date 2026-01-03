@@ -7,6 +7,9 @@
 #include "../events/event.h"
 #include "../events/event_queue.h"
 
+/* user support for prompt */
+#include "../user/user.h"
+
 static char buffer[128];
 static int index = 0;
 
@@ -58,7 +61,7 @@ static void execute_command(const char* input) {
 
 void shell_init() {
     index = 0;
-    terminal_writestring("> ");
+    shell_prompt();
 }
 
 void shell_handle_char(char c) {
@@ -68,7 +71,7 @@ void shell_handle_char(char c) {
 
         execute_command(buffer);
 
-        terminal_writestring("> ");
+        shell_prompt();
         index = 0;
         return;
     }
@@ -76,6 +79,7 @@ void shell_handle_char(char c) {
     if (c == '\b') {
         if (index > 0) {
             index--;
+            /* backspace visual (simple) */
             terminal_putchar('\b');
         }
         return;
@@ -117,5 +121,10 @@ void shell_reset_input(void) {
 }
 
 void shell_prompt(void) {
-    terminal_writestring("> ");
+    user_t* u = user_get_current();
+    if (u) {
+        terminal_printf("%s@chrysalis:~$ ", u->name);
+    } else {
+        terminal_printf("guest@chrysalis:~$ ");
+    }
 }
