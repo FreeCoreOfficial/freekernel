@@ -10,6 +10,10 @@ void terminal_writestring(const char* s);
 void terminal_clear();
 void terminal_init();
 
+/* ===== NEW: printf support ===== */
+void terminal_printf(const char* fmt, ...);
+void terminal_vprintf(const char* fmt, void* va); /* intern */
+
 #ifdef __cplusplus
 }
 #endif

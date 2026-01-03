@@ -19,5 +19,8 @@ SECTIONS
         *(COMMON)
     }
 
+    /* === IMPORTANT: end of kernel image === */
+    kernel_end = .;
+
     /DISCARD/ : { *(.eh_frame) }
 }

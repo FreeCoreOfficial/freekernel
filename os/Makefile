@@ -70,6 +70,8 @@ OBJS = \
 	$(BUILD)/vfs.o \
 	$(BUILD)/ramfs.o \
 	$(BUILD)/cmd_vfs.o \
+	$(BUILD)/pmm.o \
+
 
 
 # -------------------------
@@ -250,6 +252,11 @@ $(BUILD)/ata.o: kernel/storage/ata.c | $(BUILD)
 
 $(BUILD)/fat_fs.o: kernel/fs/fat/fat.c | $(BUILD)
 	$(CC) $(CFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/pmm.o: kernel/memory/pmm.c
+	$(CC) -m32 $(CFLAGS) -c $< -o $@
+
+
 
 # -------------------------
 # LINK

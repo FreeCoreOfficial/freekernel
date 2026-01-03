@@ -21,7 +21,8 @@
 #include "storage/ata.h"
 #include "fs/vfs/mount.h"
 #include "fs/ramfs/ramfs.h"
-
+#include "memory/pmm.h"
+//#include <cstdio.h>
 /*#include "debug/debug.h"*/
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
 #ifdef __cplusplus
@@ -119,6 +120,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         terminal_writestring("[vfs] mount FAILED\n");
 
     shell_init();
+    pmm_init((void*)addr);
+
 
 
     kbd_buffer_init();
@@ -159,6 +162,17 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     datetime t;
     time_get_local(&t);
     ata_init();
+
+
+    uint32_t a = pmm_alloc_frame();
+    uint32_t b = pmm_alloc_frame();
+
+    terminal_printf("PMM: %x %x\n", a, b);
+
+
+
+    pmm_free_frame(a);
+    pmm_free_frame(b);
 
     while (1) {
         shell_poll_input();
