@@ -55,7 +55,7 @@
 | ✅      | Paging x86              | schimbă jocul |
 | ✅     | Virtual Memory          | izolare       |
 | ✅     | Heap kernel (`kmalloc`) | obligatoriu   |
-| 🔲     | slab / buddy            | optimizare    |
+| ✅     | slab / buddy            | optimizare    |
 | 🔲     | user memory isolation   | securitate    |
 
 🟠 NIVEL 5 — Procese & multitasking

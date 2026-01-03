@@ -83,6 +83,8 @@ OBJS = \
 	$(BUILD)/panic.o \
 	$(BUILD)/cmd_crash.o \
 	$(BUILD)/panic_sys.o \
+    $(BUILD)/cmd_mem.o \
+
 
 
 
@@ -300,6 +302,11 @@ build/user_prog.bin: kernel/user/user_prog.S
 
 $(BUILD)/user_blob.o: kernel/user/user_blob.c build/user_prog.bin | $(BUILD)
 	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+$(BUILD)/cmd_mem.o: kernel/cmds/mem.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
+
+
 
 # -------------------------
 # LINK

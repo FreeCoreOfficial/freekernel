@@ -19,6 +19,7 @@
 #include "pmm.h"
 #include "login.h"
 #include "crash.h"
+#include "mem.h"
 // Definiri manuale freestanding
 #ifndef NULL
 #define NULL 0          // în loc de ((void*)0) → evită eroarea de conversie
@@ -98,6 +99,7 @@ Command command_table[] = {
     { "help",     (command_fn)wrap_cmd_help },
     { "ls",       (command_fn)wrap_cmd_ls },
     { "login",    (command_fn)cmd_login_main},
+    { "mem",      (command_fn)cmd_mem},
     { "pmm",      (command_fn)cmd_pmm},
     { "play",     (command_fn)wrap_cmd_play },
     { "reboot",   (command_fn)wrap_cmd_reboot },
