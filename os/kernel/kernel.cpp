@@ -40,6 +40,7 @@
 #include "panic.h"
 #include "sched/scheduler.h"
 #include "sched/pcb.h"
+#include "detect/ram.h"
 
 // ===== TASK SUBSYSTEM FALLBACK (in-file, no external headers) =====
 //
@@ -51,9 +52,6 @@
 //  - avoid compiler errors due to missing headers/signatures
 //  - keep TASKS disabled by default so we don't attempt context switching
 //    without a verified arch switch.S.
-//
-// If you enable TASKS_ENABLED=1, ensure you have a working arch/i386/switch.S
-// and a proper task implementation in your task/*.c/.o files.
 
 #define KSTACK_SIZE 8192
 
@@ -69,19 +67,19 @@ typedef struct task {
     struct task *next;
 } task_t;
 
-/* Weak stubs: if you have a real implementation in task/*.o these get replaced. */
+// Weak stubs: if you have a real implementation in task/*.o these get replaced.
 __attribute__((weak)) void task_init(void) { /* fallback: no-op */ }
 __attribute__((weak)) void task_init_scheduler(void) { task_init(); }
 
-/* Old API used by kernel.cpp: task_create(const char* name, void(*entry)) */
+// Old API used by kernel.cpp: task_create(const char* name, void(*entry))
 __attribute__((weak)) task_t *task_create(const char * /*name*/, void (*entry)(void)) {
     (void)entry; /* fallback does not create real tasks */
     return (task_t*)0;
 }
 
-/* yield / aliases */
+// yield / aliases
 __attribute__((weak)) void task_yield(void) { /* fallback: no-op */ }
-/* also provide yield() symbol (sometimes used) */
+// also provide yield() symbol (sometimes used)
 __attribute__((weak)) void yield(void) { task_yield(); }
 
 #ifdef __cplusplus
@@ -118,7 +116,7 @@ extern "C" void buddy_init_from_heap(void);
    Set to 1 only after you're sure switch_to is correct and you have tested
    context switching in a controlled environment.
 */
-#define TASKS_ENABLED 1
+#define TASKS_ENABLED 0
 
 /* Minimal Multiboot structure (only the fields we use) */
 typedef struct {
@@ -209,41 +207,21 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // 1) Early: pick up framebuffer info (if GRUB gave it)
     try_init_framebuffer_from_multiboot(magic, addr);
 
-#if VGA_TEST
-    /* Simple VGA test (framebuffer mode); this does not use BIOS. */
-    vga_init();
+    // 2) Terminal (text-mode) initialization - early so we can show errors
+    terminal_init();
 
-    if (vga_has_framebuffer() && vga_get_width() >= 320 && vga_get_height() >= 200) {
-        vga_clear(0);
-        for (int i = 0; i < 200 && i < (int)vga_get_width(); i++) {
-            vga_putpixel(i, i, 15);
-        }
-        for (int x = 10; x < 310 && x < (int)vga_get_width(); x++) {
-            vga_putpixel(x, 10, 14);
-            vga_putpixel(x, 190, 14);
-        }
-        for (int y = 10; y < 190 && y < (int)vga_get_height(); y++) {
-            vga_putpixel(10, y, 14);
-            vga_putpixel(310, y, 14);
-        }
+    // 3) Early boot safety check: detect RAM and panic cleanly if insufficient
+    ram_check_or_panic(magic, addr);
 
-        for (;;)
-            asm volatile("hlt");
-    }
-#endif
-
-    // 2) CPU/interrupt basic setup: GDT -> IDT -> PIC. Order matters.
+    // 4) CPU/interrupt basic setup: GDT -> IDT -> PIC. Order matters.
     gdt_init();
     idt_init();
     pic_remap();
 
-    // 3) Terminal (text-mode) initialization
-    terminal_init();
-
-    // 4) Optional boot logo
+    // 5) Optional boot logo
     bootlogo_show();
 
-    // 5) Filesystem core: initialize and mount a minimal root
+    // 6) Filesystem core: initialize and mount a minimal root
     fs_init();
     if (!ramfs_root()) {
         // ramfs_root failure is fatal for our simple early boot; panic instead of continuing
@@ -257,19 +235,18 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     else
         terminal_writestring("[vfs] mount FAILED\n");
 
-    // 6) User subsystem (if present)
+    // 7) User subsystem (if present)
     user_init();
 
-    // 7) Shell: text UI
+    // 8) Shell: text UI
     shell_init();
 
-    // 8) Physical Memory Manager (PMM)
+    // 9) Physical Memory Manager (PMM)
     pmm_init((void*)addr);
 
     // Sanity check PMM (if you have functions for total frames, check them here)
-    // If pmm_init failed in a way you can detect, call panic_if_fatal()
 
-    // 9) Input drivers: keyboard buffer + raw keyboard driver
+    // 10) Input drivers: keyboard buffer + raw keyboard driver
     kbd_buffer_init();
     keyboard_init();
 
@@ -277,24 +254,24 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     /* Use task_init() which is a safe weak symbol fallback (no-op if no task impl). */
     task_init();
 
-    // 10) Timer abstraction (PIT) - install handlers but keep interrupts disabled
+    // 11) Timer abstraction (PIT) - install handlers but keep interrupts disabled
     timer_init(100);
 
-    // 11) Other drivers and serial for debug/log
+    // 12) Other drivers and serial for debug/log
     audio_init();
     mouse_init();
 
     serial_init();
     serial_write_string("=== Chrysalis OS serial online ===\r\n");
 
-    // 12) Event queue for event-driven design
+    // 13) Event queue for event-driven design
     event_queue_init();
 
-    // 13) Now enable interrupts: only do this after driver IRQ handlers are installed.
+    // 14) Now enable interrupts: only do this after driver IRQ handlers are installed.
     // Enabling earlier risks races where an ISR runs before supporting state is ready.
     asm volatile("sti");
 
-    // 14) Demonstration of sleep / IRQ-driven timers working
+    // 15) Demonstration of sleep / IRQ-driven timers working
     terminal_writestring("Sleeping 1 second...\n");
     sleep(1000);
     terminal_writestring("Done!\n");
@@ -306,7 +283,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     terminal_writestring("\nSystem ready.\n> ");
 
-    // 15) RTC/time/ATA
+    // 16) RTC/time/ATA
     rtc_print();
     time_init();
     time_set_timezone(2);
@@ -314,7 +291,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     time_get_local(&t);
     ata_init();
 
-    // 16) PMM quick test
+    // 17) PMM quick test
     uint32_t frame1 = pmm_alloc_frame();
     uint32_t frame2 = pmm_alloc_frame();
     terminal_printf("PMM: %x %x\n", frame1, frame2);
@@ -325,11 +302,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     pmm_free_frame(frame1);
     pmm_free_frame(frame2);
 
-    // 17) Paging: choose page area size per your roadmap
+    // 18) Paging: choose page area size per your roadmap
     paging_init(PAGING_120_MB);
     terminal_printf("Paging OK\n");
 
-    // 18) Heap + buddy allocator + kmalloc
+    // 19) Heap + buddy allocator + kmalloc
     extern uint8_t __heap_start;
     extern uint8_t __heap_end;
 
@@ -342,7 +319,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     buddy_init_from_heap();
     kmalloc_init();
 
-    // 19) Heap test (defensive frees)
+    // 20) Heap test (defensive frees)
     void* heap_a = kmalloc(64);
     void* heap_b = kmalloc_aligned(100, 64);
     if (!heap_a || !heap_b) {
@@ -352,7 +329,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     kfree(heap_a);
     kfree(heap_b);
 
-    // 20) Register system info for panic screen (use safe defaults)
+    // 21) Register system info for panic screen (use safe defaults)
     uint32_t total_kb = 0;
     uint32_t free_kb  = 0;
     uint32_t uptime_s = 0;
@@ -378,10 +355,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // -----------------------------
     // TASKS: Setup cooperative scheduling (DEFENSIVE)
     // -----------------------------
-    // Default behaviour: tasking is disabled (TASKS_ENABLED == 0).
-    // If you change TASKS_ENABLED to 1, you accept responsibility: you must have
-    // a correct switch_to that saves/restores all necessary registers and uses
-    // dedicated stacks for tasks.
 #if TASKS_ENABLED
     terminal_writestring("[sched] tasks created; scheduler disabled by default\n");
     terminal_writestring("[sched] call scheduler_start() manually when ready\n");
@@ -390,22 +363,18 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
        This prevents an immediate context switch into untested stacks. */
     scheduler_init(2);
 
-    /* Create tasks (we log failures but do NOT panic automatically).
-       Panic calls are kept commented out (//) so you can re-enable them later
-       if you want the boot to stop on task-creation failures. */
+    /* Create tasks (we log failures but do NOT panic automatically). */
     int r;
     r = pcb_create(task_a, NULL);
     if (r < 0) {
         terminal_printf("[sched] pcb_create(taskA) -> %d\n", r);
         serial_write_string("[sched] pcb_create(taskA) failed\r\n");
-        //panic_if_fatal("pcb_create(taskA) failed");
     }
 
     r = pcb_create(task_b, NULL);
     if (r < 0) {
         terminal_printf("[sched] pcb_create(taskB) -> %d\n", r);
         serial_write_string("[sched] pcb_create(taskB) failed\r\n");
-        //panic_if_fatal("pcb_create(taskB) failed");
     }
 
     terminal_writestring("[sched] scheduler initialized and tasks created (scheduler NOT started)\n");
@@ -416,13 +385,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
 
 
-    // 21) Main loop: shell polling + halt (no unsafe yields)
+    // 22) Main loop: shell polling + halt (no unsafe yields)
     // If you want the shell to be preempted by tasks, move shell into its own
     // task and enable TASKS_ENABLED after implementing a safe switch_to.
     while (1) {
         shell_poll_input();   // non-blocking poll for shell input
-
-
 
 #if TASKS_ENABLED
         // If you truly want automated scheduling when TASKS_ENABLED==1, replace
@@ -430,8 +397,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         // have tested on a VM snapshot (so you can revert on triple fault).
         // task_yield();
 #endif
-
-
 
         asm volatile("hlt"); // reduce power until next interrupt
     }

@@ -96,6 +96,7 @@ OBJS = \
     $(BUILD)/arch/switch.o \
 	$(BUILD)/sched/pcb.o \
     $(BUILD)/sched/scheduler.o \
+	$(BUILD)/ram.o \
 
 # -------------------------
 # TARGETURI PRINCIPALE
@@ -352,6 +353,8 @@ $(BUILD)/sched/scheduler.o: kernel/sched/scheduler.c kernel/sched/scheduler.h ke
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -m32 -c $< -o $@
 
+$(BUILD)/ram.o: kernel/detect/ram.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # -------------------------
 # LINK
