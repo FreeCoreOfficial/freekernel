@@ -1,3 +1,4 @@
+// kernel/kernel.cpp
 #include "types.h"
 
 #include "terminal.h"
@@ -27,9 +28,7 @@
 #include "mem/kmalloc.h"
 #include "panic_sys.h"
 #include "panic.h"
-//#include "mm/kmalloc.h"
-//#include <cstdio.h>
-/*#include "debug/debug.h"*/
+
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
 #ifdef __cplusplus
 extern "C" {
@@ -42,6 +41,9 @@ void shell_poll_input(void);
 extern "C" {
     void kmalloc_init(void);
 }
+
+/* buddy init wrapper that binds buddy to the heap region (defined in linker.ld) */
+extern "C" void buddy_init_from_heap(void);
 
 /* Multiboot magic constant (classic Multiboot 1) */
 #define MULTIBOOT_MAGIC 0x2BADB002u
@@ -117,7 +119,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     bootlogo_show();
 
-    kmalloc_init();
+    /* NOTE: kmalloc_init() must run *after* heap + buddy are initialized.
+       It was moved later in the boot sequence (after heap_init and buddy_init_from_heap).
+    */
 
     fs_init();
 
@@ -135,6 +139,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     user_init();
 
     shell_init();
+
+    /* initialize physical memory manager (PMM) */
     pmm_init((void*)addr);
 
     kbd_buffer_init();
@@ -196,7 +202,12 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     extern uint8_t __heap_start;
     extern uint8_t __heap_end;
 
+    /* initialize kernel heap region (linker.ld sets __heap_start/__heap_end) */
     heap_init(&__heap_start, (size_t)(&__heap_end - &__heap_start));
+
+    /* bind buddy allocator to heap region and init kmalloc/slab */
+    buddy_init_from_heap();
+    kmalloc_init();
 
     /* Heap test: folosiți nume diferite față de frame1/frame2 */
     void* heap_a = kmalloc(64);

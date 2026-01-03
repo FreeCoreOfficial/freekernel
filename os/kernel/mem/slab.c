@@ -74,3 +74,7 @@ void slab_free(slab_cache_t* cache, void* obj) {
         }
     }
 }
+
+void* slab_alloc_page(void) {
+    return buddy_alloc_page(0); // 1 pagină = 4KB
+}
