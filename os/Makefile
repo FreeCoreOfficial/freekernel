@@ -72,6 +72,8 @@ OBJS = \
 	$(BUILD)/cmd_vfs.o \
 	$(BUILD)/pmm.o \
 	$(BUILD)/cmd_pmm.o \
+	$(BUILD)/paging.o \
+
 
 
 
@@ -259,6 +261,11 @@ $(BUILD)/pmm.o: kernel/memory/pmm.c
 
 $(BUILD)/cmd_pmm.o: kernel/cmds/pmm.cpp
 	$(CXX) -m32 $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/paging.o: kernel/paging.c kernel/paging.h
+	@mkdir -p $(dir $@)
+	cc -m32 $(CXXFLAGS) -c $< -o $@
+
 
 
 

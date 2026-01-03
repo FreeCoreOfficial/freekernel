@@ -22,6 +22,7 @@
 #include "fs/vfs/mount.h"
 #include "fs/ramfs/ramfs.h"
 #include "memory/pmm.h"
+#include "paging.h"
 //#include <cstdio.h>
 /*#include "debug/debug.h"*/
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
@@ -104,6 +105,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     idt_init();
     pic_remap();
     terminal_init();
+
+    
+
     bootlogo_show();
 
     fs_init();
@@ -118,6 +122,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         terminal_writestring("[vfs] root mounted OK\n");
     else
         terminal_writestring("[vfs] mount FAILED\n");
+
+    
 
     shell_init();
     pmm_init((void*)addr);
@@ -173,6 +179,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     pmm_free_frame(a);
     pmm_free_frame(b);
+
+    paging_init(16);
 
     while (1) {
         shell_poll_input();
