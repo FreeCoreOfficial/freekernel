@@ -27,7 +27,7 @@
 #include "mem/kmalloc.h"
 #include "panic_sys.h"
 #include "panic.h"
-
+//#include "mm/kmalloc.h"
 //#include <cstdio.h>
 /*#include "debug/debug.h"*/
 /* Dacă shell.h nu declară shell_poll_input(), avem o declarație locală ca fallback */
@@ -38,6 +38,10 @@ void shell_poll_input(void);
 #ifdef __cplusplus
 }
 #endif
+
+extern "C" {
+    void kmalloc_init(void);
+}
 
 /* Multiboot magic constant (classic Multiboot 1) */
 #define MULTIBOOT_MAGIC 0x2BADB002u
@@ -112,6 +116,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     terminal_init();
 
     bootlogo_show();
+
+    kmalloc_init();
 
     fs_init();
 

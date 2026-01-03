@@ -42,6 +42,8 @@ static void split_block(kmem_block_t* block, size_t size);
 /* Initialize heap region: start must be an address within kernel image after linking.
    size is the total bytes available for the heap region.
 */
+
+
 void heap_init(void* start, size_t size) {
     if (!start || size <= sizeof(kmem_block_t) + ALIGNMENT) return;
 

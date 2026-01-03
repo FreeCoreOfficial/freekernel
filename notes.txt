@@ -19,3 +19,8 @@ disk --test --write <lba> — scrie pattern 0..255 repeated în sector
 disk --test --output <lba> — citește + hexdump un sector
 
 disk --test --see-raw <lba> <count> — hexdump pentru mai multe sectoare
+
+
+
+make build/user_prog.bin
+xxd -i build/user_prog.bin > kernel/user/user_prog.bin.inc

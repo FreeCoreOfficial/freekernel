@@ -76,6 +76,10 @@ OBJS = \
 	$(BUILD)/user.o \
 	$(BUILD)/cmd_login.o \
 	$(BUILD)/mem/kmalloc.o \
+	$(BUILD)/mem/kmalloc_init.o \
+	$(BUILD)/mem/buddy.o \
+	$(BUILD)/mem/slab.o \
+	$(BUILD)/user_blob.o \
 	$(BUILD)/panic.o \
 	$(BUILD)/cmd_crash.o \
 	$(BUILD)/panic_sys.o \
@@ -291,7 +295,11 @@ $(BUILD)/panic_sys.o: kernel/panic_sys.c | $(BUILD)
 	$(CC) $(CFLAGS) -m32 -c $< -o $@
 
 
+build/user_prog.bin: kernel/user/user_prog.S
+	$(AS) -f bin $< -o $@
 
+$(BUILD)/user_blob.o: kernel/user/user_blob.c build/user_prog.bin | $(BUILD)
+	$(CXX) $(CXXFLAGS) -m32 -c $< -o $@
 
 # -------------------------
 # LINK

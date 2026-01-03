@@ -1,5 +1,8 @@
 #include "gdt.h"
 #include <stdint.h>
+#define GDT_USER_CODE (3*8)
+#define GDT_USER_DATA (4*8)
+
 
 extern "C" void gdt_flush(uint32_t);
 
