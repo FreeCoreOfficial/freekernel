@@ -117,7 +117,9 @@ OBJS = \
 	$(BUILD)/stubs/exec_fallbacks.o \
 	$(BUILD)/cmds/elf.o \
 	$(BUILD)/cmds/elf_debug.o \
-	$(BUILD)/cmds/elf_crash.o
+	$(BUILD)/cmds/elf_crash.o \
+	$(BUILD)/hardware/pci.o
+
 
 # -------------------------
 # TARGETURI PRINCIPALE
@@ -443,6 +445,10 @@ $(BUILD)/cmds/elf_debug.o: kernel/cmds/elf_debug.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/cmds/elf_crash.o: kernel/cmds/elf_crash.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/hardware/pci.o: kernel/hardware/pci.cpp
+	@mkdir -p $(BUILD)/hardware
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # -------------------------

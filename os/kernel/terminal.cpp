@@ -189,3 +189,19 @@ extern "C" void terminal_printf(const char* fmt, ...)
     terminal_vprintf(fmt, &args);
     va_end(args);
 }
+
+/* ---------- NEW: print hex trimmed (no leading zeros) ---------- */
+/* prints hex without 0x; trims leading zeros so 0x00008086 -> "8086" */
+extern "C" void terminal_writehex(uint32_t v)
+{
+    const char* hex = "0123456789ABCDEF";
+    bool started = false;
+
+    for (int i = 7; i >= 0; i--) {
+        uint8_t nib = (v >> (i * 4)) & 0xF;
+        if (nib != 0 || started || i == 0) {
+            started = true;
+            terminal_putchar(hex[nib]);
+        }
+    }
+}

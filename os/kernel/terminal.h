@@ -1,3 +1,4 @@
+// kernel/terminal/terminal.h
 #pragma once
 #include <stdint.h>
 
@@ -13,6 +14,9 @@ void terminal_init();
 /* ===== NEW: printf support ===== */
 void terminal_printf(const char* fmt, ...);
 void terminal_vprintf(const char* fmt, void* va); /* intern */
+
+/* print value as hex (no 0x prefix), trimmed leading zeros */
+void terminal_writehex(uint32_t v);
 
 #ifdef __cplusplus
 }

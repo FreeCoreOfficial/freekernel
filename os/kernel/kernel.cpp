@@ -54,7 +54,7 @@
 #include "sched/pcb.h"
 #include "detect/ram.h"
 #include "arch/i386/syscall.h"
-
+#include "hardware/pci.h"
 //#include "detect/tpm.h"
 //#include "detect/videomemory.h"
 
@@ -427,6 +427,8 @@ asm volatile(
     : "eax", "ebx"
 );
 
+terminal_writestring("[kernel] initializing PCI\n");
+pci_init();
 
 // definește string-ul (scope file-local e OK)
 //static const char test_msg[] = "Hello from syscall!";

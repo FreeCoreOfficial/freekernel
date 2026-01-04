@@ -81,3 +81,14 @@ fallback pe toate intrările
 IRQ 0 / 1
 syscall 0x80 (DPL=3)
 lidt
+
+31        24 23    16 15   11 10    8 7      2 1 0
++------------+--------+--------+--------+--------+
+| enable=1   | bus    | device | func   | offset |
++------------+--------+--------+--------+--------+
+
+[pci] scanning PCI bus...
+[pci] device found: 8086:1237
+[pci] device found: 8086:7000
+[pci] device found: 1234:1111
+[pci] scan complete
