@@ -1,33 +1,58 @@
+// kernel/arch/i386/idt.cpp
 #include "idt.h"
+#include "../../terminal.h"
+#include "../../panic.h"
 
 extern "C" void irq0();
 extern "C" void irq1();
+extern "C" void isr_default();   // fallback generic ASM handler
 
 static IDTEntry idt[256];
 static IDTPointer idtp;
 
-static void set_gate(uint8_t n, uint32_t handler)
+/* Public function: expusă prin idt.h */
+void idt_set_gate(int num, uint32_t base, uint16_t sel, uint8_t flags)
 {
-    idt[n].base_low  = handler & 0xFFFF;
-    idt[n].base_high = (handler >> 16) & 0xFFFF;
-    idt[n].sel       = 0x08;   // kernel code segment
-    idt[n].always0   = 0;
-    idt[n].flags     = 0x8E;   // present, ring 0, 32-bit interrupt gate
+    if (num < 0 || num >= 256) {
+        panic("idt_set_gate: invalid index");
+        return;
+    }
+
+    idt[num].base_low  = base & 0xFFFF;
+    idt[num].base_high = (base >> 16) & 0xFFFF;
+    idt[num].sel       = sel;
+    idt[num].always0   = 0;
+    idt[num].flags     = flags;
 }
 
+/* IDT init + fallback stabil */
 extern "C" void idt_init()
 {
     idtp.limit = sizeof(idt) - 1;
     idtp.base  = (uint32_t)&idt;
 
-    // clear table
+    /* zero table */
     for (int i = 0; i < 256; i++) {
-        idt[i] = {0, 0, 0, 0, 0};
+        idt[i].base_low  = 0;
+        idt[i].base_high = 0;
+        idt[i].sel       = 0;
+        idt[i].always0   = 0;
+        idt[i].flags     = 0;
     }
 
-    // IRQs after PIC remap
-    set_gate(32, (uint32_t)irq0);
-    set_gate(33, (uint32_t)irq1);
+    /* setăm un fallback clar pentru toate intrările (stabil) */
+    for (int i = 0; i < 256; i++) {
+        idt_set_gate(i, (uint32_t)isr_default, 0x08, 0x8E); // ring0 intr gate
+    }
 
+    /* Overwrite cu IRQ-urile tale reale după remap PIC (32/33 etc) */
+    idt_set_gate(32, (uint32_t)irq0, 0x08, 0x8E);
+    idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
+
+    /* Dacă vei instala syscall gate cu DPL=3, o vei seta altfel (0xEE). */
+
+    /* Load IDT */
     asm volatile("lidt %0" : : "m"(idtp));
+
+    terminal_writestring("[idt] installed (with safe fallback)\n");
 }

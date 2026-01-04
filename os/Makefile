@@ -107,9 +107,9 @@ OBJS = \
     $(BUILD)/cmd_chrysver.o \
 	build/arch/tss.o \
     build/arch/tss_flush.o \
-
-
-
+	$(BUILD)/arch/syscall.o \
+    $(BUILD)/arch/syscall_asm.o \
+	build/arch/isr_default.o
 
 # -------------------------
 # TARGETURI PRINCIPALE
@@ -402,6 +402,15 @@ build/arch/tss.o: kernel/arch/i386/tss.c
 
 build/arch/tss_flush.o: kernel/arch/i386/tss_flush.S
 	$(AS) $(ASFLAGS) $< -o $@
+
+$(BUILD)/arch/syscall.o: kernel/arch/i386/syscall.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/arch/syscall_asm.o: kernel/arch/i386/syscall.S
+	nasm -f elf32 $< -o $@
+
+build/arch/isr_default.o: kernel/arch/i386/isr_default.S
+	nasm -f elf32 $< -o $@
 
 # -------------------------
 # LINK

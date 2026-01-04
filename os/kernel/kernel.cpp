@@ -53,6 +53,8 @@
 #include "sched/scheduler.h"
 #include "sched/pcb.h"
 #include "detect/ram.h"
+#include "arch/i386/syscall.h"
+
 //#include "detect/tpm.h"
 //#include "detect/videomemory.h"
 
@@ -232,6 +234,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     // 4) CPU/interrupt basic setup: GDT -> IDT -> PIC. Order matters.
     gdt_init();
+
+    syscall_init();
+
 
     uint32_t kernel_stack;
     asm volatile("mov %%esp, %0" : "=r"(kernel_stack));
