@@ -118,7 +118,9 @@ OBJS = \
 	$(BUILD)/cmds/elf.o \
 	$(BUILD)/cmds/elf_debug.o \
 	$(BUILD)/cmds/elf_crash.o \
-	$(BUILD)/hardware/pci.o
+	$(BUILD)/hardware/pci.o \
+	$(BUILD)/hardware/acpi.o \
+
 
 
 # -------------------------
@@ -449,6 +451,9 @@ $(BUILD)/cmds/elf_crash.o: kernel/cmds/elf_crash.cpp | dirs
 
 $(BUILD)/hardware/pci.o: kernel/hardware/pci.cpp
 	@mkdir -p $(BUILD)/hardware
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/hardware/acpi.o: kernel/hardware/acpi.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # -------------------------

@@ -55,6 +55,11 @@
 #include "detect/ram.h"
 #include "arch/i386/syscall.h"
 #include "hardware/pci.h"
+#include "hardware/acpi.h"
+#include "mm/vmm.h"
+
+
+
 //#include "detect/tpm.h"
 //#include "detect/videomemory.h"
 
@@ -430,6 +435,12 @@ asm volatile(
 terminal_writestring("[kernel] initializing PCI\n");
 pci_init();
 
+/* BIOS + ACPI legacy areas */
+vmm_identity_map(0x00000000, 0x1000);      // BDA
+vmm_identity_map(0x000E0000, 0x20000);     // BIOS area
+
+
+acpi_init();
 // definește string-ul (scope file-local e OK)
 //static const char test_msg[] = "Hello from syscall!";
 

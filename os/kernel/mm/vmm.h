@@ -13,9 +13,9 @@ extern "C" {
 /* Avoid redefining PAGE_SIZE if another header already defined it
  * (pmm.h uses #define PAGE_SIZE 4096).
  */
-#ifndef PAGE_SIZE
+/*#ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000u
-#endif
+#endif*/
 
 /* Allocate one 4KiB page and return a kernel-virtual pointer to it.
  * The returned page is zeroed.
@@ -35,6 +35,10 @@ void vmm_free_page(void* page);
 void vmm_map_page(uint32_t* pagedir, uint32_t vaddr, uint32_t phys, uint32_t flags);
 
 void vmm_unmap_page(uint32_t* pagedir, uint32_t vaddr);
+
+void vmm_identity_map(uint32_t phys, uint32_t size);
+
+
 
 uint32_t vmm_virt_to_phys(void* vaddr);
 

@@ -109,3 +109,17 @@ uint32_t vmm_virt_to_phys(void* vaddr)
     uint32_t offset = va & ~PAGE_FRAME_MASK;
     return phys_page + offset;
 }
+
+void vmm_identity_map(uint32_t phys, uint32_t size)
+{
+    extern uint32_t* kernel_page_directory;
+
+    for (uint32_t addr = phys; addr < phys + size; addr += PAGE_SIZE) {
+        vmm_map_page(
+            kernel_page_directory,
+            addr,   // virtual
+            addr,   // physical
+            PAGE_RW // ← FLAG CORECT
+        );
+    }
+}
