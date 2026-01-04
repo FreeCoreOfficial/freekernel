@@ -8,7 +8,7 @@
     "r:hdd": "clear ; qemu-system-x86_64 -boot order=d -cdrom chrysalis.iso -drive file=hdd.img,format=raw",
 
     "//_all": "Curata, compileaza si creeaza imaginea ISO",
-    "all": "clear ; make clean && make && make iso",
+    "all": "clear ; make clean && make dirs ; make && make iso",
 
     "//_run": "Ruleaza OS-ul in mod standard VGA",
     "run": "clear ; qemu-system-x86_64 -cdrom chrysalis.iso",

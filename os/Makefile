@@ -110,7 +110,12 @@ OBJS = \
 	$(BUILD)/arch/syscall.o \
     $(BUILD)/arch/syscall_asm.o \
 	build/arch/isr_default.o \
-	build/arch/syscall_dispatch.o
+	build/arch/syscall_dispatch.o \
+    $(BUILD)/elf.o \
+    $(BUILD)/process.o \
+    $(BUILD)/exec.o \
+	$(BUILD)/stubs/exec_fallbacks.o \
+
 
 
 # -------------------------
@@ -123,6 +128,13 @@ all: $(ISO)/boot/$(KERNEL)
 
 $(BUILD):
 	mkdir -p $(BUILD)
+	
+
+dirs:
+	mkdir -p build/elf
+	mkdir -p build/proc
+	mkdir -p build/stubs
+
 
 # -------------------------
 # ASSEMBLY
@@ -415,6 +427,18 @@ build/arch/isr_default.o: kernel/arch/i386/isr_default.S
 	nasm -f elf32 $< -o $@
 
 build/arch/syscall_dispatch.o: kernel/arch/i386/syscall_dispatch.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/elf.o: kernel/elf/elf.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/process.o: kernel/proc/process.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/exec.o: kernel/proc/exec.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/stubs/exec_fallbacks.o: kernel/stubs/exec_fallbacks.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # -------------------------
