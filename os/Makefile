@@ -97,7 +97,9 @@ OBJS = \
 	$(BUILD)/sched/pcb.o \
     $(BUILD)/sched/scheduler.o \
 	$(BUILD)/ram.o \
-	$(BUILD)/tpm.o
+	$(BUILD)/tpm.o \
+	$(BUILD)/videomemory.o \
+
 
 
 # -------------------------
@@ -359,6 +361,9 @@ $(BUILD)/ram.o: kernel/detect/ram.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/tpm.o: kernel/detect/tpm.c
+	$(CC) $(CFLAGS) -Ikernel/include -c $< -o $@
+
+$(BUILD)/videomemory.o: kernel/detect/videomemory.c
 	$(CC) $(CFLAGS) -Ikernel/include -c $< -o $@
 
 # -------------------------
