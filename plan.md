@@ -70,7 +70,7 @@
 | ✅     | user mode             | ring 3        |
 | ✅     | syscalls (`int 0x80`) |               |
 | ✅     | ELF loader            |               |
-| 🔲     | exec()                |               |
+| 🔲 (later)     | exec()                |               |
 
 🔴 NIVEL 6 — Hardware avansat
 (opțional, dar impresionant)
