@@ -1,37 +1,44 @@
 {
   "name": "chrysalis-os-scripts",
   "version": "1.0.0",
-  "//_general": "Scripturi pentru dezvoltarea Chrysalis OS de catre Mihai209",
+  "description": "Development and testing scripts for Chrysalis OS",
+  "private": true,
+
+  "//": "====================================================",
+  "//_info": "Utility scripts used during Chrysalis OS development",
+  "//": "====================================================",
+
   "scripts": {
-  "r:vm": "sh -c 'rm -f swtpm.sock && mkdir -p tpm && swtpm socket --tpmstate dir=tpm --ctrl type=unixio,path=swtpm.sock & sleep 0.2 && qemu-system-i386 -m 64 -boot order=d -cdrom chrysalis.iso -drive file=hdd.img,format=raw -chardev socket,id=chrtpm,path=swtpm.sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0'"
-,
-    "r:hdd": "clear ; qemu-system-x86_64 -boot order=d -cdrom chrysalis.iso -drive file=hdd.img,format=raw",
+    "//_build": "Build & ISO generation",
+    "build": "clear && make clean && make dirs && make && make iso",
 
-    "//_all": "Curata, compileaza si creeaza imaginea ISO",
-    "all": "clear ; make clean && make dirs ; make && make iso",
+    "//_run": "Run in QEMU (standard VGA)",
+    "run": "clear && qemu-system-i386 -cdrom chrysalis.iso",
 
-    "//_run": "Ruleaza OS-ul in mod standard VGA",
-    "run": "clear ; qemu-system-x86_64 -cdrom chrysalis.iso",
+    "//_run-serial": "Run with serial output redirected to stdio",
+    "run:serial": "clear && qemu-system-i386 -cdrom chrysalis.iso -serial stdio",
 
-    "//_run-serial": "Debug prin terminal folosind portul serial",
-    "run-serial": "clear ; qemu-system-x86_64 -cdrom chrysalis.iso -serial stdio",
+    "//_run-audio": "Enable PC Speaker audio output",
+    "run:audio": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -cdrom chrysalis.iso",
 
-    "//_run-audio": "Activeaza driverul de PC Speaker (pentru beeps)",
-    "run-audio": "clear ; qemu-system-x86_64 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -cdrom chrysalis.iso",
+    "//_run-debug": "Log hardware interrupts in real time",
+    "run:debug": "clear && qemu-system-i386 -cdrom chrysalis.iso -serial stdio -d int",
 
-    "//_run-debug": "Afiseaza intreruperile hardware in timp real",
-    "run-debug": "clear ; qemu-system-x86_64 -cdrom chrysalis.iso -serial stdio -d int",
+    "//_run-gdb": "Wait for GDB connection (-s -S)",
+    "run:gdb": "clear && qemu-system-i386 -cdrom chrysalis.iso -s -S",
 
-    "//_run-gdb": "Porneste in mod asteptare pentru depanare cu GDB",
-    "run-gdb": "clear ; qemu-system-x86_64 -cdrom chrysalis.iso -s -S",
+    "//_storage": "Run with raw HDD image attached",
+    "run:hdd": "clear && qemu-system-i386 -boot order=d -cdrom chrysalis.iso -drive file=hdd.img,format=raw",
 
-    "//font-get": "face rost de fontu din grub",
-    "font-get": "clear ; grub-mkfont -s 24 -o iso/boot/grub/unicode.pf2 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "//_tpm": "Run with software TPM (swtpm) enabled",
+    "run:tpm": "sh -c 'rm -f swtpm.sock && mkdir -p tpm && swtpm socket --tpmstate dir=tpm --ctrl type=unixio,path=swtpm.sock & sleep 0.2 && qemu-system-i386 -m 64 -boot order=d -cdrom chrysalis.iso -drive file=hdd.img,format=raw -chardev socket,id=chrtpm,path=swtpm.sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0'",
 
+    "//_tools": "Development utilities",
+    "font:grub": "clear && grub-mkfont -s 24 -o iso/boot/grub/unicode.pf2 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+
+    "//_symbols": "Symbol / linkage checks",
     "nm:ata": "nm -g build/ata.o | grep ata_read_sector || true",
     "nm:fat": "nm -u build/fat_fs.o | grep ata_read_sector || true",
-
-    "nm:check-ata": "echo '== ata.o ==' && nm -g build/ata.o | grep ata_read_sector || true && echo '== fat_fs.o ==' && nm -u build/fat_fs.o | grep ata_read_sector || true"
-
+    "nm:check": "echo '== ata.o ==' && nm -g build/ata.o | grep ata_read_sector || true && echo '== fat_fs.o ==' && nm -u build/fat_fs.o | grep ata_read_sector || true"
   }
 }
