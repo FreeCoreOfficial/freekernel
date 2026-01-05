@@ -1,2 +1,3 @@
 git config --global user.email "sbarceamihai222@gmail.com"
 git config --global user.name "mihai209"
+git config pull.rebase false
