@@ -117,7 +117,7 @@ From a kernel → **a multi-process OS**.
 | Status | Component         |
 | ------ | ----------------- |
 | ✅      | PCI Bus           |
-| 🔲     | ACPI              |
+| ✅     | ACPI              |
 | 🔲     | APIC / IOAPIC     |
 | 🔲     | SMP (Multi-core)  |
 | 🔲     | HPET              |
