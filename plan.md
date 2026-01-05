@@ -1,102 +1,189 @@
-🟢 NIVEL 1 — Fundament (kernel minim funcțional)
+# Chrysalis OS — Development Plan
 
-✅ = deja funcțional
-🔲 = urmează
+This document describes the long-term technical roadmap of **Chrysalis OS**.
+Each level represents a meaningful evolutionary step, from a minimal kernel to a fully usable operating system.
 
-| Status | Componentă          | Note                         |
-| ------ | ------------------- | ---------------------------- |
-| ✅      | GDT                 | corect                       |
-| ✅      | IDT                 | ok                           |
-| ✅      | ISR / IRQ           | stabil                       |
-| ✅      | PIC 8259            | remap ok                     |
-| ✅      | PIT (timer)         | funcțional                   |
-| ✅      | Keyboard (IRQ1)     | funcționează                 |
-| ✅      | Terminal VGA (text) | stabil                       |
-| ✅     | Serial COM1         | stabil |
-| ✅     | CMOS / RTC          | ușor, util                   |
-| ✅      | PC Speaker          | simplu + fun                 |
+Legend:
+✅ = implemented
+🔲 = planned
+[N] = optional / nice-to-have
 
+---
 
-🟡 NIVEL 2 — Input & timing
-(organizare internă, calitate de OS)
+## 🟢 LEVEL 1 — Foundation (Minimal Working Kernel)
 
-| Status | Componentă        | De ce contează  |
-| ------ | ----------------- | --------------- |
-| ✅     | Mouse PS/2        | IRQ12           |
-| ✅     | Keyboard buffer   | input corect    |
-| ✅     | Keymap (US / RO)  | extensibil      |
-| ✅     | Timer abstraction | `sleep(ms)`     |
-| ✅     | Uptime / ticks    | sistem stabil   |
-| da dracu stie     | Delay calibrat    | pentru drivere  |
-| ✅     | Event queue       | bază pentru GUI |
+> Goal: Boot reliably, handle interrupts, and interact with basic hardware.
 
+| Status | Component         | Notes              |
+| ------ | ----------------- | ------------------ |
+| ✅      | GDT               | Correct            |
+| ✅      | IDT               | OK                 |
+| ✅      | ISR / IRQ         | Stable             |
+| ✅      | PIC 8259          | Properly remapped  |
+| ✅      | PIT (Timer)       | Functional         |
+| ✅      | Keyboard (IRQ1)   | Working            |
+| ✅      | VGA Text Terminal | Stable             |
+| ✅      | Serial COM1       | Stable (debugging) |
+| ✅      | CMOS / RTC        | Simple, useful     |
+| ✅      | PC Speaker        | Simple + fun       |
 
-🔵 NIVEL 3 — Storage
-(primul „big leap”)
+**Why this level matters:**
+Without this layer, nothing else is possible. This is where the kernel proves it can *exist*.
 
-| Status | Componentă            | Comentariu          |
-| ------ | --------------------- | ------------------- |
-| ✅      | ATA PIO               | ideal pt început    |
-| ✅      | Detectare HDD         | identify            |
-| ✅     | Read sector           | milestone major     |
-| ✅     | Write sector          | atenție la corupere |
-| [N]     | Cache simplu          | performanță         |
-| ✅     | Partition table (MBR) | necesar             |
-| ✅     | FAT12 / FAT16         | ușor                |
-| ✅     | FAT32                 | mai greu            |
-| ✅     | VFS                   | arhitectură curată  |
+---
 
-🟣 NIVEL 4 — Memorie
-(fără asta nu există multitasking real)
+## 🟡 LEVEL 2 — Input & Timing
 
-| Status | Componentă              | Note          |
-| ------ | ----------------------- | ------------- |
-| ✅     | Physical Memory Manager | bitmap        |
-| ✅      | Paging x86              | schimbă jocul |
-| ✅     | Virtual Memory          | izolare       |
-| ✅     | Heap kernel (`kmalloc`) | obligatoriu   |
-| ✅     | slab / buddy            | optimizare    |
-| ✅     | user memory isolation   | securitate    |
+> Goal: Clean input handling and predictable timing — quality-of-life for the kernel.
 
-🟠 NIVEL 5 — Procese & multitasking
-(când devine „OS adevărat”)
+| Status | Component         | Why it matters         |
+| ------ | ----------------- | ---------------------- |
+| ✅      | PS/2 Mouse        | IRQ12                  |
+| ✅      | Keyboard Buffer   | Correct input handling |
+| ✅      | Keymap (US / RO)  | Extensible             |
+| ✅      | Timer Abstraction | `sleep(ms)`            |
+| ✅      | Uptime / Ticks    | System stability       |
+| 🔲     | Calibrated Delay  | Needed for drivers     |
+| ✅      | Event Queue       | GUI foundation         |
 
-| Status | Componentă            |               |
-| ------ | --------------------- | ------------- |
-| ✅     | task struct           | baza          |
-| ✅     | context switch        | greu dar fain |
-| ✅     | scheduler RR          | simplu        |
-| ✅     | kernel threads        |               |
-| ✅     | user mode             | ring 3        |
-| ✅     | syscalls (`int 0x80`) |               |
-| ✅     | ELF loader            |               |
-| 🔲 (later)     | exec()                |               |
+**Key idea:**
+Move from “hardware reacts immediately” to **structured, buffered, event-driven input**.
 
-🔴 NIVEL 6 — Hardware avansat
-(opțional, dar impresionant)
+---
 
-| Status | Componentă       |
-| ------ | ---------------- |
-| ✅     | PCI bus          |
-| 🔲     | ACPI             |
-| 🔲     | APIC / IOAPIC    |
-| 🔲     | SMP (multi-core) |
-| 🔲     | HPET             |
-| 🔲     | USB              |
-| 🔲     | AHCI             |
-| 🔲     | VESA framebuffer |
-| 🔲     | GPU basic        |
+## 🔵 LEVEL 3 — Storage (First Big Leap)
 
-🟤 NIVEL 7 — UX & tools
+> Goal: Persistent data. The OS starts to *remember*.
 
-| Status | Componentă        |
+| Status | Component             | Comment              |
+| ------ | --------------------- | -------------------- |
+| ✅      | ATA PIO               | Ideal starting point |
+| ✅      | HDD Detection         | IDENTIFY command     |
+| ✅      | Sector Read           | Major milestone      |
+| ✅      | Sector Write          | Corruption risk      |
+| [N]    | Simple Cache          | Performance          |
+| ✅      | Partition Table (MBR) | Required             |
+| ✅      | FAT12 / FAT16         | Easy                 |
+| ✅      | FAT32                 | Harder               |
+| ✅      | VFS                   | Clean architecture   |
+
+**Why this changes everything:**
+With storage + VFS, user programs and real tools become possible.
+
+---
+
+## 🟣 LEVEL 4 — Memory Management
+
+> Goal: Isolation, safety, and scalability.
+
+| Status | Component               | Notes        |
+| ------ | ----------------------- | ------------ |
+| ✅      | Physical Memory Manager | Bitmap       |
+| ✅      | x86 Paging              | Game changer |
+| ✅      | Virtual Memory          | Isolation    |
+| ✅      | Kernel Heap (`kmalloc`) | Mandatory    |
+| ✅      | Slab / Buddy Allocator  | Optimization |
+| ✅      | User Memory Isolation   | Security     |
+
+**Key concept:**
+Memory bugs stop being fatal, and multitasking becomes realistic.
+
+---
+
+## 🟠 LEVEL 5 — Processes & Multitasking
+
+> Goal: The OS becomes a *real* operating system.
+
+| Status | Component             | Notes              |
+| ------ | --------------------- | ------------------ |
+| ✅      | Task Structure        | Core               |
+| ✅      | Context Switch        | Hard but rewarding |
+| ✅      | Round-Robin Scheduler | Simple             |
+| ✅      | Kernel Threads        |                    |
+| ✅      | User Mode             | Ring 3             |
+| ✅      | Syscalls (`int 0x80`) |                    |
+| ✅      | ELF Loader            |                    |
+| 🔲     | `exec()`              | Later              |
+
+**This is the turning point:**
+From a kernel → **a multi-process OS**.
+
+---
+
+## 🔴 LEVEL 6 — Advanced Hardware
+
+> Goal: Modern hardware support and scalability.
+
+| Status | Component         |
 | ------ | ----------------- |
-| 🔲     | shell avansat     |
-| 🔲     | piping            |
-| 🔲     | scripting         |
-| 🔲     | virtual terminals |
-| 🔲     | cursor            |
-| 🔲     | scrollback        |
-| 🔲     | culori            |
-| 🔲     | editor text       |
-| 🔲     | tools FS          |
+| ✅      | PCI Bus           |
+| 🔲     | ACPI              |
+| 🔲     | APIC / IOAPIC     |
+| 🔲     | SMP (Multi-core)  |
+| 🔲     | HPET              |
+| 🔲     | USB               |
+| 🔲     | AHCI              |
+| 🔲     | VESA Framebuffer  |
+| 🔲     | Basic GPU Support |
+
+**Optional but impressive.**
+This level separates hobby kernels from serious systems.
+
+---
+
+## 🟤 LEVEL 7 — UX & Tools
+
+> Goal: Usability, developer comfort, and productivity.
+
+| Status | Component         |
+| ------ | ----------------- |
+| 🔲     | Advanced Shell    |
+| 🔲     | Piping            |
+| 🔲     | Scripting         |
+| 🔲     | Virtual Terminals |
+| 🔲     | Cursor            |
+| 🔲     | Scrollback        |
+| 🔲     | Colors            |
+| 🔲     | Text Editor       |
+| 🔲     | Filesystem Tools  |
+
+---
+
+## 🔶 LEVEL 8 — Graphics & GUI
+
+> Goal: Visual interface and windowed environment.
+
+| Status | Component               |
+| ------ | ----------------------- |
+| 🔲     | Framebuffer Abstraction |
+| 🔲     | Basic Compositor        |
+| 🔲     | Window Manager          |
+| 🔲     | GUI Toolkit             |
+| 🔲     | Mouse-driven UI         |
+| 🔲     | Desktop Environment     |
+
+---
+
+## ⚫ LEVEL 9 — Userland & Ecosystem
+
+> Goal: Self-hosting, extensibility, and community.
+
+| Status | Component              |
+| ------ | ---------------------- |
+| 🔲     | libc                   |
+| 🔲     | POSIX-like API         |
+| 🔲     | Package Manager        |
+| 🔲     | Ports System           |
+| 🔲     | Native Build Toolchain |
+| 🔲     | Documentation System   |
+
+---
+
+## Final Note
+
+**Chrysalis OS** is designed as a transformation:
+from a simple terminal kernel
+→ into a complete, modular, and educational operating system.
+
+Not everything must be implemented —
+but everything is **understood**.
