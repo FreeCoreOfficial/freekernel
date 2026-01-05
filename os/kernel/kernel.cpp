@@ -260,6 +260,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     idt_init();
     pic_remap();
 
+    // Instalează handlerele pentru excepții (0-31) - CRITIC pentru debug (#PF, #GP)
+    isr_install();
+
     // Instalează stub-urile ASM și setează handler-ul default (silent) pentru toate IRQ-urile
     irq_install();
 
@@ -354,7 +357,15 @@ for (int i = 0; i < 5; i++) {
 
     // 18) Paging: choose page area size per your roadmap
     paging_init(PAGING_120_MB);
+    paging_map_kernel_higher_half();
     terminal_printf("Paging OK\n");
+
+    // ACPI & APIC initialization MUST happen after paging is active
+    // because they rely on vmm_map_page / kernel_page_directory.
+    acpi_init();
+    terminal_writestring("[kernel] acpi_init called\n");
+
+    apic_init();
 
     // 19) Heap + buddy allocator + kmalloc
     extern uint8_t __heap_start;
@@ -453,13 +464,6 @@ pci_init(); // DISABLED: Potential crash source
 /* BIOS + ACPI legacy areas */
 vmm_identity_map(0x00000000, 0x1000);      // BDA
 vmm_identity_map(0x000E0000, 0x20000);     // BIOS area
-
-
-acpi_init();
-terminal_writestring("[kernel] acpi_init called\n");
-
-// Try to switch to APIC
-apic_init();
 
 // definește string-ul (scope file-local e OK)
 //static const char test_msg[] = "Hello from syscall!";

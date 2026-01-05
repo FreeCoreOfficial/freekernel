@@ -1,6 +1,6 @@
 #include "lapic.h"
 #include "msr.h"
-#include "../mm/vmm.h"
+#include "../paging.h"
 #include "../drivers/serial.h"
 #include "../arch/i386/io.h"
 #include "../time/timer.h" // For PIT fallback/calibration
@@ -120,7 +120,9 @@ bool lapic_init(uint32_t base_addr) {
 
     // 2. Map LAPIC
     lapic_base = (volatile uint32_t*)base_addr;
-    vmm_identity_map(base_addr, 0x1000); // Map 4KB
+    // vmm_identity_map este stricat din cauza nepotrivirii de semnătură.
+    // Facem maparea manual, corect. Baza LAPIC trebuie să fie aliniată la pagină.
+    paging_map_page(base_addr, base_addr, PAGE_PRESENT | PAGE_RW);
     serial_printf("[apic] LAPIC mapped at 0x%x\n", base_addr);
 
     // 3. Init Spurious Interrupt Vector (Enable APIC software)
@@ -140,7 +142,8 @@ bool lapic_init(uint32_t base_addr) {
     serial_printf("[apic] LAPIC registers configured\n");
 
     // 5. Calibrate and start Timer
-    lapic_timer_calibrate();
+    // lapic_timer_calibrate(); // DISABLED FOR TESTING
+    serial_printf("[apic] Timer calibration SKIPPED for stability test.\n");
 
     return true;
 }

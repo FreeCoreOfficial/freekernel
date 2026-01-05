@@ -29,10 +29,12 @@ static void pic_enable(void) {
 void apic_init(void) {
     serial_printf("[apic] Initializing APIC subsystem...\n");
 
-    // 1. Detect APIC via MADT
+    // 1. Detect APIC via MADT. 
+    // CRITIC: Verificăm dacă pointerul este valid înainte de orice acces.
     struct MADT* madt = (struct MADT*)acpi_get_madt();
     if (!madt) {
         serial_printf("[apic] MADT not found, staying on PIC\n");
+        // STOP: Nu putem continua fără informațiile de topologie din MADT
         return;
     }
     serial_printf("[apic] MADT found\n");

@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include "../hardware/apic.h"
 #include "../hardware/lapic.h"
+#include "../drivers/serial.h"
+#include "../panic.h"
 
 extern "C" {
     void *irq_routines[16] = { 0 };

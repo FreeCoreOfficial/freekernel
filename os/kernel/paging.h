@@ -25,6 +25,9 @@ void paging_init(uint32_t identity_map_mb);
 int paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t flags);
 void paging_unmap_page(uint32_t virtual_addr);
 
+/* Map the kernel into the higher half virtual address space */
+void paging_map_kernel_higher_half(void);
+
 /* Debug: get physical address of current page directory */
 uint32_t paging_get_page_directory_phys(void);
 

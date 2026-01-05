@@ -14,6 +14,11 @@ extern void terminal_printf(const char*, ...);
 #define PT_INDEX(x)         (((x) >> 12) & 0x3FF)
 #define ALIGN_4K __attribute__((aligned(4096)))
 
+/* Kernel higher-half constants */
+#define KERNEL_VIRT_BASE    0xC0000000U
+#define KERNEL_PHYS_BASE    0x00100000U // Assumes kernel is loaded at 1MB
+#define KERNEL_MAP_SIZE_MB  8 // Map 8MB for the kernel code/data/bss/heap
+
 /* Config */
 #define DEFAULT_IDENTITY_MAP_MB PAGING_120_MB
 #define MAX_PAGE_TABLES 64U          /* total page-tables we keep statically */
@@ -24,6 +29,9 @@ static uint32_t page_directory[ENTRIES_PER_TABLE] ALIGN_4K;
 /* Pool of page tables (aligned). We'll use first N for identity mapping then allocate more on demand. */
 static uint32_t page_tables[MAX_PAGE_TABLES][ENTRIES_PER_TABLE] ALIGN_4K;
 static uint32_t next_free_table = 0;
+
+/* Variabilă globală definită în kernel/mm/paging.c, necesară pentru ACPI/VMM */
+extern uint32_t* kernel_page_directory;
 
 /* Helper: simple check for alignment */
 static inline int is_page_aligned(uint32_t v) {
@@ -123,6 +131,35 @@ void paging_init(uint32_t identity_map_mb) {
     enable_paging_internal(phys_of(page_directory));
 
     if (terminal_printf) terminal_printf("paging: enabled (CR3 set)\n");
+
+    /* Setăm pointerul global astfel încât ACPI și VMM să vadă directorul activ */
+    kernel_page_directory = page_directory;
+}
+
+/* Map the kernel into the higher half virtual address space */
+void paging_map_kernel_higher_half(void) {
+    uint32_t flags = PAGE_PRESENT | PAGE_RW;
+    uint32_t kernel_map_pages = (KERNEL_MAP_SIZE_MB * 1024 * 1024) / PAGE_SIZE;
+
+    for (uint32_t i = 0; i < kernel_map_pages; i++) {
+        uint32_t phys = KERNEL_PHYS_BASE + (i * PAGE_SIZE);
+        uint32_t virt = KERNEL_VIRT_BASE + (i * PAGE_SIZE);
+        
+        uint32_t pdx = PD_INDEX(virt);
+        uint32_t ptx = PT_INDEX(virt);
+
+        if ((page_directory[pdx] & PAGE_PRESENT) == 0) {
+            int table_idx = allocate_page_table();
+            if (table_idx < 0) {
+                if (terminal_printf) terminal_printf("paging: kernel map failed, no free tables\n");
+                return;
+            }
+            page_directory[pdx] = phys_of(&page_tables[table_idx]) | flags;
+        }
+        uint32_t* pt = (uint32_t*)(page_directory[pdx] & 0xFFFFF000);
+        pt[ptx] = phys | flags;
+    }
+    if (terminal_printf) terminal_printf("paging: mapped kernel to 0x%x\n", KERNEL_VIRT_BASE);
 }
 
 /* Map a single page (will allocate a page-table if missing). Returns 0 on success, non-zero on fail. */

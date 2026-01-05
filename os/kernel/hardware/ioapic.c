@@ -1,5 +1,5 @@
 #include "ioapic.h"
-#include "../mm/vmm.h"
+#include "../paging.h"
 #include "../drivers/serial.h"
 #include "acpi.h"
 
@@ -30,7 +30,9 @@ void ioapic_set_entry(uint8_t index, uint64_t data) {
 
 bool ioapic_init(uint32_t base_addr, uint32_t gsi_base) {
     ioapic_base = (volatile uint32_t*)base_addr;
-    vmm_identity_map(base_addr, 0x1000);
+    // vmm_identity_map este stricat din cauza nepotrivirii de semnătură.
+    // Facem maparea manual, corect. Baza IOAPIC trebuie să fie aliniată la pagină.
+    paging_map_page(base_addr, base_addr, PAGE_PRESENT | PAGE_RW);
     
     uint32_t ver = ioapic_read(IOAPICVER);
     uint32_t count = ((ver >> 16) & 0xFF) + 1;
