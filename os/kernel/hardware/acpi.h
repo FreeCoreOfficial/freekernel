@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,7 +18,7 @@ struct RSDPDescriptor {
     uint32_t rsdt_address;   // Physical address of RSDT
 } __attribute__((packed));
 
-struct ACPISDTHeader {
+typedef struct {
     char     signature[4];   // e.g. "APIC", "FACP"
     uint32_t length;
     uint8_t  revision;
@@ -27,18 +28,18 @@ struct ACPISDTHeader {
     uint32_t oem_revision;
     uint32_t creator_id;
     uint32_t creator_revision;
-} __attribute__((packed));
+} __attribute__((packed)) ACPISDTHeader;
+
+typedef struct {
+    uint8_t type;
+    uint8_t length;
+} __attribute__((packed)) MADT_Record;
 
 /* --- MADT (Multiple APIC Description Table) --- */
 struct MADT {
     ACPISDTHeader h;
     uint32_t local_apic_addr;
     uint32_t flags;
-} __attribute__((packed));
-
-struct MADT_Record {
-    uint8_t type;
-    uint8_t length;
 } __attribute__((packed));
 
 struct MADT_LocalAPIC {

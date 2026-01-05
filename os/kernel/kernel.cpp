@@ -60,6 +60,7 @@
 #include "hardware/apic.h"
 #include "interrupts/irq.h"
 #include "interrupts/isr.h"
+#include "smp/smp.h"
 
 
 
@@ -366,6 +367,10 @@ for (int i = 0; i < 5; i++) {
     terminal_writestring("[kernel] acpi_init called\n");
 
     apic_init();
+
+    // SMP Initialization
+    smp_detect_cpus();
+    // smp_start_aps(); // TODO: Enable after trampoline is copied and GDT is ready
 
     // 19) Heap + buddy allocator + kmalloc
     extern uint8_t __heap_start;

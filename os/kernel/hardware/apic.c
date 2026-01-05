@@ -46,8 +46,8 @@ void apic_init(void) {
     uint8_t* end   = (uint8_t*)madt + madt->h.length;
     
     while (start < end) {
-        struct MADT_Record* rec = (struct MADT_Record*)start;
-        if (rec->type == 1) { // IOAPIC
+        MADT_Record* rec = (MADT_Record*)start;
+        if (rec->type == 1) { // IOAPIC type
             ioapic = (struct MADT_IOAPIC*)rec;
             break;
         }

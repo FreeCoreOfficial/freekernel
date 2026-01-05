@@ -123,8 +123,9 @@ extern "C" void keyboard_handler(registers_t* regs)
         }
     }
 
-    /* manual EOI pentru PIC (dacă wrapper-ul tău deja trimite EOI, poți elimina) */
-    pic_send_eoi();
+    /* EOI este gestionat centralizat în irq_handler (irq.cpp), care știe să trimită
+       către LAPIC sau PIC în funcție de modul activ. Nu trimitem manual aici. */
+    // pic_send_eoi();
 
     (void)handled;
     return;

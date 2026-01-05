@@ -125,6 +125,7 @@ OBJS = \
 	$(BUILD)/hardware/apic.o \
 	$(BUILD)/hardware/lapic.o \
 	$(BUILD)/hardware/ioapic.o \
+	$(BUILD)/smp/smp.o \
 
 
 
@@ -148,6 +149,7 @@ dirs: $(BUILD)
 	mkdir -p $(BUILD)/arch/i386
 	mkdir -p $(BUILD)/arch/i386/cpu
 	mkdir -p $(BUILD)/arch/i386/apic
+	mkdir -p $(BUILD)/smp
 	mkdir -p $(BUILD)/hardware
 
 
@@ -485,6 +487,23 @@ $(BUILD)/hardware/lapic.o: kernel/hardware/lapic.c | dirs
 $(BUILD)/hardware/ioapic.o: kernel/hardware/ioapic.c | dirs
 	@mkdir -p $(BUILD)/hardware
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# -------------------------
+# SMP & Trampoline
+# -------------------------
+
+$(BUILD)/smp/smp.o: kernel/smp/smp.c kernel/smp/smp.h | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Rules for the trampoline
+# This creates a flat binary of the trampoline code
+$(BUILD)/smp/trampoline.bin: $(BUILD)/smp/trampoline.o
+	$(LD) -T kernel/smp/trampoline.ld -o $@ --oformat binary $^
+
+$(BUILD)/smp/trampoline.o: kernel/smp/trampoline.S | dirs
+	$(AS) $(ASFLAGS) $< -o $@
+
+# Note: You will need to ensure trampoline.bin is available to the kernel, e.g., via GRUB module or embedding.
 
 
 # -------------------------

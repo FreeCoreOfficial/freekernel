@@ -35,6 +35,24 @@ static void lapic_write(uint32_t reg, uint32_t value) {
     *((volatile uint32_t*)((uintptr_t)lapic_base + reg)) = value;
 }
 
+void lapic_send_ipi(uint8_t apic_id, uint32_t type, uint8_t vector) {
+    // Wait for delivery status to be idle
+    while (lapic_read(LAPIC_ICR_LO) & (1 << 12));
+
+    // Set destination in ICR high
+    lapic_write(LAPIC_ICR_HI, (uint32_t)apic_id << 24);
+
+    // Set IPI type and vector in ICR low
+    // Type: 0=Fixed, 5=INIT, 6=SIPI
+    // Level: 1=Assert
+    // Trigger: 0=Edge
+    uint32_t command = type | (1 << 14) | vector;
+    lapic_write(LAPIC_ICR_LO, command);
+
+    // Wait for delivery status to be idle again
+    while (lapic_read(LAPIC_ICR_LO) & (1 << 12));
+}
+
 void lapic_eoi(void) {
     if (lapic_base) {
         lapic_write(LAPIC_EOI, 0);

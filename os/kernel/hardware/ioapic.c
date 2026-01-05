@@ -29,6 +29,7 @@ void ioapic_set_entry(uint8_t index, uint64_t data) {
 }
 
 bool ioapic_init(uint32_t base_addr, uint32_t gsi_base) {
+    (void)gsi_base; // Parameter is unused for now, but may be needed later.
     ioapic_base = (volatile uint32_t*)base_addr;
     // vmm_identity_map este stricat din cauza nepotrivirii de semnătură.
     // Facem maparea manual, corect. Baza IOAPIC trebuie să fie aliniată la pagină.
@@ -57,7 +58,7 @@ bool ioapic_init(uint32_t base_addr, uint32_t gsi_base) {
         uint8_t* end   = (uint8_t*)madt + madt->h.length;
         
         while (start < end) {
-            struct MADT_Record* rec = (struct MADT_Record*)start;
+            MADT_Record* rec = (MADT_Record*)start;
             if (rec->type == 2) { // ISO
                 struct MADT_IntOverride* iso = (struct MADT_IntOverride*)rec;
                 if (iso->bus_source == 0 && iso->irq_source == i) {
@@ -83,6 +84,13 @@ bool ioapic_init(uint32_t base_addr, uint32_t gsi_base) {
         }
         if ((iso_flags & 0xC) == 0xC) { // Level Trigger
             flags |= (1 << 15);
+        }
+        
+        // FIX: Tastatura (IRQ 1) este aproape întotdeauna Edge High pe ISA.
+        // Dacă nu avem un ISO explicit care să zică altfel, forțăm Edge High.
+        if (i == 1 && iso_flags == 0) {
+             flags &= ~(1 << 13); // Active High
+             flags &= ~(1 << 15); // Edge Trigger
         }
 
         // Mask all except Keyboard (1) and Timer (0/2) initially for safety?
