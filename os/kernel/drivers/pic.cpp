@@ -33,3 +33,13 @@ extern "C" void pic_remap()
     outb(PIC2_DATA, 0xFF);
 }
 
+// C linkage pentru ASM / C callers
+extern "C" void pic_send_eoi(uint8_t irq)
+{
+    /* If the IRQ came from the slave PIC (IRQ 8..15), ack the slave first */
+    if (irq >= 8) {
+        outb(0xA0, 0x20);
+    }
+    /* Always ack the master PIC */
+    outb(0x20, 0x20);
+}

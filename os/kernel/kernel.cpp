@@ -57,9 +57,13 @@
 #include "hardware/pci.h"
 #include "hardware/acpi.h"
 #include "mm/vmm.h"
+#include "interrupts/irq.h"
+#include "interrupts/isr.h"
 
 
 
+
+//#include "arch/i386/interrupts.h"
 //#include "detect/tpm.h"
 //#include "detect/videomemory.h"
 
@@ -221,6 +225,16 @@ static void panic_if_fatal(const char *msg)
     panic("Kernel detected fatal error; halting.");
 }
 
+/* Default IRQ handler that matches irq_handler_t (registers_t*) expected by irq_install_handler.
+   It simply logs the IRQ number — irq.cpp will send EOI after calling this handler. */
+static void default_irq_handler(registers_t* regs)
+{
+    (void)regs;
+    terminal_writestring("[irq] unhandled irq ");
+    terminal_writehex((uint32_t)regs->int_no);
+    terminal_writestring("\n");
+}
+
 // -----------------------------
 // kernel_main - entry point
 // -----------------------------
@@ -240,7 +254,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // 4) CPU/interrupt basic setup: GDT -> IDT -> PIC. Order matters.
     gdt_init();
 
-    syscall_init();
+    syscall_init(); // DISABLED: Potential crash source until handler is verified
+  //  terminal_writestring("[kernel] syscall_init skipped for stability\n");
 
 
     uint32_t kernel_stack;
@@ -253,6 +268,19 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     idt_init();
     pic_remap();
+
+irq_install();
+
+/* Register default handler for IRQs 0..15 */
+// Instalăm handlerele default PRIMELE, ca să nu suprascriem driverele ulterior
+for (int i = 0; i < 16; i++) {
+    irq_install_handler(i, default_irq_handler);
+}
+
+// 11) Timer abstraction (PIT) - install handlers (overwrites IRQ0)
+    timer_init(100);
+
+
 
     // 5) Optional boot logo
     bootlogo_show();
@@ -290,8 +318,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     /* Use task_init() which is a safe weak symbol fallback (no-op if no task impl). */
     task_init();
 
-    // 11) Timer abstraction (PIT) - install handlers but keep interrupts disabled
-    timer_init(100);
+    
 
     // 12) Other drivers and serial for debug/log
     audio_init();
@@ -307,15 +334,15 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // Enabling earlier risks races where an ISR runs before supporting state is ready.
     asm volatile("sti");
 
-    // 15) Demonstration of sleep / IRQ-driven timers working
-    terminal_writestring("Sleeping 1 second...\n");
-    sleep(1000);
-    terminal_writestring("Done!\n");
+terminal_writestring("Sleeping 1 second...\n");
+sleep(1000);
+terminal_writestring("Done!\n");
 
-    for (int i = 0; i < 5; i++) {
-        terminal_writestring("tick\n");
-        sleep(500);
-    }
+for (int i = 0; i < 5; i++) {
+    terminal_writestring("tick\n");
+    sleep(500);
+}
+
 
     terminal_writestring("\nSystem ready.\n> ");
 
@@ -325,7 +352,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     time_set_timezone(2);
     datetime t;
     time_get_local(&t);
-    ata_init();
+    ata_init(); // DISABLED: Potential crash source (EIP=0)
+ //   terminal_writestring("[kernel] ata_init skipped for stability\n");
 
     // 17) PMM quick test
     uint32_t frame1 = pmm_alloc_frame();
@@ -420,20 +448,21 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 #endif
 
 
-
-static const char msg[] = "hello from syscall";
-
-asm volatile(
-    "movl $1, %%eax\n"    /* SYS_WRITE */
-    "movl %0, %%ebx\n"
-    "int $0x80\n"
-    :
-    : "r"(msg)            /* %0 = pointer la msg */
-    : "eax", "ebx"
-);
+// COMENTAT TEMPORAR: Cauzează Kernel Panic dacă handlerul int 0x80 nu e setat corect
+// static const char msg[] = "hello from syscall";
+//
+// asm volatile(
+//     "movl $1, %%eax\n"    /* SYS_WRITE */
+//     "movl %0, %%ebx\n"
+//     "int $0x80\n"
+//     :
+//     : "r"(msg)            /* %0 = pointer la msg */
+//     : "eax", "ebx"
+// );
 
 terminal_writestring("[kernel] initializing PCI\n");
-pci_init();
+pci_init(); // DISABLED: Potential crash source
+//terminal_writestring("[kernel] pci_init skipped for stability\n");
 
 /* BIOS + ACPI legacy areas */
 vmm_identity_map(0x00000000, 0x1000);      // BDA
@@ -441,6 +470,7 @@ vmm_identity_map(0x000E0000, 0x20000);     // BIOS area
 
 
 acpi_init();
+terminal_writestring("[kernel] acpi_init called\n");
 // definește string-ul (scope file-local e OK)
 //static const char test_msg[] = "Hello from syscall!";
 

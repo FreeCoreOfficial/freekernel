@@ -1,0 +1,14 @@
+echo "irq.h"
+cat kernel/interrupts/irq.h
+echo "irq.cpp"
+cat kernel/interrupts/irq.cpp
+echo "isr.h"
+cat kernel/interrupts/isr.h
+echo "isr.cpp"
+cat kernel/interrupts/isr.cpp
+echo "interrupts.asm"
+cat kernel/interrupts/interrupts.asm
+echo "irq.asm"
+cat kernel/interrupts/irq.asm
+echo "isr.asm"
+cat kernel/interrupts/isr.asm

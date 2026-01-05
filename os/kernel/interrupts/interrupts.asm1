@@ -1,0 +1,199 @@
+; kernel/interrupts/interrupts.asm
+; NASM syntax, BITS 32
+; IRQ stubs 0..15 + common handler stub
+
+[BITS 32]
+
+global irq0
+global irq1
+global irq2
+global irq3
+global irq4
+global irq5
+global irq6
+global irq7
+global irq8
+global irq9
+global irq10
+global irq11
+global irq12
+global irq13
+global irq14
+global irq15
+
+extern irq_handler
+
+; -----------------------
+; IRQ 0 (timer)
+; -----------------------
+irq0:
+    cli
+    push byte 0          ; fake error code
+    push byte 32         ; interrupt number
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 1 (keyboard)
+; -----------------------
+irq1:
+    cli
+    push byte 0
+    push byte 33
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 2
+; -----------------------
+irq2:
+    cli
+    push byte 0
+    push byte 34
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 3
+; -----------------------
+irq3:
+    cli
+    push byte 0
+    push byte 35
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 4
+; -----------------------
+irq4:
+    cli
+    push byte 0
+    push byte 36
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 5
+; -----------------------
+irq5:
+    cli
+    push byte 0
+    push byte 37
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 6
+; -----------------------
+irq6:
+    cli
+    push byte 0
+    push byte 38
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 7
+; -----------------------
+irq7:
+    cli
+    push byte 0
+    push byte 39
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 8
+; -----------------------
+irq8:
+    cli
+    push byte 0
+    push byte 40
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 9
+; -----------------------
+irq9:
+    cli
+    push byte 0
+    push byte 41
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 10
+; -----------------------
+irq10:
+    cli
+    push byte 0
+    push byte 42
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 11
+; -----------------------
+irq11:
+    cli
+    push byte 0
+    push byte 43
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 12
+; -----------------------
+irq12:
+    cli
+    push byte 0
+    push byte 44
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 13
+; -----------------------
+irq13:
+    cli
+    push byte 0
+    push byte 45
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 14
+; -----------------------
+irq14:
+    cli
+    push byte 0
+    push byte 46
+    jmp irq_common_stub
+
+; -----------------------
+; IRQ 15
+; -----------------------
+irq15:
+    cli
+    push byte 0
+    push byte 47
+    jmp irq_common_stub
+
+; -----------------------
+; Common IRQ handler
+; -----------------------
+irq_common_stub:
+    pusha
+
+    push ds
+    push es
+    push fs
+    push gs
+
+    mov ax, 0x10         ; kernel data selector
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    push esp             ; pointer to registers_t
+    call irq_handler
+    add esp, 4
+
+    pop gs
+    pop fs
+    pop es
+    pop ds
+
+    popa
+    add esp, 8           ; pop int_no + err_code
+   ; sti
+    iretd

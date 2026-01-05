@@ -1,19 +1,11 @@
 #pragma once
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef struct regs {
-    uint32_t gs, fs, es, ds;
+struct regs {
+    uint32_t ds;
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
     uint32_t int_no, err_code;
     uint32_t eip, cs, eflags, useresp, ss;
-} registers_t;
+};
 
-void isr_install(void);
-
-#ifdef __cplusplus
-}
-#endif
+void irq_stub_handler(struct regs* r);

@@ -120,8 +120,7 @@ OBJS = \
 	$(BUILD)/cmds/elf_crash.o \
 	$(BUILD)/hardware/pci.o \
 	$(BUILD)/hardware/acpi.o \
-
-
+	$(BUILD)/arch/interrupts.o \
 
 # -------------------------
 # TARGETURI PRINCIPALE
@@ -455,6 +454,10 @@ $(BUILD)/hardware/pci.o: kernel/hardware/pci.cpp
 
 $(BUILD)/hardware/acpi.o: kernel/hardware/acpi.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/arch/interrupts.o: kernel/arch/i386/interrupts.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 
 # -------------------------
 # LINK
