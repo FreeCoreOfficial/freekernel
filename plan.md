@@ -120,7 +120,7 @@ From a kernel → **a multi-process OS**.
 | ✅     | ACPI              |
 | ✅     | APIC / IOAPIC     |
 | ✅     | SMP (Multi-core)  |
-| 🔲     | HPET              |
+| ✅     | HPET              |
 | 🔲     | USB               |
 | 🔲     | AHCI              |
 | 🔲     | VESA Framebuffer  |
