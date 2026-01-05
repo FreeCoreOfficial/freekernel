@@ -1,5 +1,4 @@
 // kernel/panic.cpp
-// Windows XP Style Blue Screen of Death (BSOD) pentru Chrysalis OS
 
 #include "panic.h"
 #include "panic_sys.h"
