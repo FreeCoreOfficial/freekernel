@@ -156,8 +156,8 @@ static void cmd_fdisk_list(void) {
     kfree(mbr);
 }
 
-/* Internal: Scan and assign letters (like mounting) */
-static void cmd_probe(void) {
+/* Scan and assign letters (like mounting) - Exported for automount */
+void disk_probe_partitions(void) {
     block_device_t* bd = get_main_disk();
     if (!bd) return;
 
@@ -266,7 +266,7 @@ void cmd_disk(int argc, char** argv)
 
     if (strcmp(sub, "list") == 0)    { cmd_lsblk(); return; }
     if (strcmp(sub, "print") == 0)   { cmd_fdisk_list(); return; }
-    if (strcmp(sub, "probe") == 0)   { cmd_probe(); return; }
+    if (strcmp(sub, "probe") == 0)   { disk_probe_partitions(); return; }
     if (strcmp(sub, "mklabel") == 0) { cmd_mklabel(); return; }
     
     if (strcmp(sub, "read") == 0) {

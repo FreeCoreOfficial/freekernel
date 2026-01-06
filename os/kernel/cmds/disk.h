@@ -22,6 +22,9 @@ int disk_read_sector(uint32_t lba, uint8_t* buf);
 int disk_write_sector(uint32_t lba, const uint8_t* buf);
 uint32_t disk_get_capacity(void);
 
+/* Helper pentru automount: scanează partițiile și populează g_assigns */
+void disk_probe_partitions(void);
+
 /* Shell Command Entry Point */
 void cmd_disk(int argc, char** argv);
 

@@ -7,6 +7,41 @@
 
 extern void terminal_printf(const char* fmt, ...);
 
+static bool is_fat_initialized = false;
+
+/* Încearcă să monteze automat prima partiție FAT găsită */
+static void try_automount(void) {
+    if (is_fat_initialized) return;
+
+    /* 1. Verificăm dacă avem partiții detectate. Dacă nu, scanăm. */
+    bool has_partitions = false;
+    for (int i = 0; i < 26; i++) {
+        if (g_assigns[i].used) {
+            has_partitions = true;
+            break;
+        }
+    }
+
+    if (!has_partitions) {
+        // terminal_writestring("[AutoMount] Probing partitions...\n");
+        disk_probe_partitions();
+    }
+
+    /* 2. Căutăm prima partiție de tip FAT32 (0x0B sau 0x0C) */
+    for (int i = 0; i < 26; i++) {
+        if (g_assigns[i].used) {
+            uint8_t t = g_assigns[i].type;
+            if (t == 0x0B || t == 0x0C) {
+                terminal_printf("[AutoMount] Mounting FAT32 on partition %c (LBA %u)...\n", g_assigns[i].letter, g_assigns[i].lba);
+                if (fat32_init(0, g_assigns[i].lba) == 0) {
+                    is_fat_initialized = true;
+                    return;
+                }
+            }
+        }
+    }
+}
+
 static void cmd_usage(void) {
     terminal_writestring("Usage: fat <command>\n");
     terminal_writestring("Commands:\n");
@@ -24,12 +59,16 @@ extern "C" int cmd_fat(int argc, char **argv) {
     const char* sub = argv[1];
 
     if (strcmp(sub, "ls") == 0) {
-        fat32_list_root();
+        try_automount();
+        if (is_fat_initialized) fat32_list_root();
+        else terminal_writestring("FAT not mounted (no FAT32 partition found).\n");
         return 0;
     }
 
     if (strcmp(sub, "info") == 0) {
-        fat32_list_root(); // Fallback la listare momentan
+        try_automount();
+        if (is_fat_initialized) fat32_list_root();
+        else terminal_writestring("FAT not mounted.\n");
         return 0;
     }
 
@@ -59,6 +98,7 @@ extern "C" int cmd_fat(int argc, char **argv) {
         // 0 = device ID (ignorat dacă fat.c folosește disk_read_sector global)
         if (fat32_init(0, lba) == 0) {
             terminal_writestring("Mount successful.\n");
+            is_fat_initialized = true;
         } else {
             terminal_writestring("Mount failed.\n");
         }
