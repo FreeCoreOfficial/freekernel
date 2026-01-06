@@ -71,6 +71,8 @@
 #include "input/input.h"
 #include "storage/block.h"
 #include "fs/chrysfs/chrysfs.h"
+#include "cmds/disk.h"
+#include "cmds/fat.h"
 
 
 
@@ -468,13 +470,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         ata_init();
     }
     
-    /* Mount CHRYS_FS on ahci0 */
+    /* Auto-mount: Scan partitions and try to mount FAT32 */
     if (ahci_ports > 0) {
-        block_device_t *bd = block_get("ahci0");
-        if (bd) {
-            chrysfs_mount(bd, "/");
-            chrysfs_ls("/root/files");
-        }
+        serial("[KERNEL] Probing partitions...\n");
+        disk_probe_partitions();
+        fat_automount();
     }
 
     terminal_writestring("Sleeping 1 second...\n");

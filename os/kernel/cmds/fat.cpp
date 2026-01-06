@@ -10,7 +10,7 @@ extern void terminal_printf(const char* fmt, ...);
 static bool is_fat_initialized = false;
 
 /* Încearcă să monteze automat prima partiție FAT găsită */
-static void try_automount(void) {
+void fat_automount(void) {
     if (is_fat_initialized) return;
 
     /* 1. Verificăm dacă avem partiții detectate. Dacă nu, scanăm. */
@@ -59,14 +59,14 @@ extern "C" int cmd_fat(int argc, char **argv) {
     const char* sub = argv[1];
 
     if (strcmp(sub, "ls") == 0) {
-        try_automount();
+        fat_automount();
         if (is_fat_initialized) fat32_list_root();
         else terminal_writestring("FAT not mounted (no FAT32 partition found).\n");
         return 0;
     }
 
     if (strcmp(sub, "info") == 0) {
-        try_automount();
+        fat_automount();
         if (is_fat_initialized) fat32_list_root();
         else terminal_writestring("FAT not mounted.\n");
         return 0;

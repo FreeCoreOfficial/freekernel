@@ -76,10 +76,9 @@ int chrysfs_mount(block_device_t *dev, const char *mountpoint) {
     
     chrysfs_superblock_t *sb = (chrysfs_superblock_t*)buf;
     if (sb->magic != CHRYSFS_MAGIC) {
-        serial("[FS] Invalid magic on %s. Formatting...\n", dev->name);
-        chrysfs_format(dev);
-        // Re-read
-        dev->read(dev, 0, 1, buf);
+        serial("[FS] Invalid magic on %s. Mount failed (not ChrysFS).\n", dev->name);
+        kfree(buf);
+        return -1;
     }
     
     serial("[FS] Mounted CHRYS_FS from %s at %s\n", dev->name, mountpoint);
