@@ -417,41 +417,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // 13) Event queue for event-driven design
     event_queue_init();
     
-    /* === NEW ARCHITECTURE INIT === */
-    input_init();
-    block_init();
-    chrysfs_init();
-    
-    serial("[KERNEL] initializing AHCI\n");
-    int ahci_ports = ahci_init();
-    io_sched_init(); /* Init Async IO Scheduler */
-
-    if (ahci_ports > 0) {
-        serial("[KERNEL] AHCI initialized %d ports. Disabling Legacy ATA.\n", ahci_ports);
-    } else {
-        serial("[KERNEL] AHCI not available or no ports active. Fallback to ATA.\n");
-        ata_init();
-    }
-    
-    /* Mount CHRYS_FS on ahci0 */
-    if (ahci_ports > 0) {
-        block_device_t *bd = block_get("ahci0");
-        if (bd) {
-            chrysfs_mount(bd, "/");
-            chrysfs_ls("/root/files");
-        }
-    }
-
-terminal_writestring("Sleeping 1 second...\n");
-sleep(1000);
-terminal_writestring("Done!\n");
-
-for (int i = 0; i < 5; i++) {
-    terminal_writestring("tick\n");
-    sleep(500);
-}
-
-
     terminal_writestring("\nSystem ready.\n> ");
 
     // 16) RTC/time/ATA
@@ -478,6 +443,48 @@ for (int i = 0; i < 5; i++) {
     paging_init(PAGING_120_MB);
     paging_map_kernel_higher_half();
     terminal_printf("Paging OK\n");
+
+    /* === NEW ARCHITECTURE INIT (Moved after Paging) === */
+    input_init();
+    block_init();
+    chrysfs_init();
+    
+    /* BIOS + ACPI legacy areas */
+    vmm_identity_map(0x00000000, 0x1000);      // BDA
+    vmm_identity_map(0x000E0000, 0x20000);     // BIOS area
+
+    /* FIX: Map AHCI MMIO BAR (QEMU specific usually at 0xFEBF0000, mapping 64KB covers it) */
+    /* Must be mapped BEFORE ahci_init attempts to access it */
+    vmm_identity_map(0xFEBF0000, 0x10000);
+
+    serial("[KERNEL] initializing AHCI\n");
+    int ahci_ports = ahci_init();
+    io_sched_init(); /* Init Async IO Scheduler */
+
+    if (ahci_ports > 0) {
+        serial("[KERNEL] AHCI initialized %d ports. Disabling Legacy ATA.\n", ahci_ports);
+    } else {
+        serial("[KERNEL] AHCI not available or no ports active. Fallback to ATA.\n");
+        ata_init();
+    }
+    
+    /* Mount CHRYS_FS on ahci0 */
+    if (ahci_ports > 0) {
+        block_device_t *bd = block_get("ahci0");
+        if (bd) {
+            chrysfs_mount(bd, "/");
+            chrysfs_ls("/root/files");
+        }
+    }
+
+    terminal_writestring("Sleeping 1 second...\n");
+    sleep(1000);
+    terminal_writestring("Done!\n");
+
+    for (int i = 0; i < 5; i++) {
+        terminal_writestring("tick\n");
+        sleep(500);
+    }
 
     // ACPI & APIC initialization MUST happen after paging is active
     // because they rely on vmm_map_page / kernel_page_directory.
@@ -582,10 +589,6 @@ pci_init(); // DISABLED: Potential crash source
 
     /* Initialize USB Subsystem (UHCI) */
     usb_core_init();
-
-/* BIOS + ACPI legacy areas */
-vmm_identity_map(0x00000000, 0x1000);      // BDA
-vmm_identity_map(0x000E0000, 0x20000);     // BIOS area
 
 // definește string-ul (scope file-local e OK)
 //static const char test_msg[] = "Hello from syscall!";

@@ -47,7 +47,7 @@ extern "C" void keyboard_handler(registers_t* regs)
 
         /* If USB Keyboard is active, ignore PS/2 to prevent conflicts */
         if (input_is_usb_keyboard_active()) {
-            lapic_eoi();
+            /* EOI is handled centrally in irq_handler */
             return;
         }
 
@@ -123,10 +123,25 @@ extern "C" void keyboard_init()
 
     /* Reset keyboard */
     outb(0x60, 0xFF);
-    while (!(inb(0x64) & 1));
-    uint8_t resp = inb(0x60);
-    serial_write_string("[PS/2] reset resp=");
-    serial_printf("%x\r\n", resp);
+    
+    /* Wait for ACK (0xFA) */
+    int timeout = 100000;
+    while(timeout-- && !(inb(0x64) & 1));
+    if (timeout > 0) {
+        uint8_t resp = inb(0x60);
+        serial_printf("[PS/2] reset resp=0x%x\n", resp);
+    }
+
+    /* Wait for BAT (0xAA) - Self Test Passed */
+    timeout = 1000000; 
+    while(timeout-- > 0) {
+        if (inb(0x64) & 1) {
+            uint8_t bat = inb(0x60);
+            serial_printf("[PS/2] BAT/Extra: 0x%x\n", bat);
+            if (bat == 0xAA) break; // Found BAT, we are good
+        }
+        asm volatile("pause");
+    }
 
     /* Enable scanning */
     outb(0x60, 0xF4);
