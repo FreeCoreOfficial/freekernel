@@ -21,6 +21,7 @@
 //    so many kernel faults will show a panic screen instead of resulting in a triple fault.
 
 #include "types.h"
+#include <stdarg.h>
 
 #include "terminal.h"
 #include "drivers/pic.h"
@@ -63,7 +64,7 @@
 #include "smp/smp.h"
 #include "hardware/hpet.h"
 #include "usb/usb_core.h"
-
+#include "storage/ahci/ahci.h"
 
 
 
@@ -115,6 +116,80 @@ __attribute__((weak)) void yield(void) { task_yield(); }
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+// ===== AHCI / Driver Support Glue =====
+extern "C" {
+
+char* itoa_dec(char* out, int32_t v);
+char* utoa_hex(char* out, uint32_t v);
+
+/* Minimal serial printf implementation for drivers */
+void serial(const char *fmt, ...) {
+    char buf[1024];
+    char *p = buf;
+    va_list args;
+    va_start(args, fmt);
+
+    const char *f = fmt;
+    while (*f) {
+        if (*f != '%') {
+            *p++ = *f++;
+            continue;
+        }
+        f++; // skip %
+        
+        // Simple modifiers skip (like .40 or 08)
+        while ((*f >= '0' && *f <= '9') || *f == '.') f++;
+
+        if (*f == 'd' || *f == 'u') {
+            int val = va_arg(args, int);
+            char tmp[32];
+            itoa_dec(tmp, val);
+            char *t = tmp;
+            while (*t) *p++ = *t++;
+        } else if (*f == 'x' || *f == 'p') {
+            uint32_t val = va_arg(args, uint32_t);
+            char tmp[32];
+            utoa_hex(tmp, val);
+            char *t = tmp;
+            while (*t) *p++ = *t++;
+        } else if (*f == 's') {
+            const char *s = va_arg(args, const char*);
+            if (!s) s = "(null)";
+            while (*s) *p++ = *s++;
+        } else if (*f == 'l') {
+            f++; // skip first l
+            if (*f == 'l') f++; // skip second l
+            if (*f == 'u') {
+                // Hack for %llu: print high/low hex or just 32-bit cast for now
+                // Since we don't have full 64-bit formatting helpers here easily
+                uint64_t val = va_arg(args, uint64_t);
+                char tmp[32];
+                utoa_hex(tmp, (uint32_t)val); // Truncate to 32-bit for simplicity in glue
+                char *t = tmp;
+                while (*t) *p++ = *t++;
+            }
+        } else {
+            *p++ = '?';
+        }
+        f++;
+    }
+    *p = 0;
+    va_end(args);
+    
+    serial_write_string(buf);
+}
+
+/* Uptime helper for AHCI timeouts */
+uint32_t get_uptime_ms(void) {
+    if (hpet_is_active()) {
+        return (uint32_t)hpet_time_ms();
+    }
+    // Fallback if HPET not active (should not happen if hpet_init called)
+    return 0;
+}
+
+} // extern "C"
 
 // ===== end fallback =====
 
@@ -322,6 +397,15 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     // 13) Event queue for event-driven design
     event_queue_init();
+    
+    serial("[KERNEL] initializing AHCI\n");
+    int ahci_ports = ahci_init();
+    if (ahci_ports > 0) {
+        serial("[KERNEL] AHCI initialized %d ports. Disabling Legacy ATA.\n", ahci_ports);
+    } else {
+        serial("[KERNEL] AHCI not available or no ports active. Fallback to ATA.\n");
+        ata_init();
+    }
 
     // 14) Now enable interrupts: only do this after driver IRQ handlers are installed.
     // Enabling earlier risks races where an ISR runs before supporting state is ready.
@@ -345,8 +429,8 @@ for (int i = 0; i < 5; i++) {
     time_set_timezone(2);
     datetime t;
     time_get_local(&t);
-    ata_init(); // DISABLED: Potential crash source (EIP=0)
- //   terminal_writestring("[kernel] ata_init skipped for stability\n");
+    
+    /* ata_init() moved above to conditional block */
 
     // 17) PMM quick test
     uint32_t frame1 = pmm_alloc_frame();

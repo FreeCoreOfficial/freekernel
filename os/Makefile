@@ -133,6 +133,12 @@ OBJS = \
 	$(BUILD)/usb/usb_msc.o \
 	$(BUILD)/smp/smp.o \
 	$(BUILD)/smp/trampoline_obj.o \
+	build/storage/ahci/ahci_pci.o \
+    build/storage/ahci/ahci_hba.o \
+    build/storage/ahci/ahci_port.o \
+    build/storage/ahci/ahci_cmd.o \
+    build/storage/ahci/ahci_dma.o
+
 
 
 
@@ -537,6 +543,25 @@ $(BUILD)/smp/trampoline_obj.o: $(BUILD)/smp/trampoline.bin
 
 # Note: You will need to ensure trampoline.bin is available to the kernel, e.g., via GRUB module or embedding.
 
+build/storage/ahci/ahci_pci.o: kernel/storage/ahci/ahci_pci.c kernel/storage/ahci/ahci.h
+	@mkdir -p build/storage/ahci
+	$(CC) $(CFLAGS) -c kernel/storage/ahci/ahci_pci.c -o $@
+
+build/storage/ahci/ahci_hba.o: kernel/storage/ahci/ahci_hba.c kernel/storage/ahci/ahci.h
+	@mkdir -p build/storage/ahci
+	$(CC) $(CFLAGS) -c kernel/storage/ahci/ahci_hba.c -o $@
+
+build/storage/ahci/ahci_port.o: kernel/storage/ahci/ahci_port.c kernel/storage/ahci/ahci.h
+	@mkdir -p build/storage/ahci
+	$(CC) $(CFLAGS) -c kernel/storage/ahci/ahci_port.c -o $@
+
+build/storage/ahci/ahci_cmd.o: kernel/storage/ahci/ahci_cmd.c kernel/storage/ahci/ahci.h
+	@mkdir -p build/storage/ahci
+	$(CC) $(CFLAGS) -c kernel/storage/ahci/ahci_cmd.c -o $@
+
+build/storage/ahci/ahci_dma.o: kernel/storage/ahci/ahci_dma.c kernel/storage/ahci/ahci.h
+	@mkdir -p build/storage/ahci
+	$(CC) $(CFLAGS) -c kernel/storage/ahci/ahci_dma.c -o $@
 
 # -------------------------
 # LINK

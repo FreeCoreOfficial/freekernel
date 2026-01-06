@@ -48,6 +48,19 @@ static uint16_t pci_get_device(uint8_t bus, uint8_t device, uint8_t function)
     return (pci_read(bus, device, function, 0x00) >> 16) & 0xFFFF;
 }
 
+static void pci_write(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset, uint32_t value)
+{
+    uint32_t address =
+        (1U << 31) |
+        ((uint32_t)bus << 16) |
+        ((uint32_t)device << 11) |
+        ((uint32_t)function << 8) |
+        (offset & 0xFC);
+
+    outl(PCI_CONFIG_ADDRESS, address);
+    outl(PCI_CONFIG_DATA, value);
+}
+
 /* ============================================================
    Class / Subclass helpers
    ============================================================ */
@@ -152,4 +165,42 @@ void pci_init(void)
     }
 
     terminal_writestring("\n[pci] scan complete\n");
+}
+
+/* ============================================================
+   Public API for Drivers (AHCI, etc.)
+   ============================================================ */
+extern "C" {
+
+int pci_find_device_by_class(uint8_t class_code, uint8_t sub, uint8_t prog_if, uint8_t *out_bus, uint8_t *out_dev, uint8_t *out_func) {
+    for (uint16_t bus = 0; bus < 256; bus++) {
+        for (uint8_t dev = 0; dev < 32; dev++) {
+            for (uint8_t func = 0; func < 8; func++) {
+                uint16_t vendor = pci_get_vendor(bus, dev, func);
+                if (vendor == 0xFFFF) continue;
+                
+                if (pci_get_class(bus, dev, func) == class_code &&
+                    pci_get_subclass(bus, dev, func) == sub &&
+                    pci_get_progif(bus, dev, func) == prog_if) {
+                    *out_bus = (uint8_t)bus;
+                    *out_dev = dev;
+                    *out_func = func;
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+uint32_t pci_read_bar32(uint8_t bus, uint8_t dev, uint8_t func, int bar_index) {
+    return pci_read(bus, dev, func, 0x10 + bar_index * 4);
+}
+
+void pci_enable_busmaster(uint8_t bus, uint8_t dev, uint8_t func) {
+    uint32_t cmd = pci_read(bus, dev, func, 0x04);
+    cmd |= (1 << 2); /* Bit 2: Bus Master Enable */
+    pci_write(bus, dev, func, 0x04, cmd);
+}
+
 }
