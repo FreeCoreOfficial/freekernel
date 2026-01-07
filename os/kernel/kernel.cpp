@@ -574,6 +574,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // 14) Now enable interrupts: only do this after driver IRQ handlers are installed.
     // Enabling earlier risks races where an ISR runs before supporting state is ready.
     asm volatile("sti");
+    serial("[KERNEL] Interrupts enabled (STI). System alive.\n");
 
     // 20) Heap test (defensive frees)
     void* heap_a = kmalloc(64);
@@ -677,6 +678,7 @@ pci_init(); // DISABLED: Potential crash source
     // 22) Main loop: shell polling + halt (no unsafe yields)
     // If you want the shell to be preempted by tasks, move shell into its own
     // task and enable TASKS_ENABLED after implementing a safe switch_to.
+    serial("[KERNEL] Entering main loop...\n");
     while (1) {
         usb_poll();           // Poll USB HID devices
         io_sched_poll();      // Process Async I/O requests
@@ -687,7 +689,7 @@ pci_init(); // DISABLED: Potential crash source
             if (ev.type == INPUT_KEYBOARD && ev.pressed) {
                 // Convert keycode to char if needed, or pass raw
                 // For now assuming keycode is ASCII for demo
-                // serial("[KERNEL] Shell consume: %c (0x%x)\n", (char)ev.keycode, ev.keycode);
+                serial("[KERNEL] Input: %c (0x%x)\n", (char)ev.keycode, ev.keycode);
                 shell_handle_char((char)ev.keycode);
             }
         }

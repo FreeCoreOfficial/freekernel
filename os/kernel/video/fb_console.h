@@ -16,6 +16,9 @@ void fb_cons_putc(char c);
 /* Write a string to the console */
 void fb_cons_puts(const char* s);
 
+/* Clear the console screen */
+void fb_cons_clear(void);
+
 #ifdef __cplusplus
 }
 #endif

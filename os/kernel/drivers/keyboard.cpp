@@ -134,6 +134,21 @@ extern "C" void keyboard_init()
     kbd_wait_write();
     outb(PS2_CMD, 0xAE);
 
+    /* 4. Enable Interrupts in Command Byte (Before Reset) */
+    kbd_wait_write();
+    outb(PS2_CMD, 0x20); // Read Config
+    
+    kbd_wait_read();
+    uint8_t cmd = inb(PS2_DATA);
+    
+    cmd |= 0x01; // Enable IRQ1 (Keyboard)
+    cmd &= ~0x10; // Disable IRQ12 (Mouse) temporarily
+    
+    kbd_wait_write();
+    outb(PS2_CMD, 0x60); // Write Config
+    kbd_wait_write();
+    outb(PS2_DATA, cmd);
+
     /* Reset keyboard */
     kbd_wait_write();
     outb(PS2_DATA, 0xFF);
@@ -150,7 +165,11 @@ extern "C" void keyboard_init()
     while(timeout-- > 0) {
         if (inb(PS2_STATUS) & 1) {
             uint8_t bat = inb(PS2_DATA);
-            if (bat == 0xAA) break; // Found BAT, we are good
+            if (bat == 0xAA) {
+                serial_write_string("[PS/2] Self Test Passed (0xAA)\r\n");
+                break; 
+            }
+            serial_printf("[PS/2] Reset response: 0x%x\n", bat);
         }
         asm volatile("pause");
     }
@@ -160,21 +179,13 @@ extern "C" void keyboard_init()
     outb(PS2_DATA, 0xF4);
     
     kbd_wait_read();
-    if (inb(PS2_STATUS) & 1) inb(PS2_DATA); // ACK for Enable Scanning
+    if (inb(PS2_STATUS) & 1) {
+        uint8_t resp = inb(PS2_DATA); // ACK for Enable Scanning
+        serial_printf("[PS/2] Enable Scanning ACK: 0x%x\n", resp);
+    }
 
-    /* 4. Enable Interrupts in Command Byte */
-    kbd_wait_write();
-    outb(PS2_CMD, 0x20); // Read Config
-    
-    kbd_wait_read();
-    uint8_t cmd = inb(PS2_DATA);
-    
-    kbd_wait_write();
-    outb(PS2_CMD, 0x60); // Write Config
-    
-    kbd_wait_write();
-    cmd |= 0x01; // Enable IRQ1
-    outb(PS2_DATA, cmd);
+    /* 7. Final Flush to ensure line is low before unmasking PIC */
+    while(inb(PS2_STATUS) & 1) inb(PS2_DATA);
 
     irq_install_handler(1, keyboard_handler);
     

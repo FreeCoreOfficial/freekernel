@@ -3,6 +3,9 @@
 #include "panic.h"
 #include "panic_sys.h"
 #include "arch/i386/tss.h"
+#include "video/framebuffer.h"
+#include "video/font8x16.h"
+#include "arch/i386/io.h"
 // === Freestanding headers (fără libc) ===
 typedef unsigned int       size_t;
 typedef unsigned char      uint8_t;
@@ -27,15 +30,9 @@ static size_t strlen(const char* str) {
 #define XP_FG      15 // Alb (foreground)
 #define XP_ATTR    ((XP_BG << 4) | (XP_FG & 0x0F))
 
-// === I/O Ports ===
-static inline void outb(uint16_t port, uint8_t val) {
-    asm volatile("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-static inline uint8_t inb(uint16_t port) {
-    uint8_t v;
-    asm volatile("inb %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
-}
+// === Framebuffer Colors (ARGB) ===
+#define FB_BLUE    0x000000AA // Albastru BSOD
+#define FB_WHITE   0x00FFFFFF // Alb
 
 // === Serial debug (COM1) ===
 static void serial_print(const char* s) {
@@ -45,10 +42,38 @@ static void serial_print(const char* s) {
     }
 }
 
+// === Framebuffer Helpers ===
+static bool use_fb = false;
+static uint32_t fb_w = 0, fb_h = 0;
+
+static void check_fb() {
+    uint32_t p; uint8_t b; uint8_t* buf;
+    fb_get_info(&fb_w, &fb_h, &p, &b, &buf);
+    use_fb = (buf != 0 && fb_w > 0 && fb_h > 0);
+}
+
+static void fb_draw_char(int x, int y, char c) {
+    if (!use_fb) return;
+    const uint8_t* glyph = &font8x16[(uint8_t)c * 16];
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 8; j++) {
+            if (glyph[i] & (1 << (7-j))) {
+                fb_putpixel(x + j, y + i, FB_WHITE);
+            }
+        }
+    }
+}
+
 // === Primitivă de scriere caracter ===
 static void put_char(int x, int y, char c) {
-    if (x >= 0 && x < VGA_WIDTH && y >= 0 && y < VGA_HEIGHT)
-        VGA_MEM[y * VGA_WIDTH + x] = ((uint16_t)XP_ATTR << 8) | (uint8_t)c;
+    if (use_fb) {
+        // Pe FB folosim coordonate pixel (8x16 font)
+        fb_draw_char(x * 8, y * 16, c);
+    } else {
+        // Pe VGA folosim coordonate text
+        if (x >= 0 && x < VGA_WIDTH && y >= 0 && y < VGA_HEIGHT)
+            VGA_MEM[y * VGA_WIDTH + x] = ((uint16_t)XP_ATTR << 8) | (uint8_t)c;
+    }
 }
 
 // === Scrie string centrat sau la poziție fixă ===
@@ -66,8 +91,12 @@ static void draw_string_center(int y, const char* s) {
 
 // === Umple tot ecranul cu fundal albastru + spații (autentic XP) ===
 static void clear_screen_xp() {
-    for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
-        VGA_MEM[i] = ((uint16_t)XP_ATTR << 8) | ' ';
+    if (use_fb) {
+        fb_clear(FB_BLUE);
+    } else {
+        for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
+            VGA_MEM[i] = ((uint16_t)XP_ATTR << 8) | ' ';
+        }
     }
 }
 
@@ -100,6 +129,7 @@ static void u32_to_dec(uint32_t value, char* buf) {
 }
 
 extern "C" void panic_render_pretty(const char* msg) {
+    check_fb(); // Detectăm modul video
     clear_screen_xp();
 
     int line = 1;  // Pornim și mai sus pentru compactitate
@@ -143,9 +173,11 @@ extern "C" void panic_render_pretty(const char* msg) {
     draw_string(indent, line++, "Chrysalis OS - chrysalisos.netlify.app");
 
     // Protecție contra depășire (șterge jos dacă e cazul)
-    for (int y = line; y < VGA_HEIGHT; y++) {
-        for (int x = 0; x < VGA_WIDTH; x++) {
-            put_char(x, y, ' ');
+    if (!use_fb) {
+        for (int y = line; y < VGA_HEIGHT; y++) {
+            for (int x = 0; x < VGA_WIDTH; x++) {
+                put_char(x, y, ' ');
+            }
         }
     }
 }

@@ -83,8 +83,8 @@ static void acpi_io_outb(uint16_t port, uint8_t val) {
 extern "C" uint32_t* kernel_page_directory;
 
 // Zonă virtuală rezervată pentru mapări temporare ACPI (trebuie să fie liberă)
-// Alegem 0xE0000000 (3.5 GB), departe de kernel (0xC0000000) și heap.
-#define ACPI_TEMP_VIRT_BASE 0xE0000000
+// Alegem 0xE1000000, pentru a nu intra în conflict cu Framebuffer-ul (0xE0000000)
+#define ACPI_TEMP_VIRT_BASE 0xE1000000
 
 /* 
  * Helper pentru a mapa TEMPORAR o regiune fizică într-o zonă virtuală fixă.

@@ -52,6 +52,9 @@ void fb_init(uint64_t addr, uint32_t width, uint32_t height, uint32_t pitch, uin
     /* 4. Reserve Framebuffer Memory in PMM (Critical!) */
     /* Calculate total size in bytes */
     uint32_t fb_size = fb_height * fb_pitch;
+
+    /* Align size to page boundary (4KB) to ensure complete mapping coverage */
+    fb_size = (fb_size + 0xFFF) & 0xFFFFF000;
     
     pmm_reserve_area((uint32_t)phys_addr, fb_size);
 
@@ -102,11 +105,17 @@ void fb_putpixel(uint32_t x, uint32_t y, uint32_t color) {
 void fb_clear(uint32_t color) {
     if (!fb_buffer) return;
 
-    /* Optimized clear could use memset/rep stosd for 32bpp, 
-     * but generic loop covers all BPPs safely for now. */
-    for (uint32_t y = 0; y < fb_height; y++) {
-        for (uint32_t x = 0; x < fb_width; x++) {
-            fb_putpixel(x, y, color);
+    /* Optimized clear for 32bpp (Direct Memory Access) */
+    if (fb_bpp == 32) {
+        uint32_t* buf = (uint32_t*)fb_buffer;
+        uint32_t count = fb_width * fb_height;
+        for (uint32_t i = 0; i < count; ++i) buf[i] = color;
+    } else {
+        /* Generic fallback */
+        for (uint32_t y = 0; y < fb_height; y++) {
+            for (uint32_t x = 0; x < fb_width; x++) {
+                fb_putpixel(x, y, color);
+            }
         }
     }
 }

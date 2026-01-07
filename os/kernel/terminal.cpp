@@ -28,6 +28,11 @@ extern "C" void terminal_set_backend_fb(bool active) {
 }
 
 extern "C" void terminal_clear() {
+    if (use_fb_console) {
+        fb_cons_clear();
+        return;
+    }
+
     for (int i = 0; i < 80 * 25; i++)
         vga[i] = ' ' | (color << 8);
 
