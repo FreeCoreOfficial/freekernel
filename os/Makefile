@@ -19,6 +19,7 @@ ISO = iso
 KERNEL = kernel.bin
 
 OBJS = \
+	build/arch/i386/multiboot2_header.o \
 	$(BUILD)/boot.o \
 	$(BUILD)/gdt_flush.o \
 	$(BUILD)/gdt.o \
@@ -142,7 +143,8 @@ OBJS = \
     build/storage/io_sched.o \
     build/storage/block.o \
     build/input/input.o \
-    build/fs/chrysfs/chrysfs.o
+    build/fs/chrysfs/chrysfs.o \
+	$(BUILD)/framebuffer.o \
 
 
 
@@ -188,6 +190,9 @@ $(BUILD)/interrupts.o: kernel/interrupts/interrupts.asm | dirs
 # -------------------------
 # C++ OBJECTS
 # -------------------------
+build/arch/i386/multiboot2_header.o: arch/i386/multiboot2_header.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/kernel.o: kernel/kernel.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -588,6 +593,8 @@ build/fs/chrysfs/chrysfs.o: kernel/fs/chrysfs/chrysfs.c
 	@mkdir -p build/fs/chrysfs
 	$(CC) $(CFLAGS) -c kernel/fs/chrysfs/chrysfs.c -o $@
 
+$(BUILD)/framebuffer.o: kernel/video/framebuffer.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
 # -------------------------
 # LINK
 # -------------------------

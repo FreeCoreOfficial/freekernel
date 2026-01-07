@@ -1,205 +1,140 @@
+/* kernel/paging.c */
 #include "paging.h"
+#include "mm/paging.h" /* for KERNEL_BASE */
+#include "memory/pmm.h"
+#include "string.h"
 #include <stdint.h>
-#include <stddef.h>
 
-/* Optional: if you want to print text during init (make sure terminal_init already called) */
-extern void terminal_printf(const char*, ...);
-
-/* Constants */
-#define PAGE_SIZE           0x1000U
-#define ENTRIES_PER_TABLE   1024U
-#define TABLE_SIZE_BYTES    (ENTRIES_PER_TABLE * 4U) /* 4096 bytes */
-#define ONE_DIR_ENTRY_BYTES 4U
-#define PD_INDEX(x)         (((x) >> 22) & 0x3FF)
-#define PT_INDEX(x)         (((x) >> 12) & 0x3FF)
-#define ALIGN_4K __attribute__((aligned(4096)))
-
-/* Kernel higher-half constants */
-#define KERNEL_VIRT_BASE    0xC0000000U
-#define KERNEL_PHYS_BASE    0x00100000U // Assumes kernel is loaded at 1MB
-#define KERNEL_MAP_SIZE_MB  8 // Map 8MB for the kernel code/data/bss/heap
-
-/* Config */
-#define DEFAULT_IDENTITY_MAP_MB PAGING_120_MB
-#define MAX_PAGE_TABLES 64U          /* total page-tables we keep statically */
-
-/* Page directory (aligned) */
-static uint32_t page_directory[ENTRIES_PER_TABLE] ALIGN_4K;
-
-/* Pool of page tables (aligned). We'll use first N for identity mapping then allocate more on demand. */
-static uint32_t page_tables[MAX_PAGE_TABLES][ENTRIES_PER_TABLE] ALIGN_4K;
-static uint32_t next_free_table = 0;
-
-/* Variabilă globală definită în kernel/mm/paging.c, necesară pentru ACPI/VMM */
+/* Import the global directory from kernel/mm/paging.c */
 extern uint32_t* kernel_page_directory;
 
-/* Helper: simple check for alignment */
-static inline int is_page_aligned(uint32_t v) {
-    return (v & (PAGE_SIZE - 1)) == 0;
+/* Constants */
+#define KERNEL_PHYS_BASE    0x00000000 /* FIX: Map from 0 to align with phys_to_virt */
+#define PAGE_SIZE           4096
+
+void paging_init(uint32_t ram_size_mb) {
+    (void)ram_size_mb;
+    
+    /* Allocate a frame for the kernel page directory */
+    uint32_t pd_phys = pmm_alloc_frame();
+    
+    /* Temporarily access it using physical address */
+    kernel_page_directory = (uint32_t*)pd_phys;
+    
+    /* Clear it */
+    memset(kernel_page_directory, 0, PAGE_SIZE);
 }
 
-/* Returns physical address of a page-table pointer (before paging enabled virtual==physical). */
-static inline uint32_t phys_of(void* p) {
-    return (uint32_t)p;
-}
+void paging_map_kernel_higher_half(void) {
+    /* Map physical memory starting from 0 to KERNEL_BASE (0xC0000000) */
+    /* We map 32MB to cover kernel code, data, and some initial heap */
+    
+    uint32_t virt_start = KERNEL_BASE;
+    uint32_t phys_start = KERNEL_PHYS_BASE;
+    uint32_t map_size   = 32 * 1024 * 1024; /* 32 MB */
+    
+    /* 1. Identity map the first 32MB (covers kernel low-half code, VGA, etc.)
+     * This is CRITICAL: without this, enabling paging (CR0.PG=1) causes an
+     * immediate Triple Fault because the currently executing code (EIP) is
+     * at a low physical address which wouldn't be mapped.
+     */
+    for (uint32_t offset = 0; offset < map_size; offset += PAGE_SIZE) {
+        uint32_t vaddr = phys_start + offset; /* Identity: virt = phys */
+        uint32_t paddr = phys_start + offset;
+        
+        uint32_t pd_index = vaddr >> 22;
+        uint32_t pt_index = (vaddr >> 12) & 0x3FF;
+        
+        if (!(kernel_page_directory[pd_index] & PAGE_PRESENT)) {
+            uint32_t pt_phys = pmm_alloc_frame();
+            uint32_t* pt = (uint32_t*)pt_phys;
+            memset(pt, 0, PAGE_SIZE);
+            kernel_page_directory[pd_index] = pt_phys | PAGE_PRESENT | PAGE_RW;
+        }
+        
+        uint32_t pt_phys = kernel_page_directory[pd_index] & ~0xFFF;
+        uint32_t* pt = (uint32_t*)pt_phys;
+        pt[pt_index] = paddr | PAGE_PRESENT | PAGE_RW;
+    }
 
-/* Enable paging: write CR3 and set CR0.PG bit */
-static void enable_paging_internal(uint32_t pd_phys) {
-    /* load CR3 */
-    asm volatile("mov %0, %%cr3" :: "r"(pd_phys));
-    /* set PG bit in CR0 */
+    /* 2. Map higher half (0xC0000000 -> 0x00000000) */
+    for (uint32_t offset = 0; offset < map_size; offset += PAGE_SIZE) {
+        uint32_t vaddr = virt_start + offset;
+        uint32_t paddr = phys_start + offset;
+        
+        uint32_t pd_index = vaddr >> 22;
+        uint32_t pt_index = (vaddr >> 12) & 0x3FF;
+        
+        /* Check if Page Table exists */
+        if (!(kernel_page_directory[pd_index] & PAGE_PRESENT)) {
+            uint32_t pt_phys = pmm_alloc_frame();
+            uint32_t* pt = (uint32_t*)pt_phys; /* Access as phys for now */
+            memset(pt, 0, PAGE_SIZE);
+            
+            kernel_page_directory[pd_index] = pt_phys | PAGE_PRESENT | PAGE_RW;
+        }
+        
+        /* Get Page Table */
+        uint32_t pt_phys = kernel_page_directory[pd_index] & ~0xFFF;
+        uint32_t* pt = (uint32_t*)pt_phys;
+        
+        /* Set Page Table Entry */
+        pt[pt_index] = paddr | PAGE_PRESENT | PAGE_RW;
+    }
+    
+    /* Recursive mapping for the PD itself at the last entry (1023) */
+    kernel_page_directory[1023] = (uint32_t)kernel_page_directory | PAGE_PRESENT | PAGE_RW;
+    
+    /* Load CR3 */
+    asm volatile("mov %0, %%cr3" :: "r"(kernel_page_directory));
+    
+    /* Enable Paging */
     uint32_t cr0;
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000U; /* set PG */
+    cr0 |= 0x80000000; /* Set PG bit */
     asm volatile("mov %0, %%cr0" :: "r"(cr0));
+    
+    /* Update kernel_page_directory to virtual address */
+    kernel_page_directory = (uint32_t*)((uintptr_t)kernel_page_directory + KERNEL_BASE);
 }
 
-/* Create a new page-table from pool; returns index or -1 on failure */
-static int allocate_page_table(void) {
-    if (next_free_table >= MAX_PAGE_TABLES) return -1;
-    /* Zero table for cleanliness */
-    uint32_t idx = next_free_table++;
-    for (uint32_t i = 0; i < ENTRIES_PER_TABLE; ++i) page_tables[idx][i] = 0;
-    return (int)idx;
-}
-
-/* Accept only the predefined MB profiles (20,40,60,80,100,120) */
-static int paging_is_valid_mb(uint32_t mb) {
-    switch (mb) {
-        case 20:
-        case 40:
-        case 60:
-        case 80:
-        case 100:
-        case 120:
-            return 1;
-        default:
-            return 0;
-    }
-}
-
-void paging_init(uint32_t identity_map_mb) {
-    /* if 0 => use default, if invalid => fallback default */
-    if (identity_map_mb == 0) identity_map_mb = DEFAULT_IDENTITY_MAP_MB;
-    if (!paging_is_valid_mb(identity_map_mb)) {
-        if (terminal_printf)
-            terminal_printf("paging: invalid profile %u MB, falling back to %u MB\n", identity_map_mb, DEFAULT_IDENTITY_MAP_MB);
-        identity_map_mb = DEFAULT_IDENTITY_MAP_MB;
-    }
-
-    /* Zero page directory */
-    for (uint32_t i = 0; i < ENTRIES_PER_TABLE; ++i) page_directory[i] = 0;
-
-    /* Reset pool */
-    next_free_table = 0;
-    for (uint32_t t = 0; t < MAX_PAGE_TABLES; ++t) {
-        for (uint32_t i = 0; i < ENTRIES_PER_TABLE; ++i) page_tables[t][i] = 0;
-    }
-
-    /* How many 4MB chunks we need to cover identity_map_mb */
-    uint32_t mb = identity_map_mb;
-    uint32_t four_mb_chunks = (mb + 3) / 4; /* ceil(mb/4) */
-
-    uint32_t flags = PAGE_PRESENT | PAGE_RW; /* kernel RW present */
-
-    uint32_t used_tables = 0;
-    for (uint32_t chunk = 0; chunk < four_mb_chunks; ++chunk) {
-        int table_idx = allocate_page_table();
-        if (table_idx < 0) {
-            /* allocation failure */
-            if (terminal_printf) terminal_printf("paging: no free page-tables\n");
-            return;
-        }
-        used_tables++;
-
-        /* Set PDE to point to this page_table */
-        uint32_t pde_val = phys_of(&page_tables[table_idx]) | flags;
-        page_directory[chunk] = pde_val;
-
-        /* Fill the page table: identity map 4MB chunk */
-        uint32_t base_phys = chunk * 0x400000U; /* each page table maps 4MB */
-        for (uint32_t i = 0; i < ENTRIES_PER_TABLE; ++i) {
-            uint32_t phys_addr = base_phys + (i * PAGE_SIZE);
-            page_tables[table_idx][i] = phys_addr | flags;
-        }
-    }
-
-    /* Optional debug */
-    if (terminal_printf) terminal_printf("paging: identity-mapped %u MB using %u page-tables\n", mb, used_tables);
-
-    /* Enable paging: pass physical address of page_directory (identity mapped so &page_directory is physical) */
-    enable_paging_internal(phys_of(page_directory));
-
-    if (terminal_printf) terminal_printf("paging: enabled (CR3 set)\n");
-
-    /* Setăm pointerul global astfel încât ACPI și VMM să vadă directorul activ */
-    kernel_page_directory = page_directory;
-}
-
-/* Map the kernel into the higher half virtual address space */
-void paging_map_kernel_higher_half(void) {
-    uint32_t flags = PAGE_PRESENT | PAGE_RW;
-    uint32_t kernel_map_pages = (KERNEL_MAP_SIZE_MB * 1024 * 1024) / PAGE_SIZE;
-
-    for (uint32_t i = 0; i < kernel_map_pages; i++) {
-        uint32_t phys = KERNEL_PHYS_BASE + (i * PAGE_SIZE);
-        uint32_t virt = KERNEL_VIRT_BASE + (i * PAGE_SIZE);
-        
-        uint32_t pdx = PD_INDEX(virt);
-        uint32_t ptx = PT_INDEX(virt);
-
-        if ((page_directory[pdx] & PAGE_PRESENT) == 0) {
-            int table_idx = allocate_page_table();
-            if (table_idx < 0) {
-                if (terminal_printf) terminal_printf("paging: kernel map failed, no free tables\n");
-                return;
-            }
-            page_directory[pdx] = phys_of(&page_tables[table_idx]) | flags;
-        }
-        uint32_t* pt = (uint32_t*)(page_directory[pdx] & 0xFFFFF000);
-        pt[ptx] = phys | flags;
-    }
-    if (terminal_printf) terminal_printf("paging: mapped kernel to 0x%x\n", KERNEL_VIRT_BASE);
-}
-
-/* Map a single page (will allocate a page-table if missing). Returns 0 on success, non-zero on fail. */
 int paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t flags) {
-    if (!is_page_aligned(virtual_addr) || !is_page_aligned(physical_addr)) return -1;
+    uint32_t pd_index = virtual_addr >> 22;
+    uint32_t pt_index = (virtual_addr >> 12) & 0x3FF;
 
-    uint32_t pdx = PD_INDEX(virtual_addr);
-    uint32_t ptx = PT_INDEX(virtual_addr);
-
-    uint32_t pde = page_directory[pdx];
-    if ((pde & PAGE_PRESENT) == 0) {
-        int idx = allocate_page_table();
-        if (idx < 0) return -2; /* no free page table */
-        page_directory[pdx] = phys_of(&page_tables[idx]) | (PAGE_PRESENT | PAGE_RW);
-        pde = page_directory[pdx];
+    if (!(kernel_page_directory[pd_index] & PAGE_PRESENT)) {
+        uint32_t pt_phys = pmm_alloc_frame();
+        if (!pt_phys) return -1;
+        
+        uint32_t* pt_virt = (uint32_t*)(pt_phys + KERNEL_BASE);
+        memset(pt_virt, 0, PAGE_SIZE);
+        
+        uint32_t pd_flags = PAGE_PRESENT | PAGE_RW;
+        if (flags & PAGE_USER) pd_flags |= PAGE_USER;
+        
+        kernel_page_directory[pd_index] = pt_phys | pd_flags;
     }
 
-    /* We assume page_directory entries are physical addresses to page_tables (identity mapped) */
-    uint32_t *pt = (uint32_t*)(pde & 0xFFFFF000U);
-    pt[ptx] = physical_addr | (flags & 0xFFFU);
-    /* invalidate TLB for that page */
-    asm volatile("invlpg (%0)" :: "r"(virtual_addr) : "memory");
-
+    uint32_t pt_phys = kernel_page_directory[pd_index] & ~0xFFF;
+    uint32_t* pt_virt = (uint32_t*)(pt_phys + KERNEL_BASE);
+    
+    pt_virt[pt_index] = (physical_addr & ~0xFFF) | (flags & 0xFFF) | PAGE_PRESENT;
+    asm volatile("invlpg (%0)" :: "r" (virtual_addr) : "memory");
     return 0;
 }
 
 void paging_unmap_page(uint32_t virtual_addr) {
-    if (!is_page_aligned(virtual_addr)) return;
+    uint32_t pd_index = virtual_addr >> 22;
+    uint32_t pt_index = (virtual_addr >> 12) & 0x3FF;
 
-    uint32_t pdx = PD_INDEX(virtual_addr);
-    uint32_t ptx = PT_INDEX(virtual_addr);
-
-    uint32_t pde = page_directory[pdx];
-    if ((pde & PAGE_PRESENT) == 0) return;
-
-    uint32_t *pt = (uint32_t*)(pde & 0xFFFFF000U);
-    pt[ptx] = 0;
-    asm volatile("invlpg (%0)" :: "r"(virtual_addr) : "memory");
+    if (kernel_page_directory[pd_index] & PAGE_PRESENT) {
+        uint32_t pt_phys = kernel_page_directory[pd_index] & ~0xFFF;
+        uint32_t* pt_virt = (uint32_t*)(pt_phys + KERNEL_BASE);
+        pt_virt[pt_index] = 0;
+        asm volatile("invlpg (%0)" :: "r" (virtual_addr) : "memory");
+    }
 }
 
 uint32_t paging_get_page_directory_phys(void) {
-    return phys_of(page_directory);
+    return (uint32_t)((uintptr_t)kernel_page_directory - KERNEL_BASE);
 }

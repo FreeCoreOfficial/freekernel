@@ -1,4 +1,3 @@
-/* repaired linker.ld - simple, ld-friendly layout */
 ENTRY(_start)
 
 SECTIONS
@@ -6,7 +5,10 @@ SECTIONS
     /* load address: 1MiB */
     . = 1M;
 
-    .multiboot : { *(.multiboot) }
+.multiboot : {
+    KEEP(*(.multiboot))
+}
+
 
     .text : { *(.text*) }
 
@@ -14,7 +16,8 @@ SECTIONS
 
     .data : { *(.data*) }
 
-    .bss (NOLOAD) : {
+    .bss (NOLOAD) :
+    {
         *(.bss*)
         *(COMMON)
     }
@@ -22,12 +25,11 @@ SECTIONS
     /* ================== KERNEL HEAP ================== */
     . = ALIGN(0x1000);
     __heap_start = .;
-    . += 0x100000;          /* 1 MiB heap kernel */
+    . += 0x100000;
     __heap_end = .;
     . = ALIGN(0x1000);
     /* ================================================= */
 
-    /* === IMPORTANT: end of kernel image === */
     kernel_end = .;
 
     /DISCARD/ : { *(.eh_frame) }

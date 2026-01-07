@@ -73,6 +73,8 @@
 #include "fs/chrysfs/chrysfs.h"
 #include "cmds/disk.h"
 #include "cmds/fat.h"
+#include "video/framebuffer.h"
+#include "smp/multiboot.h"
 
 
 
@@ -220,9 +222,6 @@ extern "C" {
    defined by the linker script (linker.ld) */
 extern "C" void buddy_init_from_heap(void);
 
-/* Classic Multiboot 1 magic constant */
-#define MULTIBOOT_MAGIC 0x2BADB002u
-
 /* Debug/test flag: set to 1 to exercise framebuffer logic (if available) */
 #define VGA_TEST 0
 
@@ -231,41 +230,6 @@ extern "C" void buddy_init_from_heap(void);
    context switching in a controlled environment.
 */
 #define TASKS_ENABLED 0
-
-/* Minimal Multiboot structure (only the fields we use) */
-typedef struct {
-    uint32_t flags;
-    /* many fields omitted intentionally */
-    uint64_t framebuffer_addr;
-    uint32_t framebuffer_pitch;
-    uint32_t framebuffer_width;
-    uint32_t framebuffer_height;
-    uint8_t  framebuffer_bpp;
-} multiboot_info_t;
-
-/* Try to initialize the framebuffer if GRUB provided a framebuffer info block.
-   This is minimal and defensive: it only touches VGA subsystem if the multiboot
-   info reports a valid framebuffer. */
-static void try_init_framebuffer_from_multiboot(uint32_t magic, uint32_t addr)
-{
-    if (magic != MULTIBOOT_MAGIC) return;
-    if (addr == 0) return;
-
-    multiboot_info_t* mbi = (multiboot_info_t*)(uintptr_t)addr;
-
-    /* Multiboot spec: bit 12 = framebuffer info present */
-    if (mbi->flags & (1 << 12)) {
-        void* fb_addr = (void*)(uintptr_t)mbi->framebuffer_addr;
-        uint32_t fb_width = mbi->framebuffer_width;
-        uint32_t fb_height = mbi->framebuffer_height;
-        uint32_t fb_pitch = mbi->framebuffer_pitch;
-        uint8_t  fb_bpp = mbi->framebuffer_bpp;
-
-        if (fb_addr && fb_width > 0 && fb_height > 0 && fb_pitch > 0 && fb_bpp > 0) {
-            vga_set_framebuffer(fb_addr, fb_width, fb_height, fb_pitch, fb_bpp);
-        }
-    }
-}
 
 // -----------------------------
 // Example tasks (cooperative)
@@ -318,14 +282,51 @@ static void panic_if_fatal(const char *msg)
 // -----------------------------
 extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
-    // 1) Early: pick up framebuffer info (if GRUB gave it)
-    try_init_framebuffer_from_multiboot(magic, addr);
-
     // 2) Terminal (text-mode) initialization - early so we can show errors
     terminal_init();
 
     // 3) Early boot safety check: detect RAM and panic cleanly if insufficient
-    ram_check_or_panic(magic, addr);
+    // ram_check_or_panic(magic, addr); // Replaced with inline Multiboot2 logic below
+
+    uint64_t total_ram_mb = 0;
+    if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && addr != 0) {
+        struct multiboot2_tag *tag = (struct multiboot2_tag*)(addr + 8);
+        while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
+            if (tag->type == MULTIBOOT2_TAG_TYPE_BASIC_MEMINFO) {
+                 struct multiboot2_tag_basic_meminfo *mem = (struct multiboot2_tag_basic_meminfo*)tag;
+                 // Fallback if MMAP not present (mem_upper is in KB)
+                 if (total_ram_mb == 0) total_ram_mb = (mem->mem_lower + mem->mem_upper) / 1024;
+            } else if (tag->type == MULTIBOOT2_TAG_TYPE_MMAP) {
+                 struct multiboot2_tag_mmap *mmap = (struct multiboot2_tag_mmap*)tag;
+                 uint64_t total_bytes = 0;
+                 for (struct multiboot2_mmap_entry *entry = mmap->entries;
+                      (uint8_t*)entry < (uint8_t*)mmap + mmap->common.size;
+                      entry = (struct multiboot2_mmap_entry*)((uint8_t*)entry + mmap->entry_size)) {
+                     if (entry->type == MULTIBOOT2_MEMORY_AVAILABLE) {
+                         total_bytes += entry->len;
+                     }
+                 }
+                 total_ram_mb = total_bytes / (1024 * 1024);
+            }
+            tag = (struct multiboot2_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
+        }
+    } else if (magic == MULTIBOOT_MAGIC && addr != 0) {
+        multiboot_info_t* mb = (multiboot_info_t*)addr;
+        if (mb->flags & 1) {
+            total_ram_mb = (mb->mem_lower + mb->mem_upper) / 1024;
+        }
+    }
+
+    serial("[RAM] Detected: %u MB\n", (uint32_t)total_ram_mb);
+
+    if (total_ram_mb < 20) {
+        panic_if_fatal("Insufficient RAM (detected < 20 MB). Check bootloader/QEMU memory.");
+    }
+
+    // 9) Physical Memory Manager (PMM) - MOVED UP
+    // Must be initialized BEFORE paging or heap
+    pmm_init(magic, (void*)addr);
+
     // tpm_check_or_panic();
     // video_check_or_panic(magic, addr);
 
@@ -380,9 +381,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     // 8) Shell: text UI
     shell_init();
-
-    // 9) Physical Memory Manager (PMM)
-    pmm_init((void*)addr);
 
     // 19) Heap + buddy allocator + kmalloc (MOVED UP - CRITICAL for drivers)
     extern uint8_t __heap_start;
@@ -443,8 +441,70 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     // 18) Paging: choose page area size per your roadmap
     paging_init(PAGING_120_MB);
+
+    // FIX: Disable Write Protect (CR0.WP) to allow kernel to write to RO pages
+    uint32_t cr0;
+    asm volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1 << 16);
+    asm volatile("mov %0, %%cr0" :: "r"(cr0));
+
     paging_map_kernel_higher_half();
     terminal_printf("Paging OK\n");
+
+    /* Sync VMM with active paging directory (Bridge legacy paging with new VMM) */
+    {
+        uint32_t cr3_phys;
+        asm volatile("mov %%cr3, %0" : "=r"(cr3_phys));
+        kernel_page_directory = (uint32_t*)((cr3_phys & 0xFFFFF000) + 0xC0000000);
+    }
+
+    /* Initialize VESA Framebuffer (Multiboot 2 preferred) */
+    if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && addr != 0) {
+        serial("[KERNEL] Multiboot 2 detected.\n");
+        uint32_t total_size = *(uint32_t*)addr;
+        
+        // Iterate tags
+        struct multiboot2_tag *tag = (struct multiboot2_tag*)(addr + 8);
+        
+        while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
+            if (tag->type == MULTIBOOT2_TAG_TYPE_FRAMEBUFFER) {
+                struct multiboot2_tag_framebuffer *fb = (struct multiboot2_tag_framebuffer*)tag;
+                fb_init(
+                    fb->common_addr,
+                    fb->common_width,
+                    fb->common_height,
+                    fb->common_pitch,
+                    fb->common_bpp,
+                    fb->common_type
+                );
+                break;
+            }
+            
+            // Move to next tag (8-byte aligned)
+            uint32_t next_off = (tag->size + 7) & ~7;
+            tag = (struct multiboot2_tag*)((uint8_t*)tag + next_off);
+        }
+    } else if (magic == MULTIBOOT_MAGIC && addr != 0) {
+        // Legacy Multiboot 1 fallback
+        multiboot_info_t* mb = (multiboot_info_t*)addr;
+        if (mb->flags & (1 << 12)) {
+             fb_init(
+                mb->framebuffer_addr,
+                mb->framebuffer_width,
+                mb->framebuffer_height,
+                mb->framebuffer_pitch,
+                mb->framebuffer_bpp,
+                mb->framebuffer_type
+            );
+        }
+    }
+
+    /* Visual test: Draw a blue rectangle to confirm video works */
+    if (magic == MULTIBOOT2_BOOTLOADER_MAGIC || magic == MULTIBOOT_MAGIC) {
+        /* Visual test: Draw a blue rectangle to confirm video works */
+        fb_draw_rect(100, 100, 200, 150, 0x0000FF);
+        fb_draw_rect(350, 100, 200, 150, 0x00FF0000); /* Red rect for double confirmation */
+    }
 
     /* === NEW ARCHITECTURE INIT (Moved after Paging) === */
     input_init();

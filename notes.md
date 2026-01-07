@@ -95,3 +95,7 @@ lidt
 
 
 grep -R "cmd_[a-zA-Z_]*(" kernel/cmds/*.h
+
+grub-file --is-x86-multiboot2 iso/boot/kernel.bin
+
+objdump -h iso/boot/kernel.bin | grep multiboot

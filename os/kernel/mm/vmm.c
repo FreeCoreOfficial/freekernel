@@ -81,6 +81,15 @@ void vmm_map_page(uint32_t* pagedir, uint32_t vaddr, uint32_t phys, uint32_t fla
     asm volatile ("invlpg (%0)" : : "r" (va) : "memory");
 }
 
+void vmm_map_region(uint32_t* pagedir, uint32_t vaddr, uint32_t paddr, uint32_t size, uint32_t flags)
+{
+    for (uint32_t off = 0; off < size; off += PAGE_SIZE) {
+        vmm_map_page(pagedir, vaddr + off, paddr + off, flags);
+    }
+    /* Full TLB flush to ensure new mappings are visible immediately */
+    asm volatile("mov %%cr3, %%eax\n mov %%eax, %%cr3" ::: "eax", "memory");
+}
+
 void vmm_unmap_page(uint32_t* pagedir, uint32_t vaddr)
 {
     uint32_t va = vaddr & PAGE_FRAME_MASK;
@@ -122,4 +131,9 @@ void vmm_identity_map(uint32_t phys, uint32_t size)
             PAGE_RW // ← FLAG CORECT
         );
     }
+}
+
+uint32_t* vmm_get_current_pd(void)
+{
+    return kernel_page_directory;
 }

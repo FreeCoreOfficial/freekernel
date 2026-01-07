@@ -132,12 +132,6 @@ extern "C" void panic_render_pretty(const char* msg) {
         line += 1;
     }
 
-
-    if (!tss_loaded) {
-    panic("Ring3 failed: TSS not loaded");
-}
-
-
     // Instrucțiuni tehnice - aliniate la stânga, compact
     draw_string(indent, line++, "Check to make sure any new hardware or software is properly installed.");
     draw_string(indent, line++, "If problems continue, disable or remove newly installed hardware");
