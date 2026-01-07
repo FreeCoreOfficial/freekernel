@@ -124,7 +124,7 @@ From a kernel → **a multi-process OS**.
 | ✅     | USB               |
 | ✅     | AHCI              |
 | ✅     | VESA Framebuffer  |
-| 🔲     | Basic GPU Support |
+| ✅     | Basic GPU Support |
 
 **Optional but impressive.**
 This level separates hobby kernels from serious systems.
