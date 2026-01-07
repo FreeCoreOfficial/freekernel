@@ -75,6 +75,8 @@
 #include "cmds/fat.h"
 #include "video/framebuffer.h"
 #include "video/fb_console.h"
+#include "video/gpu.h"
+#include "video/gpu_bochs.h"
 #include "smp/multiboot.h"
 
 
@@ -463,52 +465,66 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         kernel_page_directory = (uint32_t*)((cr3_phys & 0xFFFFF000) + 0xC0000000);
     }
 
+    // Initialize GPU Core Subsystem (Moved after paging init to ensure mappings persist)
+    gpu_init();
+    
+    // Try to initialize Bochs/QEMU GPU (Native driver preferred over VESA)
+    gpu_bochs_init();
+
     /* Initialize VESA Framebuffer (Multiboot 2 preferred) */
-    if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && addr != 0) {
-        serial("[KERNEL] Multiboot 2 detected.\n");
-        uint32_t total_size = *(uint32_t*)addr;
-        
-        // Iterate tags
-        struct multiboot2_tag *tag = (struct multiboot2_tag*)(addr + 8);
-        
-        while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
-            if (tag->type == MULTIBOOT2_TAG_TYPE_FRAMEBUFFER) {
-                struct multiboot2_tag_framebuffer *fb = (struct multiboot2_tag_framebuffer*)tag;
-                fb_init(
-                    fb->common_addr,
-                    fb->common_width,
-                    fb->common_height,
-                    fb->common_pitch,
-                    fb->common_bpp,
-                    fb->common_type
-                );
-                break;
-            }
+    // FIX: Only init VESA if no other GPU (like Bochs) was detected
+    if (!gpu_get_primary()) {
+        if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && addr != 0) {
+            serial("[KERNEL] Multiboot 2 detected.\n");
             
-            // Move to next tag (8-byte aligned)
-            uint32_t next_off = (tag->size + 7) & ~7;
-            tag = (struct multiboot2_tag*)((uint8_t*)tag + next_off);
+            // Iterate tags
+            struct multiboot2_tag *tag = (struct multiboot2_tag*)(addr + 8);
+            
+            while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
+                if (tag->type == MULTIBOOT2_TAG_TYPE_FRAMEBUFFER) {
+                    struct multiboot2_tag_framebuffer *fb = (struct multiboot2_tag_framebuffer*)tag;
+                    fb_init(
+                        fb->common_addr,
+                        fb->common_width,
+                        fb->common_height,
+                        fb->common_pitch,
+                        fb->common_bpp,
+                        fb->common_type
+                    );
+                    break;
+                }
+                
+                // Move to next tag (8-byte aligned)
+                uint32_t next_off = (tag->size + 7) & ~7;
+                tag = (struct multiboot2_tag*)((uint8_t*)tag + next_off);
+            }
+        } else if (magic == MULTIBOOT_MAGIC && addr != 0) {
+            // Legacy Multiboot 1 fallback
+            multiboot_info_t* mb = (multiboot_info_t*)addr;
+            if (mb->flags & (1 << 12)) {
+                 fb_init(
+                    mb->framebuffer_addr,
+                    mb->framebuffer_width,
+                    mb->framebuffer_height,
+                    mb->framebuffer_pitch,
+                    mb->framebuffer_bpp,
+                    mb->framebuffer_type
+                );
+            }
         }
-    } else if (magic == MULTIBOOT_MAGIC && addr != 0) {
-        // Legacy Multiboot 1 fallback
-        multiboot_info_t* mb = (multiboot_info_t*)addr;
-        if (mb->flags & (1 << 12)) {
-             fb_init(
-                mb->framebuffer_addr,
-                mb->framebuffer_width,
-                mb->framebuffer_height,
-                mb->framebuffer_pitch,
-                mb->framebuffer_bpp,
-                mb->framebuffer_type
-            );
-        }
+    } else {
+        serial("[KERNEL] Primary GPU already present (Bochs/QEMU), skipping VESA init.\n");
     }
 
     /* Visual test: Draw a blue rectangle to confirm video works */
     if (magic == MULTIBOOT2_BOOTLOADER_MAGIC || magic == MULTIBOOT_MAGIC) {
         /* Visual test: Draw a blue rectangle to confirm video works */
-        fb_draw_rect(100, 100, 200, 150, 0x0000FF);
-        fb_draw_rect(350, 100, 200, 150, 0x00FF0000); /* Red rect for double confirmation */
+        // Use generic GPU ops instead of hardcoded VESA calls
+        gpu_device_t* gpu = gpu_get_primary();
+        if (gpu && gpu->ops && gpu->ops->fillrect) {
+             gpu->ops->fillrect(gpu, 100, 100, 200, 150, 0x0000FF);
+             gpu->ops->fillrect(gpu, 350, 100, 200, 150, 0x00FF0000);
+        }
         
         /* Initialize Framebuffer Console and redirect terminal output */
         fb_cons_init();

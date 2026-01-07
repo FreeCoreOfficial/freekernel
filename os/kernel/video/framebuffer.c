@@ -3,6 +3,7 @@
 #include "../drivers/serial.h"
 #include "../memory/pmm.h"
 #include "../mm/paging.h" /* for KERNEL_BASE */
+#include "gpu.h"
 
 /* Import serial logging from kernel glue */
 extern void serial(const char *fmt, ...);
@@ -16,6 +17,77 @@ static uint8_t  fb_bpp = 0;
 
 /* Virtual base for Framebuffer (Must not conflict with ACPI_TEMP_VIRT_BASE at 0xE1000000) */
 #define FB_VIRT_BASE 0xE0000000
+
+/* --- GPU Driver Implementation --- */
+
+static void vesa_putpixel(gpu_device_t* dev, uint32_t x, uint32_t y, uint32_t color) {
+    if (!dev->virt_addr || x >= dev->width || y >= dev->height) return;
+
+    uint32_t offset = y * dev->pitch + x * (dev->bpp / 8);
+    uint8_t* pixel = (uint8_t*)dev->virt_addr + offset;
+
+    if (dev->bpp == 32) {
+        *(uint32_t*)pixel = color;
+    } else if (dev->bpp == 24) {
+        pixel[0] = (color) & 0xFF;
+        pixel[1] = (color >> 8) & 0xFF;
+        pixel[2] = (color >> 16) & 0xFF;
+    }
+}
+
+static void vesa_fillrect(gpu_device_t* dev, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
+    if (!dev->virt_addr) return;
+    
+    /* Clipping */
+    if (x >= dev->width || y >= dev->height) return;
+    if (x + w > dev->width) w = dev->width - x;
+    if (y + h > dev->height) h = dev->height - y;
+
+    for (uint32_t j = 0; j < h; j++) {
+        for (uint32_t i = 0; i < w; i++) {
+            vesa_putpixel(dev, x + i, y + j, color);
+        }
+    }
+}
+
+static void vesa_clear(gpu_device_t* dev, uint32_t color) {
+    if (!dev->virt_addr) return;
+
+    /* Optimized clear for 32bpp */
+    if (dev->bpp == 32) {
+        uint32_t* buf = (uint32_t*)dev->virt_addr;
+        uint32_t count = dev->width * dev->height;
+        /* Note: This assumes pitch == width * 4, which is usually true for VESA 32bpp 
+           but strictly we should respect pitch. For full correctness line-by-line is safer,
+           but for a clear operation on linear LFB, this is usually fine. */
+        for (uint32_t i = 0; i < count; ++i) buf[i] = color;
+    } else {
+        vesa_fillrect(dev, 0, 0, dev->width, dev->height, color);
+    }
+}
+
+static int vesa_set_mode(gpu_device_t* dev, uint32_t width, uint32_t height, uint32_t bpp) {
+    /* VESA driver cannot switch modes at runtime (requires BIOS call / vm86) */
+    if (width == dev->width && height == dev->height && bpp == dev->bpp) return 0;
+    serial("[GPU] VESA: Mode switch requested but not supported.\n");
+    return -1;
+}
+
+static void vesa_flush(gpu_device_t* dev) {
+    (void)dev;
+    /* Linear Framebuffer is usually uncached (WC) or direct, no explicit flush needed */
+    asm volatile("sfence" ::: "memory");
+}
+
+static gpu_ops_t vesa_ops = {
+    .set_mode = vesa_set_mode,
+    .putpixel = vesa_putpixel,
+    .fillrect = vesa_fillrect,
+    .clear    = vesa_clear,
+    .flush    = vesa_flush
+};
+
+static gpu_device_t vesa_device = {0};
 
 void fb_init(uint64_t addr, uint32_t width, uint32_t height, uint32_t pitch, uint8_t bpp, uint8_t type) {
     serial("[FB] Initializing VESA Framebuffer...\n");
@@ -78,61 +150,34 @@ void fb_init(uint64_t addr, uint32_t width, uint32_t height, uint32_t pitch, uin
     fb_buffer = (uint8_t*)FB_VIRT_BASE;
     
     serial("[FB] Mapped %d bytes at virtual 0x%x\n", fb_size, fb_buffer);
-    serial("[FB] Initialization successful.\n");
+
+    /* Register as GPU Device */
+    vesa_device.type = GPU_TYPE_VESA;
+    vesa_device.width = fb_width;
+    vesa_device.height = fb_height;
+    vesa_device.pitch = fb_pitch;
+    vesa_device.bpp = fb_bpp;
+    vesa_device.phys_addr = (uintptr_t)phys_addr;
+    vesa_device.virt_addr = fb_buffer;
+    vesa_device.ops = &vesa_ops;
+
+    gpu_register_device(&vesa_device);
 
     /* Clear screen to black to verify write access */
-    fb_clear(0x000000);
+    vesa_clear(&vesa_device, 0x000000);
 }
 
+/* Legacy wrappers for compatibility if needed, redirecting to GPU ops */
 void fb_putpixel(uint32_t x, uint32_t y, uint32_t color) {
-    if (!fb_buffer || x >= fb_width || y >= fb_height) return;
-
-    /* Calculate offset in bytes */
-    uint32_t offset = y * fb_pitch + x * (fb_bpp / 8);
-    uint8_t* pixel = fb_buffer + offset;
-
-    if (fb_bpp == 32) {
-        /* 32-bit (ARGB/RGBA) */
-        *(uint32_t*)pixel = color;
-    } else if (fb_bpp == 24) {
-        /* 24-bit (RGB) - Write 3 bytes */
-        pixel[0] = (color) & 0xFF;       // Blue
-        pixel[1] = (color >> 8) & 0xFF;  // Green
-        pixel[2] = (color >> 16) & 0xFF; // Red
-    }
+    vesa_putpixel(&vesa_device, x, y, color);
 }
 
 void fb_clear(uint32_t color) {
-    if (!fb_buffer) return;
-
-    /* Optimized clear for 32bpp (Direct Memory Access) */
-    if (fb_bpp == 32) {
-        uint32_t* buf = (uint32_t*)fb_buffer;
-        uint32_t count = fb_width * fb_height;
-        for (uint32_t i = 0; i < count; ++i) buf[i] = color;
-    } else {
-        /* Generic fallback */
-        for (uint32_t y = 0; y < fb_height; y++) {
-            for (uint32_t x = 0; x < fb_width; x++) {
-                fb_putpixel(x, y, color);
-            }
-        }
-    }
+    vesa_clear(&vesa_device, color);
 }
 
 void fb_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    if (!fb_buffer) return;
-
-    /* Clipping */
-    if (x >= fb_width || y >= fb_height) return;
-    if (x + w > fb_width) w = fb_width - x;
-    if (y + h > fb_height) h = fb_height - y;
-
-    for (uint32_t j = 0; j < h; j++) {
-        for (uint32_t i = 0; i < w; i++) {
-            fb_putpixel(x + i, y + j, color);
-        }
-    }
+    vesa_fillrect(&vesa_device, x, y, w, h, color);
 }
 
 void fb_get_info(uint32_t* width, uint32_t* height, uint32_t* pitch, uint8_t* bpp, uint8_t** buffer) {

@@ -1,5 +1,6 @@
 #include "fb_console.h"
 #include "framebuffer.h"
+#include "gpu.h"
 #include "font8x16.h"
 #include "../drivers/serial.h"
 #include "../string.h"
@@ -12,8 +13,6 @@ extern void serial(const char *fmt, ...);
 static uint32_t cons_width = 0;
 static uint32_t cons_height = 0;
 static uint32_t cons_pitch = 0;
-static uint8_t  cons_bpp = 0;
-static uint8_t* cons_buffer = 0;
 
 static uint32_t cursor_x = 0;
 static uint32_t cursor_y = 0;
@@ -37,32 +36,23 @@ static console_cell_t* text_buffer = 0;
 static uint32_t current_fg = DEFAULT_FG;
 static uint32_t current_bg = DEFAULT_BG;
 
-/* Helper to draw a character at specific coordinates directly to VRAM */
+/* Helper to draw a character using GPU ops */
 static void draw_char_at(uint32_t cx, uint32_t cy, char c, uint32_t fg, uint32_t bg) {
-    if (!cons_buffer) return;
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
 
     const uint8_t* glyph = &font8x16[(uint8_t)c * 16];
     uint32_t start_y = cy * FONT_H;
     uint32_t start_x = cx * FONT_W;
 
     /* Bounds check */
-    if (start_x + FONT_W > cons_width || start_y + FONT_H > cons_height) return;
+    if (start_x + FONT_W > gpu->width || start_y + FONT_H > gpu->height) return;
 
     for (int y = 0; y < FONT_H; y++) {
         uint8_t row = glyph[y];
         for (int x = 0; x < FONT_W; x++) {
             uint32_t color = (row & (1 << (7 - x))) ? fg : bg;
-            
-            uint32_t offset = (start_y + y) * cons_pitch + (start_x + x) * (cons_bpp / 8);
-            
-            if (cons_bpp == 32) {
-                *(uint32_t*)(cons_buffer + offset) = color;
-            } else if (cons_bpp == 24) {
-                uint8_t* p = cons_buffer + offset;
-                p[0] = color & 0xFF;
-                p[1] = (color >> 8) & 0xFF;
-                p[2] = (color >> 16) & 0xFF;
-            }
+            gpu->ops->putpixel(gpu, start_x + x, start_y + y, color);
         }
     }
 }
@@ -101,13 +91,14 @@ static void scroll(void) {
 
 /* Draw cursor (block) */
 static void draw_cursor(int on) {
-    if (!cons_buffer) return;
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
     
     uint32_t start_y = cursor_y * FONT_H;
     uint32_t start_x = cursor_x * FONT_W;
     
     /* Bounds check */
-    if (start_x + FONT_W > cons_width || start_y + FONT_H > cons_height) return;
+    if (start_x + FONT_W > gpu->width || start_y + FONT_H > gpu->height) return;
 
     /* If turning off, restore character from buffer */
     if (!on) {
@@ -124,35 +115,28 @@ static void draw_cursor(int on) {
     uint32_t color = 0x00AAAAAA; // Grey block
     for (int y = FONT_H - 2; y < FONT_H; y++) {
         for (int x = 0; x < FONT_W; x++) {
-             uint32_t offset = (start_y + y) * cons_pitch + (start_x + x) * (cons_bpp / 8);
-             if (cons_bpp == 32) {
-                *(uint32_t*)(cons_buffer + offset) = color;
-            } else if (cons_bpp == 24) {
-                uint8_t* p = cons_buffer + offset;
-                p[0] = color & 0xFF;
-                p[1] = (color >> 8) & 0xFF;
-                p[2] = (color >> 16) & 0xFF;
-            }
+             gpu->ops->putpixel(gpu, start_x + x, start_y + y, color);
         }
     }
 }
 
 void fb_cons_init(void) {
     serial("[FB_CONS] Initializing...\n");
+    gpu_device_t* gpu = gpu_get_primary();
     
-    fb_get_info(&cons_width, &cons_height, &cons_pitch, &cons_bpp, &cons_buffer);
-    
-    if (!cons_buffer) {
-        serial("[FB_CONS] Error: Framebuffer not available.\n");
+    if (!gpu) {
+        serial("[FB_CONS] Error: No primary GPU available.\n");
         return;
     }
+
+    cons_width = gpu->width;
+    cons_height = gpu->height;
+    cons_pitch = gpu->pitch;
 
     max_cols = cons_width / FONT_W;
     max_rows = cons_height / FONT_H;
     cursor_x = 0;
     cursor_y = 0;
-
-    serial("[FB_CONS] Resolution: %dx%d, Grid: %dx%d\n", cons_width, cons_height, max_cols, max_rows);
     
     /* Allocate text buffer */
     if (text_buffer) kfree(text_buffer);
@@ -171,7 +155,7 @@ void fb_cons_init(void) {
     }
 
     /* Clear screen */
-    fb_clear(current_bg);
+    gpu->ops->clear(gpu, current_bg);
     serial("[FB_CONS] Screen cleared.\n");
     
     draw_cursor(1);
@@ -232,7 +216,7 @@ static void fb_cons_putc_internal(char c) {
 }
 
 void fb_cons_putc(char c) {
-    if (!cons_buffer || !text_buffer) return;
+    if (!gpu_get_primary() || !text_buffer) return;
 
     /* Hide cursor, draw char, show cursor */
     draw_cursor(0);
@@ -241,7 +225,7 @@ void fb_cons_putc(char c) {
 }
 
 void fb_cons_puts(const char* s) {
-    if (!cons_buffer || !text_buffer) return;
+    if (!gpu_get_primary() || !text_buffer) return;
 
     /* Optimization: Hide cursor ONCE for the whole string */
     draw_cursor(0);
@@ -252,7 +236,8 @@ void fb_cons_puts(const char* s) {
 }
 
 void fb_cons_clear(void) {
-    if (!cons_buffer || !text_buffer) return;
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu || !text_buffer) return;
     serial("[FB_CONS] Clearing screen...\n");
 
     /* Clear text buffer */
@@ -267,7 +252,7 @@ void fb_cons_clear(void) {
     cursor_y = 0;
     
     /* Clear screen and redraw cursor */
-    fb_clear(current_bg);
+    gpu->ops->clear(gpu, current_bg);
     draw_cursor(1);
     serial("[FB_CONS] Clear done.\n");
 }

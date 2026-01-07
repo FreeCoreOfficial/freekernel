@@ -146,6 +146,8 @@ OBJS = \
     build/fs/chrysfs/chrysfs.o \
 	$(BUILD)/framebuffer.o \
 	$(BUILD)/fb_console.o \
+	$(BUILD)/gpu.o \
+	$(BUILD)/gpu_bochs.o \
 
 
 
@@ -598,6 +600,12 @@ $(BUILD)/framebuffer.o: kernel/video/framebuffer.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/fb_console.o: kernel/video/fb_console.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/gpu.o: kernel/video/gpu.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/gpu_bochs.o: kernel/video/gpu_bochs.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 # -------------------------
 # LINK
