@@ -20,9 +20,11 @@ extern "C" {
 #endif
 
 /* Page flags */
-#define PAGE_PRESENT   0x1
-#define PAGE_RW        0x2
-#define PAGE_USER      0x4
+#define PAGE_PRESENT 0x01
+#define PAGE_RW      0x02
+#define PAGE_USER    0x04
+#define PAGE_PWT     0x08 /* Page Write Through */
+#define PAGE_PCD     0x10 /* Page Cache Disable */
 
 /* Convenience masks */
 #define PAGE_FRAME_MASK 0xFFFFF000u

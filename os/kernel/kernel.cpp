@@ -74,6 +74,7 @@
 #include "cmds/disk.h"
 #include "cmds/fat.h"
 #include "video/framebuffer.h"
+#include "video/fb_console.h"
 #include "smp/multiboot.h"
 
 
@@ -224,6 +225,10 @@ extern "C" void buddy_init_from_heap(void);
 
 /* Debug/test flag: set to 1 to exercise framebuffer logic (if available) */
 #define VGA_TEST 0
+
+/* Helper to switch terminal backend */
+extern "C" void terminal_set_backend_fb(bool active);
+
 
 /* IMPORTANT: by default we KEEP TASKING DISABLED to avoid bootloops.
    Set to 1 only after you're sure switch_to is correct and you have tested
@@ -504,6 +509,10 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         /* Visual test: Draw a blue rectangle to confirm video works */
         fb_draw_rect(100, 100, 200, 150, 0x0000FF);
         fb_draw_rect(350, 100, 200, 150, 0x00FF0000); /* Red rect for double confirmation */
+        
+        /* Initialize Framebuffer Console and redirect terminal output */
+        fb_cons_init();
+        terminal_set_backend_fb(true);
     }
 
     /* === NEW ARCHITECTURE INIT (Moved after Paging) === */

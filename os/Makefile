@@ -145,6 +145,7 @@ OBJS = \
     build/input/input.o \
     build/fs/chrysfs/chrysfs.o \
 	$(BUILD)/framebuffer.o \
+	$(BUILD)/fb_console.o \
 
 
 
@@ -594,6 +595,9 @@ build/fs/chrysfs/chrysfs.o: kernel/fs/chrysfs/chrysfs.c
 	$(CC) $(CFLAGS) -c kernel/fs/chrysfs/chrysfs.c -o $@
 
 $(BUILD)/framebuffer.o: kernel/video/framebuffer.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/fb_console.o: kernel/video/fb_console.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 # -------------------------
 # LINK

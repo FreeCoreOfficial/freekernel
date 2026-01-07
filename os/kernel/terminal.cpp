@@ -1,5 +1,6 @@
 // kernel/terminal/terminal.cpp
 #include "terminal.h"
+#include "video/fb_console.h"
 #include <stdarg.h>
 #include <stdint.h>
 
@@ -7,6 +8,7 @@ static uint16_t* vga = (uint16_t*)0xB8000;
 static int row = 0;
 static int col = 0;
 static const uint8_t color = 0x0F;
+static bool use_fb_console = false;
 
 static void scroll() {
     if (row < 25) return;
@@ -21,6 +23,10 @@ static void scroll() {
     row = 24;
 }
 
+extern "C" void terminal_set_backend_fb(bool active) {
+    use_fb_console = active;
+}
+
 extern "C" void terminal_clear() {
     for (int i = 0; i < 80 * 25; i++)
         vga[i] = ' ' | (color << 8);
@@ -30,6 +36,11 @@ extern "C" void terminal_clear() {
 }
 
 extern "C" void terminal_putchar(char c) {
+    if (use_fb_console) {
+        fb_cons_putc(c);
+        return;
+    }
+
     if (c == '\n') {
         row++;
         col = 0;
@@ -54,6 +65,11 @@ extern "C" void terminal_putchar(char c) {
 }
 
 extern "C" void terminal_writestring(const char* s) {
+    if (use_fb_console) {
+        fb_cons_puts(s);
+        return;
+    }
+
     while (*s)
         terminal_putchar(*s++);
 }

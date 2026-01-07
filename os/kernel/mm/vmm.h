@@ -5,17 +5,11 @@
  */
 
 #include <stdint.h>
+#include "paging.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Page Flags */
-#define PAGE_PRESENT 0x01
-#define PAGE_RW      0x02
-#define PAGE_USER    0x04
-#define PAGE_PWT     0x08 /* Page Write Through */
-#define PAGE_PCD     0x10 /* Page Cache Disable */
 
 /* Avoid redefining PAGE_SIZE if another header already defined it
  * (pmm.h uses #define PAGE_SIZE 4096).

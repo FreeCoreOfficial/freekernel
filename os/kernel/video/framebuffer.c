@@ -125,3 +125,11 @@ void fb_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color
         }
     }
 }
+
+void fb_get_info(uint32_t* width, uint32_t* height, uint32_t* pitch, uint8_t* bpp, uint8_t** buffer) {
+    if (width) *width = fb_width;
+    if (height) *height = fb_height;
+    if (pitch) *pitch = fb_pitch;
+    if (bpp) *bpp = fb_bpp;
+    if (buffer) *buffer = fb_buffer;
+}
