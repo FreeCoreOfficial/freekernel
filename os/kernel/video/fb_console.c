@@ -256,3 +256,15 @@ void fb_cons_clear(void) {
     draw_cursor(1);
     serial("[FB_CONS] Clear done.\n");
 }
+
+void fb_cons_scroll(int lines) {
+    /* Simple scroll implementation. 
+       Since we don't have a history buffer yet, we can only simulate 
+       scrolling by moving text up (lines > 0). 
+       lines < 0 would mean scrolling back to history. */
+    
+    if (lines > 0) {
+        for (int i = 0; i < lines; i++) scroll();
+    }
+    /* TODO: Implement history buffer for lines < 0 */
+}

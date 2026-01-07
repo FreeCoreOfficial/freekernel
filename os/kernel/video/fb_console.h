@@ -19,6 +19,9 @@ void fb_cons_puts(const char* s);
 /* Clear the console screen */
 void fb_cons_clear(void);
 
+/* Scroll console (positive = scroll down/new lines, negative = scroll up/history) */
+void fb_cons_scroll(int lines);
+
 #ifdef __cplusplus
 }
 #endif

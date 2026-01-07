@@ -5,6 +5,7 @@
 #include "arch/i386/tss.h"
 #include "video/framebuffer.h"
 #include "video/font8x16.h"
+#include "video/gpu.h"
 #include "arch/i386/io.h"
 // === Freestanding headers (fără libc) ===
 typedef unsigned int       size_t;
@@ -46,19 +47,27 @@ static void serial_print(const char* s) {
 static bool use_fb = false;
 static uint32_t fb_w = 0, fb_h = 0;
 
+/* Use GPU subsystem instead of raw framebuffer */
 static void check_fb() {
-    uint32_t p; uint8_t b; uint8_t* buf;
-    fb_get_info(&fb_w, &fb_h, &p, &b, &buf);
-    use_fb = (buf != 0 && fb_w > 0 && fb_h > 0);
+    gpu_device_t* gpu = gpu_get_primary();
+    if (gpu && gpu->virt_addr) {
+        use_fb = true;
+        fb_w = gpu->width;
+        fb_h = gpu->height;
+    } else {
+        use_fb = false;
+    }
 }
 
 static void fb_draw_char(int x, int y, char c) {
-    if (!use_fb) return;
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
+
     const uint8_t* glyph = &font8x16[(uint8_t)c * 16];
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 8; j++) {
             if (glyph[i] & (1 << (7-j))) {
-                fb_putpixel(x + j, y + i, FB_WHITE);
+                gpu->ops->putpixel(gpu, x + j, y + i, FB_WHITE);
             }
         }
     }
@@ -92,7 +101,8 @@ static void draw_string_center(int y, const char* s) {
 // === Umple tot ecranul cu fundal albastru + spații (autentic XP) ===
 static void clear_screen_xp() {
     if (use_fb) {
-        fb_clear(FB_BLUE);
+        gpu_device_t* gpu = gpu_get_primary();
+        if (gpu) gpu->ops->clear(gpu, FB_BLUE);
     } else {
         for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
             VGA_MEM[i] = ((uint16_t)XP_ATTR << 8) | ' ';

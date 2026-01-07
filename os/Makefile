@@ -290,8 +290,8 @@ $(BUILD)/cmd_play.o: kernel/cmds/play.cpp | dirs
 $(BUILD)/mlb.o: kernel/mlb/mlb.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD)/mouse.o: kernel/drivers/mouse.cpp | dirs
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(BUILD)/mouse.o: kernel/drivers/mouse.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/keyboard_buffer.o: kernel/input/keyboard_buffer.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
