@@ -456,7 +456,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     asm volatile("mov %0, %%cr0" :: "r"(cr0));
 
     paging_map_kernel_higher_half();
-    terminal_printf("Paging OK\n");
 
     /* Sync VMM with active paging directory (Bridge legacy paging with new VMM) */
     {
@@ -464,6 +463,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         asm volatile("mov %%cr3, %0" : "=r"(cr3_phys));
         kernel_page_directory = (uint32_t*)((cr3_phys & 0xFFFFF000) + 0xC0000000);
     }
+
+    /* FIX: Map VGA memory to avoid crash when printing "Paging OK" */
+    vmm_identity_map(0xB8000, 0x1000);
+
+    terminal_printf("Paging OK\n");
 
     // Initialize GPU Core Subsystem (Moved after paging init to ensure mappings persist)
     gpu_init();
@@ -675,6 +679,7 @@ pci_init(); // DISABLED: Potential crash source
 
     /* Initialize USB Subsystem (UHCI) */
     usb_core_init();
+    terminal_writestring("[kernel] USB init done.\n");
 
 // definește string-ul (scope file-local e OK)
 //static const char test_msg[] = "Hello from syscall!";
@@ -695,6 +700,10 @@ pci_init(); // DISABLED: Potential crash source
     // If you want the shell to be preempted by tasks, move shell into its own
     // task and enable TASKS_ENABLED after implementing a safe switch_to.
     serial("[KERNEL] Entering main loop...\n");
+    
+    /* Reprint shell prompt as screen might have been cleared or scrolled */
+    shell_prompt();
+
     while (1) {
         usb_poll();           // Poll USB HID devices
         io_sched_poll();      // Process Async I/O requests

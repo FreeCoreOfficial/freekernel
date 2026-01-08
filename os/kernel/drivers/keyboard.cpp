@@ -7,13 +7,24 @@
 #include "../drivers/serial.h"
 #include "../input/input.h"
 #include "../video/fb_console.h"
-#include "../interrupts/irq.h"
-#include "../hardware/lapic.h"
 
 /* PS/2 Ports */
 #define PS2_DATA    0x60
 #define PS2_STATUS  0x64
 #define PS2_CMD     0x64
+
+/* Import serial logging from kernel glue */
+extern "C" void serial(const char *fmt, ...);
+
+/* Status Register Bits */
+#define STATUS_OUTPUT_FULL  0x01
+#define STATUS_INPUT_FULL   0x02
+#define STATUS_SYSTEM       0x04
+#define STATUS_CMD_DATA     0x08    /* 0 = Data, 1 = Command */
+#define STATUS_KEYLOCK      0x10
+#define STATUS_AUX_FULL     0x20    /* 1 = Mouse data */
+#define STATUS_TIMEOUT      0x40
+#define STATUS_PARITY       0x80
 
 /* US QWERTY Keymap (embedded for stability) */
 static const char keymap_us[128] = {
@@ -38,169 +49,150 @@ static const char keymap_us_shift[128] = {
 static bool ctrl_pressed = false;
 static bool shift_pressed = false;
 static bool alt_pressed = false;
+static bool e0_prefix = false;
 
 /* Helpers pentru sincronizare PS/2 */
 static void kbd_wait_write() {
     int timeout = 100000;
     while (timeout--) {
-        if ((inb(PS2_STATUS) & 2) == 0) return;
+        if ((inb(PS2_STATUS) & STATUS_INPUT_FULL) == 0) return;
         asm volatile("pause");
     }
-    serial_write_string("[PS/2] Warning: Write timeout\r\n");
 }
 
 static void kbd_wait_read() {
     int timeout = 100000;
     while (timeout--) {
-        if ((inb(PS2_STATUS) & 1) == 1) return;
+        if ((inb(PS2_STATUS) & STATUS_OUTPUT_FULL) == 1) return;
         asm volatile("pause");
     }
-    // Nu e neapărat eroare, poate nu sunt date
 }
 
 extern "C" void keyboard_handler(registers_t* regs)
 {
     (void)regs;
-    uint8_t status = inb(PS2_STATUS);
     
-    /* DEBUG: Log status to see if IRQ fires */
-    serial_printf("[KBD] IRQ Status: 0x%x\n", status);
+    /* Loop to handle all pending data (robustness against IRQ sharing/latency) */
+    while (true) {
+        uint8_t status = inb(PS2_STATUS);
 
-    if (status & 0x01) {
+        /* If output buffer is empty, we are done */
+        if (!(status & STATUS_OUTPUT_FULL)) {
+            break;
+        }
 
-        if (input_is_usb_keyboard_active()) {
-            serial_printf("[KBD] USB active, ignoring PS/2\n");
+        /* If data is from Mouse (Aux), discard it here (mouse driver has its own IRQ12,
+           but if IRQ1 fires for mouse data, we must read it to clear the controller). */
+        if (status & STATUS_AUX_FULL) {
             inb(PS2_DATA);
-            goto done;
+            continue;
         }
 
-        if (status & 0x20) {
-            uint8_t mdata = inb(PS2_DATA);
-            serial_printf("[KBD] Mouse data (0x%x), ignoring\n", mdata);
-            goto done;
-        }
-
+        /* Read Scancode */
         uint8_t scancode = inb(PS2_DATA);
-        serial_printf("[KBD] Scancode: 0x%x\n", scancode);
 
-        static bool e0_prefix = false;
+        /* If USB keyboard is active, ignore PS/2 to avoid duplicates */
+        if (input_is_usb_keyboard_active()) {
+            continue;
+        }
+
+        /* Handle Extended Scancodes (E0) */
         if (scancode == 0xE0) {
             e0_prefix = true;
-            goto done;
+            continue;
         }
 
-        if (e0_prefix) {
-            e0_prefix = false;
-            if (scancode == 0x49) fb_cons_scroll(-10);
-            else if (scancode == 0x51) fb_cons_scroll(10);
-            goto done;
-        }
-
+        /* Handle Break Codes (Key Release) */
         if (scancode & 0x80) {
             uint8_t sc = scancode & 0x7F;
             if (sc == 0x2A || sc == 0x36) shift_pressed = false;
             else if (sc == 0x1D) ctrl_pressed = false;
             else if (sc == 0x38) alt_pressed = false;
-        } else {
+            
+            e0_prefix = false; 
+        } 
+        /* Handle Make Codes (Key Press) */
+        else {
             if (scancode == 0x2A || scancode == 0x36) shift_pressed = true;
             else if (scancode == 0x1D) ctrl_pressed = true;
             else if (scancode == 0x38) alt_pressed = true;
             else {
-                char c = 0;
-                if (scancode < 128)
-                    c = shift_pressed ? keymap_us_shift[scancode]
-                                      : keymap_us[scancode];
-
-                if (c) {
-                    serial_printf("[KBD] Pushing char: %c\n", c);
-                    input_push_key((uint32_t)c, true);
+                /* Handle Special Keys with E0 prefix */
+                if (e0_prefix) {
+                    if (scancode == 0x49) fb_cons_scroll(-10);      /* Page Up */
+                    else if (scancode == 0x51) fb_cons_scroll(10);  /* Page Down */
+                    else if (scancode == 0x48) fb_cons_scroll(-1);  /* Arrow Up */
+                    else if (scancode == 0x50) fb_cons_scroll(1);   /* Arrow Down */
+                    
+                    e0_prefix = false;
+                } 
+                /* Standard Keys */
+                else {
+                    /* Keypad Scroll Fallback */
+                    if (scancode == 0x48) { fb_cons_scroll(-1); }      /* Keypad 8 */
+                    else if (scancode == 0x50) { fb_cons_scroll(1); }  /* Keypad 2 */
+                    else {
+                        /* ASCII Translation */
+                        char c = 0;
+                        if (scancode < 128) {
+                            c = shift_pressed ? keymap_us_shift[scancode] : keymap_us[scancode];
+                        }
+                        
+                        if (c) {
+                            input_push_key((uint32_t)c, true);
+                        }
+                    }
                 }
             }
         }
-    } else {
-        serial_printf("[KBD] Spurious IRQ (Status 0x%x)\n", status);
     }
-
-done:
-    return;
 }
-
 
 extern "C" void keyboard_init()
 {
-    serial_write_string("[PS/2] Initializing keyboard driver...\r\n");
+    serial("[PS/2] Initializing keyboard...\n");
 
-    /* 1. Disable Keyboard Port */
+    /* 1. Disable Devices */
     kbd_wait_write();
-    outb(PS2_CMD, 0xAD);
+    outb(PS2_CMD, 0xAD); // Disable Keyboard
+    kbd_wait_write();
+    outb(PS2_CMD, 0xA7); // Disable Mouse
 
     /* 2. Flush Output Buffer */
-    while(inb(PS2_STATUS) & 1) inb(PS2_DATA);
+    inb(PS2_DATA);
 
-    /* 3. Enable Keyboard Port */
-    kbd_wait_write();
-    outb(PS2_CMD, 0xAE);
-
-    /* 4. Enable Interrupts in Command Byte (Before Reset) */
+    /* 3. Set Configuration Byte */
     kbd_wait_write();
     outb(PS2_CMD, 0x20); // Read Config
-    
     kbd_wait_read();
-    uint8_t cmd = inb(PS2_DATA);
-    
-    cmd |= 0x01; // Enable IRQ1 (Keyboard)
-    cmd &= ~0x10; // Disable IRQ12 (Mouse) temporarily
+    uint8_t config = inb(PS2_DATA);
+
+    config |= 0x01;  // Enable IRQ1 (Keyboard)
+    config |= 0x40;  // Enable Translation (Set 2 -> Set 1)
     
     kbd_wait_write();
     outb(PS2_CMD, 0x60); // Write Config
     kbd_wait_write();
-    outb(PS2_DATA, cmd);
+    outb(PS2_DATA, config);
 
-    /* Reset keyboard */
+    /* 4. Enable Keyboard */
+    kbd_wait_write();
+    outb(PS2_CMD, 0xAE);
+
+    /* 5. Reset Keyboard */
     kbd_wait_write();
     outb(PS2_DATA, 0xFF);
-    
-    /* Wait for ACK (0xFA) */
     kbd_wait_read();
-    if (inb(PS2_STATUS) & 1) {
-        uint8_t resp = inb(PS2_DATA);
-        serial_printf("[PS/2] Reset ACK: 0x%x\n", resp);
-    }
-
-    /* Wait for BAT (0xAA) - Self Test Passed */
-    int timeout = 1000000; 
-    while(timeout-- > 0) {
-        if (inb(PS2_STATUS) & 1) {
-            uint8_t bat = inb(PS2_DATA);
-            if (bat == 0xAA) {
-                serial_write_string("[PS/2] Self Test Passed (0xAA)\r\n");
-                break; 
-            }
-            serial_printf("[PS/2] Reset response: 0x%x\n", bat);
-        }
-        asm volatile("pause");
-    }
-
-    /* Enable scanning */
-    kbd_wait_write();
-    outb(PS2_DATA, 0xF4);
-    
+    inb(PS2_DATA); // ACK
     kbd_wait_read();
-    if (inb(PS2_STATUS) & 1) {
-        uint8_t resp = inb(PS2_DATA); // ACK for Enable Scanning
-        serial_printf("[PS/2] Enable Scanning ACK: 0x%x\n", resp);
-    }
+    inb(PS2_DATA); // BAT
 
-    /* 7. Final Flush to ensure line is low before unmasking PIC */
-    while(inb(PS2_STATUS) & 1) inb(PS2_DATA);
-
+    /* 6. Install Handler */
     irq_install_handler(1, keyboard_handler);
     
-    /* 5. Unmask IRQ1 in PIC (Master) explicitly */
+    /* 7. Unmask IRQ1 in PIC (Master) */
     uint8_t mask = inb(0x21);
-    outb(0x21, mask & 0xFD); // Clear bit 1 (IRQ1)
+    outb(0x21, mask & 0xFD);
 
-    serial_write_string("[PS/2] Keyboard handler installed on IRQ1.\r\n");
-    input_signal_ready();
-    serial_write_string("[PS/2] Init sequence complete.\r\n");
+    serial("[PS/2] Keyboard initialized.\n");
 }
