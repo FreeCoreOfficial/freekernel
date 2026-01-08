@@ -70,9 +70,13 @@ extern "C" void terminal_putchar(char c) {
         return;
     }
 
+    if (c == '\r') {
+        col = 0;
+        return;
+    }
+
     if (c == '\b') {
         if (col > 0) col--;
-        vga[row * 80 + col] = ' ' | (color << 8);
         return;
     }
 

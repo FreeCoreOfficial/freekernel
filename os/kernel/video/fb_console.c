@@ -229,12 +229,6 @@ static void fb_cons_putc_internal(char c) {
             cursor_y--;
             cursor_x = max_cols - 1;
         }
-        /* Erase char in buffer and screen */
-        console_cell_t* cell = &text_buffer[cursor_y * max_cols + cursor_x];
-        cell->c = ' ';
-        cell->fg = current_fg;
-        cell->bg = current_bg;
-        draw_char_at(cursor_x, cursor_y, ' ', current_fg, current_bg);
 
     } else if (c == '\t') {
         int spaces = 8 - (cursor_x % 8);

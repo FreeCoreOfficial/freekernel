@@ -8,6 +8,7 @@
 #include "../arch/i386/io.h"
 #include "../drivers/serial.h"
 #include "../interrupts/irq.h"
+#include "../video/gpu.h"
 #include "../video/fb_console.h"
 
 /* Import serial logging from kernel glue */
@@ -21,10 +22,39 @@ extern void serial(const char *fmt, ...);
 /* Mouse State */
 static uint8_t mouse_cycle = 0;
 static int8_t  mouse_byte[4];
+static int32_t mouse_x = 0;
+static int32_t mouse_y = 0;
+static int32_t prev_mouse_x = 0;
+static int32_t prev_mouse_y = 0;
 static bool    mouse_has_wheel = false;
+static bool    cursor_drawn = false;
 
-/* Accumulator for Y movement to smooth scrolling */
-static int32_t y_acc = 0;
+/* Cursor Bitmap (16x16)
+ * 0 = Transparent
+ * 1 = Black (Border)
+ * 2 = White (Fill)
+ */
+static const uint8_t cursor_bitmap[16 * 16] = {
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,2,2,1,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0,
+    1,2,2,2,2,1,0,0,0,0,0,0,0,0,0,0,
+    1,2,2,2,2,2,1,0,0,0,0,0,0,0,0,0,
+    1,2,2,2,2,2,2,1,0,0,0,0,0,0,0,0,
+    1,2,2,2,2,2,2,2,1,0,0,0,0,0,0,0,
+    1,2,2,2,2,2,2,2,2,1,0,0,0,0,0,0,
+    1,2,2,2,2,2,1,1,1,1,0,0,0,0,0,0,
+    1,2,2,1,2,2,1,0,0,0,0,0,0,0,0,0,
+    1,2,1,0,1,2,2,1,0,0,0,0,0,0,0,0,
+    1,1,0,0,1,2,2,1,0,0,0,0,0,0,0,0,
+    1,0,0,0,0,1,2,2,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0
+};
+
+/* Save-under buffer to restore background */
+static uint32_t cursor_save_buffer[16 * 16];
 
 /* --- PS/2 Helpers --- */
 
@@ -53,19 +83,88 @@ static uint8_t mouse_read(void) {
     return inb(MOUSE_PORT_DATA);
 }
 
-/* --- Interrupt Handler --- */
+/* --- Software Cursor Rendering --- */
 
+static uint32_t get_pixel(gpu_device_t* dev, int x, int y) {
+    if (!dev || !dev->virt_addr) return 0;
+    if (x < 0 || x >= (int)dev->width || y < 0 || y >= (int)dev->height) return 0;
+
+    /* Assuming 32bpp for simplicity as per kernel setup */
+    uint32_t offset = y * (dev->pitch / 4) + x;
+    uint32_t* fb = (uint32_t*)dev->virt_addr;
+    return fb[offset];
+}
+
+static void draw_pixel(gpu_device_t* dev, int x, int y, uint32_t color) {
+    if (dev && dev->ops && dev->ops->putpixel) {
+        dev->ops->putpixel(dev, x, y, color);
+    }
+}
+
+static void restore_cursor_background(gpu_device_t* dev) {
+    if (!cursor_drawn) return;
+
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            int px = prev_mouse_x + x;
+            int py = prev_mouse_y + y;
+            draw_pixel(dev, px, py, cursor_save_buffer[y * 16 + x]);
+        }
+    }
+    cursor_drawn = false;
+}
+
+static void save_cursor_background(gpu_device_t* dev, int mx, int my) {
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            int px = mx + x;
+            int py = my + y;
+            cursor_save_buffer[y * 16 + x] = get_pixel(dev, px, py);
+        }
+    }
+}
+
+static void draw_cursor_sprite(gpu_device_t* dev, int mx, int my) {
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            uint8_t type = cursor_bitmap[y * 16 + x];
+            int px = mx + x;
+            int py = my + y;
+
+            if (type == 1) {
+                draw_pixel(dev, px, py, 0xFF000000); // Black border
+            } else if (type == 2) {
+                draw_pixel(dev, px, py, 0xFFFFFFFF); // White fill
+            }
+        }
+    }
+}
+
+static void update_cursor(void) {
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
+
+    restore_cursor_background(gpu);
+    save_cursor_background(gpu, mouse_x, mouse_y);
+    draw_cursor_sprite(gpu, mouse_x, mouse_y);
+
+    prev_mouse_x = mouse_x;
+    prev_mouse_y = mouse_y;
+    cursor_drawn = true;
+}
+
+/* --- Interrupt Handler --- */
 void mouse_handler(registers_t* regs) {
     (void)regs;
     uint8_t status = inb(MOUSE_PORT_STATUS);
 
-    // Check if buffer has data and it is from mouse (Aux bit 5)
+    /* Check if buffer has data and it is from mouse (Aux bit 5) */
     if (!(status & 0x20)) return;
 
     uint8_t b = inb(MOUSE_PORT_DATA);
 
     if (mouse_cycle == 0) {
-        // Byte 0 validation: Bit 3 must be 1
+        /* Byte 0 validation: Bit 3 must be 1 */
         if ((b & 0x08) == 0) return; 
         mouse_byte[0] = b;
         mouse_cycle++;
@@ -74,9 +173,8 @@ void mouse_handler(registers_t* regs) {
         mouse_cycle++;
     } else if (mouse_cycle == 2) {
         mouse_byte[2] = b;
-        
         if (mouse_has_wheel) {
-            mouse_cycle++; // Wait for 4th byte
+            mouse_cycle++; /* Wait for 4th byte */
         } else {
             goto process_packet;
         }
@@ -89,46 +187,38 @@ void mouse_handler(registers_t* regs) {
 process_packet:
     mouse_cycle = 0;
 
-    // Decode Packet
-    // Byte 0: Yovfl, Xovfl, Ysign, Xsign, 1, Mid, Right, Left
-    // Byte 1: X movement
-    // Byte 2: Y movement
-    // Byte 3: Z movement (Scroll)
-    
-    // int32_t dx = (int32_t)mouse_byte[1]; // Ignored for scroll-only
+    /* Decode Packet */
+    int32_t dx = (int32_t)mouse_byte[1];
     int32_t dy = (int32_t)mouse_byte[2];
 
-    // Handle signs (9-bit signed integers)
+    /* Handle signs (9-bit signed integers) */
+    if (mouse_byte[0] & 0x10) dx |= 0xFFFFFF00;
     if (mouse_byte[0] & 0x20) dy |= 0xFFFFFF00;
 
-    // Handle Scroll
+    /* Update Position */
+    mouse_x += dx;
+    mouse_y -= dy; /* PS/2 Y is bottom-to-top */
+
+    /* Clamp to screen */
+    gpu_device_t* gpu = gpu_get_primary();
+    if (gpu) {
+        if (mouse_x < 0) mouse_x = 0;
+        if (mouse_y < 0) mouse_y = 0;
+        if (mouse_x >= (int)gpu->width) mouse_x = gpu->width - 1;
+        if (mouse_y >= (int)gpu->height) mouse_y = gpu->height - 1;
+    }
+
+    /* Handle Scroll */
     if (mouse_has_wheel) {
         int8_t dz = (int8_t)mouse_byte[3];
         if (dz != 0) {
-            // Z > 0 = Scroll Up (Wheel forward)
-            // Z < 0 = Scroll Down (Wheel backward)
-            // Note: PS/2 Z direction might vary, usually +1 is up.
-            
-            /* Map wheel to console scroll. 
-               Wheel backward (negative) -> Scroll down (advance text) -> positive lines 
-               Wheel forward (positive) -> Scroll up (history) -> negative lines */
-            serial("[MOUSE] Scroll wheel event: %d\n", dz);
+            /* Map wheel to console scroll */
             fb_cons_scroll(-dz);
         }
     }
-    
-    // Handle Y movement as scroll (fallback/alternative)
-    if (dy != 0) {
-        y_acc += dy;
-        // Threshold for Y movement to trigger a scroll line (e.g., 10 units)
-        int threshold = 10;
-        if (y_acc > threshold || y_acc < -threshold) {
-            int lines = y_acc / threshold;
-            y_acc %= threshold;
-            serial("[MOUSE] Vertical move scroll: %d lines\n", -lines);
-            fb_cons_scroll(-lines); // dy > 0 is UP, so we scroll UP (negative lines)
-        }
-    }
+
+    /* Update Cursor on Screen */
+    update_cursor();
 }
 
 /* --- Initialization --- */
@@ -138,33 +228,33 @@ void mouse_init(void) {
 
     uint8_t status;
 
-    // 1. Enable Aux Device
+    /* 1. Enable Aux Device */
     mouse_wait(1);
     outb(MOUSE_PORT_CMD, 0xA8);
 
-    // 2. Enable IRQ12
+    /* 2. Enable IRQ12 */
     mouse_wait(1);
-    outb(MOUSE_PORT_CMD, 0x20); // Read Config
+    outb(MOUSE_PORT_CMD, 0x20); /* Read Config */
     mouse_wait(0);
     status = inb(MOUSE_PORT_DATA) | 2;
     mouse_wait(1);
-    outb(MOUSE_PORT_CMD, 0x60); // Write Config
+    outb(MOUSE_PORT_CMD, 0x60); /* Write Config */
     mouse_wait(1);
     outb(MOUSE_PORT_DATA, status);
 
-    // 3. Set Defaults
+    /* 3. Set Defaults */
     mouse_write(0xF6);
-    mouse_read(); // ACK
+    mouse_read(); /* ACK */
 
-    // 4. Enable Scroll Wheel (Intellimouse Magic Sequence)
-    // Sequence: Set Rate 200, 100, 80
+    /* 4. Enable Scroll Wheel (Intellimouse Magic Sequence) */
+    /* Sequence: Set Rate 200, 100, 80 */
     mouse_write(0xF3); mouse_read(); mouse_write(200); mouse_read();
     mouse_write(0xF3); mouse_read(); mouse_write(100); mouse_read();
     mouse_write(0xF3); mouse_read(); mouse_write(80);  mouse_read();
 
-    // Check ID
+    /* Check ID */
     mouse_write(0xF2);
-    mouse_read(); // ACK
+    mouse_read(); /* ACK */
     uint8_t id = mouse_read();
     
     if (id == 3 || id == 4) {
@@ -175,17 +265,24 @@ void mouse_init(void) {
         serial("[MOUSE] Standard PS/2 mouse (ID: %d)\n", id);
     }
 
-    // 5. Enable Streaming
+    /* 5. Enable Streaming */
     mouse_write(0xF4);
-    mouse_read(); // ACK
+    mouse_read(); /* ACK */
 
-    // 6. Install Interrupt Handler
+    /* 6. Install Interrupt Handler */
     irq_install_handler(12, mouse_handler);
 
-    // 7. Unmask IRQ12 in PIC (Slave)
-    // Master IRQ2 (Slave cascade) should be unmasked already
+    /* 7. Unmask IRQ12 in PIC (Slave) */
     uint8_t mask = inb(0xA1);
-    outb(0xA1, mask & ~(1 << 4)); // Clear bit 4 (IRQ12 is IRQ4 on Slave)
+    outb(0xA1, mask & ~(1 << 4));
 
     serial("[MOUSE] PS/2 mouse detected and enabled\n");
+
+    /* Center cursor initially */
+    gpu_device_t* gpu = gpu_get_primary();
+    if (gpu) {
+        mouse_x = gpu->width / 2;
+        mouse_y = gpu->height / 2;
+        update_cursor();
+    }
 }

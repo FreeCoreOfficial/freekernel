@@ -7,6 +7,8 @@
 #include "../drivers/serial.h"
 #include "../input/input.h"
 #include "../video/fb_console.h"
+#include "../interrupts/irq.h"
+#include "../hardware/lapic.h"
 
 /* PS/2 Ports */
 #define PS2_DATA    0x60
@@ -59,80 +61,70 @@ static void kbd_wait_read() {
 extern "C" void keyboard_handler(registers_t* regs)
 {
     (void)regs;
-
-    /* Read status register */
     uint8_t status = inb(PS2_STATUS);
+    
+    /* DEBUG: Log status to see if IRQ fires */
+    serial_printf("[KBD] IRQ Status: 0x%x\n", status);
 
-    /* Check if output buffer is full (bit 0) */
     if (status & 0x01) {
+
+        if (input_is_usb_keyboard_active()) {
+            serial_printf("[KBD] USB active, ignoring PS/2\n");
+            inb(PS2_DATA);
+            goto done;
+        }
+
+        if (status & 0x20) {
+            uint8_t mdata = inb(PS2_DATA);
+            serial_printf("[KBD] Mouse data (0x%x), ignoring\n", mdata);
+            goto done;
+        }
+
         uint8_t scancode = inb(PS2_DATA);
-        
-        /* Handle Extended Keys (E0 prefix) */
+        serial_printf("[KBD] Scancode: 0x%x\n", scancode);
+
         static bool e0_prefix = false;
         if (scancode == 0xE0) {
             e0_prefix = true;
-            return;
+            goto done;
         }
-        
+
         if (e0_prefix) {
             e0_prefix = false;
-            if (scancode == 0x49) { /* PgUp */ fb_cons_scroll(-10); return; }
-            if (scancode == 0x51) { /* PgDn */ fb_cons_scroll(10); return; }
-            return; /* Consume other extended keys for now */
+            if (scancode == 0x49) fb_cons_scroll(-10);
+            else if (scancode == 0x51) fb_cons_scroll(10);
+            goto done;
         }
 
-        /* If USB Keyboard is active, ignore PS/2 to prevent conflicts */
-        /* --- KEY RELEASES --- */
         if (scancode & 0x80) {
             uint8_t sc = scancode & 0x7F;
-
-            /* Shift release */
-            if (sc == 0x2A || sc == 0x36) {
-                shift_pressed = false;
-            }
-            /* Ctrl release */
-            else if (sc == 0x1D) {
-                ctrl_pressed = false;
-            }
-            /* Alt release */
-            else if (sc == 0x38) {
-                alt_pressed = false;
-            }
+            if (sc == 0x2A || sc == 0x36) shift_pressed = false;
+            else if (sc == 0x1D) ctrl_pressed = false;
+            else if (sc == 0x38) alt_pressed = false;
         } else {
-            /* --- KEY PRESSES --- */
-
-            /* Shift press */
-            if (scancode == 0x2A || scancode == 0x36) {
-                shift_pressed = true;
-            }
-            /* Ctrl press */
-            else if (scancode == 0x1D) {
-                ctrl_pressed = true;
-            }
-            /* Alt press */
-            else if (scancode == 0x38) {
-                alt_pressed = true;
-            }
+            if (scancode == 0x2A || scancode == 0x36) shift_pressed = true;
+            else if (scancode == 0x1D) ctrl_pressed = true;
+            else if (scancode == 0x38) alt_pressed = true;
             else {
-                /* Translate scancode -> char */
                 char c = 0;
-                if (scancode < 128) {
-                    if (shift_pressed) {
-                        c = keymap_us_shift[scancode];
-                    } else {
-                        c = keymap_us[scancode];
-                    }
-                }
+                if (scancode < 128)
+                    c = shift_pressed ? keymap_us_shift[scancode]
+                                      : keymap_us[scancode];
 
                 if (c) {
-                    /* Push to new input system */
+                    serial_printf("[KBD] Pushing char: %c\n", c);
                     input_push_key((uint32_t)c, true);
                 }
             }
         }
+    } else {
+        serial_printf("[KBD] Spurious IRQ (Status 0x%x)\n", status);
     }
 
+done:
+    return;
 }
+
 
 extern "C" void keyboard_init()
 {
@@ -210,4 +202,5 @@ extern "C" void keyboard_init()
 
     serial_write_string("[PS/2] Keyboard handler installed on IRQ1.\r\n");
     input_signal_ready();
+    serial_write_string("[PS/2] Init sequence complete.\r\n");
 }
