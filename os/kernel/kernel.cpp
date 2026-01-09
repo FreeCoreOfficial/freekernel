@@ -82,6 +82,8 @@
 #include "colors/cl.h"
 #include "video/surface.h"
 #include "video/compositor.h"
+#include "ui/wm/wm.h"
+#include "ui/wm/window.h"
 
 
 
@@ -559,15 +561,17 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     /* Initialize Compositor */
     compositor_init();
 
-    /* Create a test surface (Red Box) */
-    surface_t* test_surf = surface_create(100, 100);
-    if (test_surf) {
-        surface_clear(test_surf, 0xFFFF0000); // Red
-        test_surf->x = 500;
-        test_surf->y = 100;
-        compositor_add_surface(test_surf);
-        compositor_render(); // Render once
+    /* Initialize Window Manager */
+    wm_init();
+
+    /* Create a test window (Green Box) */
+    surface_t* win_surf = surface_create(200, 150);
+    if (win_surf) {
+        surface_clear(win_surf, 0xFF00FF00); // Green
+        wm_create_window(win_surf, 100, 100);
     }
+
+    wm_render();
 
     /* === NEW ARCHITECTURE INIT (Moved after Paging) === */
     input_init();

@@ -157,7 +157,7 @@ This level separates hobby kernels from serious systems.
 | ------ | ----------------------- |
 | ✅     | Framebuffer Abstraction |
 | ✅     | Basic Compositor        |
-| 🔲     | Window Manager          |
+| ✅     | Window Manager          |
 | 🔲     | GUI Toolkit             |
 | 🔲     | Mouse-driven UI         |
 | 🔲     | Desktop Environment     |

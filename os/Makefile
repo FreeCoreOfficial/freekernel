@@ -159,6 +159,10 @@ OBJS = \
 	$(BUILD)/colors/cl.o \
 	$(BUILD)/surface.o \
 	$(BUILD)/compositor.o \
+	$(BUILD)/ui/wm/wm.o \
+	$(BUILD)/ui/wm/window.o \
+	$(BUILD)/ui/wm/wm_layout.o \
+	$(BUILD)/ui/wm/wm_hooks.o \
 
 
 
@@ -651,6 +655,22 @@ $(BUILD)/surface.o: kernel/video/surface.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/compositor.o: kernel/video/compositor.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/wm/wm.o: kernel/ui/wm/wm.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/wm/window.o: kernel/ui/wm/window.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/wm/wm_layout.o: kernel/ui/wm/wm_layout.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/wm/wm_hooks.o: kernel/ui/wm/wm_hooks.c | dirs
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # -------------------------
