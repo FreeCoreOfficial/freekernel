@@ -163,6 +163,16 @@ OBJS = \
 	$(BUILD)/ui/wm/window.o \
 	$(BUILD)/ui/wm/wm_layout.o \
 	$(BUILD)/ui/wm/wm_hooks.o \
+	$(BUILD)/ui/flyui/core.o \
+	$(BUILD)/ui/flyui/widget.o \
+	$(BUILD)/ui/flyui/event.o \
+	$(BUILD)/ui/flyui/draw.o \
+	$(BUILD)/ui/flyui/surface.o \
+	$(BUILD)/ui/flyui/layout.o \
+	$(BUILD)/ui/flyui/theme.o \
+	$(BUILD)/ui/flyui/widgets/label.o \
+	$(BUILD)/ui/flyui/widgets/button.o \
+	$(BUILD)/ui/flyui/widgets/panel.o \
 
 
 
@@ -190,6 +200,9 @@ dirs: $(BUILD)
 	mkdir -p $(BUILD)/smp
 	mkdir -p $(BUILD)/hardware
 	mkdir -p ${BUILD}/colors
+	mkdir -p $(BUILD)/ui/wm
+	mkdir -p $(BUILD)/ui/flyui
+
 
 
 
@@ -670,6 +683,46 @@ $(BUILD)/ui/wm/wm_layout.o: kernel/ui/wm/wm_layout.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui/wm/wm_hooks.o: kernel/ui/wm/wm_hooks.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/core.o: kernel/ui/flyui/core.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/widget.o: kernel/ui/flyui/widget.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/event.o: kernel/ui/flyui/event.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/draw.o: kernel/ui/flyui/draw.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/surface.o: kernel/ui/flyui/surface.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/layout.o: kernel/ui/flyui/layout.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/theme.o: kernel/ui/flyui/theme.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/widgets/label.o: kernel/ui/flyui/widgets/label.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/widgets/button.o: kernel/ui/flyui/widgets/button.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/widgets/panel.o: kernel/ui/flyui/widgets/panel.c | dirs
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

@@ -84,6 +84,8 @@
 #include "video/compositor.h"
 #include "ui/wm/wm.h"
 #include "ui/wm/window.h"
+#include "ui/flyui/flyui.h"
+#include "ui/flyui/widgets/widgets.h"
 
 
 
@@ -564,11 +566,33 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     /* Initialize Window Manager */
     wm_init();
 
-    /* Create a test window (Green Box) */
-    surface_t* win_surf = surface_create(200, 150);
-    if (win_surf) {
-        surface_clear(win_surf, 0xFF00FF00); // Green
-        wm_create_window(win_surf, 100, 100);
+    /* Create a FlyUI Demo Window */
+    surface_t* fly_surf = surface_create(300, 200);
+    if (fly_surf) {
+        /* Initialize FlyUI context bound to this surface */
+        flyui_context_t* ctx = flyui_init(fly_surf);
+        
+        if (ctx) {
+            /* Create Root Panel */
+            fly_widget_t* root = fly_panel_create(300, 200);
+            flyui_set_root(ctx, root);
+            
+            /* Add Label */
+            fly_widget_t* lbl = fly_label_create("Hello FlyUI!");
+            lbl->x = 10; lbl->y = 10;
+            fly_widget_add(root, lbl);
+            
+            /* Add Button */
+            fly_widget_t* btn = fly_button_create("Click Me");
+            btn->x = 10; btn->y = 40; btn->w = 100; btn->h = 30;
+            fly_widget_add(root, btn);
+            
+            /* Render UI to surface */
+            flyui_render(ctx);
+            
+            /* Create Window containing the UI */
+            wm_create_window(fly_surf, 150, 150);
+        }
     }
 
     wm_render();
