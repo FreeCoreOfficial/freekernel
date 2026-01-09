@@ -181,6 +181,7 @@ extern "C" void panic_render_pretty(const char* msg) {
     // Footer
     draw_string(indent, line++, "Force shutdown the system from the power button.");
     draw_string(indent, line++, "Chrysalis OS - https://chrysalisos.netlify.app");
+    draw_string(indent, line++, "ChrysOS Version: 0.3");
 
     // Protecție contra depășire (șterge jos dacă e cazul)
     if (!use_fb) {
