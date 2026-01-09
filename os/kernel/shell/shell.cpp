@@ -7,6 +7,7 @@
 #include "../user/user.h"
 #include "../events/event_queue.h"
 #include "../proc/exec.h"
+#include "../cmds/cd.h"
 
 /* Configuration */
 #define SHELL_BUF_SIZE 256
@@ -441,10 +442,12 @@ void shell_set_active_context(int id) {
 
 void shell_prompt(void) {
     user_t* u = user_get_current();
+    char cwd[64];
+    cd_get_cwd(cwd, 64);
     if (u) {
-        terminal_printf("%s@chrysalis:~$ ", u->name);
+        terminal_printf("%s@chrysalis:%s$ ", u->name, cwd);
     } else {
-        terminal_printf("guest@chrysalis:~$ ");
+        terminal_printf("guest@chrysalis:%s$ ", cwd);
     }
 }
 

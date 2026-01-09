@@ -6,8 +6,6 @@
 #include "../terminal.h"
 #include "../string.h"
 #include "../mem/kmalloc.h"
-#include "../fs/fs.h"
-#include "../fs/chrysfs/chrysfs.h"
 #include "fat.h"
 
 /* FAT32 Driver API (External) */
@@ -56,7 +54,7 @@ extern "C" int cmd_write(int argc, char** argv) {
     
     size_t new_len = strlen(new_text);
 
-    /* 1. Try Disk (FAT32) - Priority */
+    /* Ensure Disk (FAT32) is mounted */
     fat_automount();
 
     /* Try to read existing file to support append */
@@ -106,47 +104,11 @@ extern "C" int cmd_write(int argc, char** argv) {
         }
         kfree(new_text);
         return 0;
-    }
-    
-    /* 2. RAMFS Handling (Fallback if disk failed/not mounted) */
-    {
-        /* Check if exists to append */
-        const FSNode* node = fs_find(path);
-        char* ram_buf = nullptr;
-        
-        if (node && node->data) {
-            size_t old_len = strlen(node->data);
-            ram_buf = (char*)kmalloc(old_len + new_len + 1);
-            if (ram_buf) {
-                strcpy(ram_buf, node->data);
-                strcat(ram_buf, new_text);
-            }
-        } else {
-            ram_buf = (char*)kmalloc(new_len + 1);
-            if (ram_buf) {
-                strcpy(ram_buf, new_text);
-            }
-        }
-
-        if (ram_buf) {
-            /* fs_create typically creates or updates in RAMFS */
-            fs_create(path, ram_buf);
-            
-            if (node) {
-                terminal_writestring("Appended to RAMFS file.\n");
-                serial("[WRITE] append ramfs %s\n", path);
-            } else {
-                terminal_writestring("Created RAMFS file.\n");
-                serial("[WRITE] created ramfs %s\n", path);
-            }
-            
-            /* Note: We don't free final_buf here assuming RAMFS takes ownership 
-               or copies. If it copies, this is a small leak, acceptable for bootstrap. */
-        } else {
-             terminal_writestring("Error: Out of memory\n");
-        }
+    } else {
+        terminal_writestring("Error: Failed to write to disk (FAT32).\n");
+        serial("[WRITE] Disk write failed for %s\n", path);
     }
 
     kfree(new_text);
-    return 0;
+    return -1;
 }

@@ -6,7 +6,7 @@ extern "C" {
 
 /* write <path> <text...>
  * Creates file or appends text with a newline.
- * Prioritizes Disk (FAT32) if available, falls back to RAMFS.
+ * Writes exclusively to Disk (FAT32).
  */
 int cmd_write(int argc, char** argv);
 

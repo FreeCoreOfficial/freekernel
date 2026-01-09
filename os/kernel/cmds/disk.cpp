@@ -8,6 +8,7 @@
 #include "../terminal.h"
 #include "../string.h"
 #include "../mem/kmalloc.h"
+#include "fat.h"
 
 /* Global partition table */
 struct part_assign g_assigns[26];
@@ -202,6 +203,17 @@ void disk_probe_partitions(void) {
     terminal_printf("Probed %d partitions. Use 'disk list' to see details.\n", found);
 }
 
+/* Helper to zero sectors */
+static void disk_zero_sectors(block_device_t* bd, uint32_t start_lba, uint32_t count) {
+    uint8_t* zero_buf = (uint8_t*)kmalloc(512);
+    if (!zero_buf) return;
+    memset(zero_buf, 0, 512);
+    for (uint32_t i = 0; i < count; i++) {
+        bd->write(bd, start_lba + i, 1, zero_buf);
+    }
+    kfree(zero_buf);
+}
+
 /* Create a fresh MBR with one partition */
 static void cmd_mklabel(void) {
     block_device_t* bd = get_main_disk();
@@ -236,11 +248,52 @@ static void cmd_mklabel(void) {
         terminal_writestring("Created a new partition 1 of type 'FAT32' and of size ");
         print_size(size);
         terminal_writestring(".\n");
+        
+        /* Wipe the start of the new partition to avoid ghost filesystems */
+        terminal_writestring("Wiping partition header...\n");
+        disk_zero_sectors(bd, start, 64); // Wipe 32KB
+        terminal_writestring("Partition created. Run 'disk probe' then 'disk format <a>' to initialize filesystem.\n");
     } else {
         terminal_writestring("Write failed.\n");
     }
     
     kfree(mbr);
+}
+
+/* Format (wipe) a partition */
+static void cmd_format(int argc, char** argv) {
+    if (argc < 3) {
+        terminal_writestring("Usage: disk format <letter>\n");
+        return;
+    }
+    char letter = argv[2][0];
+    if (letter >= 'A' && letter <= 'Z') letter += 32;
+    
+    int idx = letter - 'a';
+    if (idx < 0 || idx >= 26 || !g_assigns[idx].used) {
+        terminal_writestring("Invalid or unassigned partition letter.\n");
+        return;
+    }
+    
+    block_device_t* bd = get_main_disk();
+    if (!bd) {
+        terminal_writestring("No disk found.\n");
+        return;
+    }
+    
+    uint32_t start = g_assigns[idx].lba;
+    uint32_t count = g_assigns[idx].count;
+    uint8_t type = g_assigns[idx].type;
+
+    if (type == 0x0B || type == 0x0C) {
+        terminal_printf("Formatting partition %c (LBA %u, Size %u) as FAT32...\n", letter, start, count);
+        fat32_format(start, count, "CHRYSALIS");
+        terminal_writestring("Format complete. You can now mount it.\n");
+    } else {
+        terminal_printf("Formatting partition %c (LBA %u)...\n", letter, start);
+        disk_zero_sectors(bd, start, 256); // Wipe 128KB
+        terminal_writestring("Partition wiped (headers removed).\n");
+    }
 }
 
 static void cmd_usage(void) {
@@ -250,6 +303,7 @@ static void cmd_usage(void) {
     terminal_writestring("  print    Show partition table (fdisk -l)\n");
     terminal_writestring("  probe    Scan and assign partitions\n");
     terminal_writestring("  mklabel  Create fresh MBR with 1 partition\n");
+    terminal_writestring("  format   Wipe partition data (disk format <letter>)\n");
     terminal_writestring("  read     Read sector 0 (test)\n");
 }
 
@@ -268,6 +322,7 @@ void cmd_disk(int argc, char** argv)
     if (strcmp(sub, "print") == 0)   { cmd_fdisk_list(); return; }
     if (strcmp(sub, "probe") == 0)   { disk_probe_partitions(); return; }
     if (strcmp(sub, "mklabel") == 0) { cmd_mklabel(); return; }
+    if (strcmp(sub, "format") == 0)  { cmd_format(argc, argv); return; }
     
     if (strcmp(sub, "read") == 0) {
         uint8_t* buf = (uint8_t*)kmalloc(512);

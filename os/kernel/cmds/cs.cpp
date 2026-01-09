@@ -9,8 +9,6 @@
 #include "../terminal.h"
 #include "../string.h"
 #include "../mem/kmalloc.h"
-#include "../fs/fs.h"
-#include "../fs/chrysfs/chrysfs.h"
 #include "registry.h"
 #include "fat.h"
 
@@ -25,12 +23,15 @@ static void cs_exec_line(char* line, int line_num) {
     /* Trim leading whitespace */
     while (*line == ' ' || *line == '\t') line++;
 
-    /* Ignore empty lines and comments */
-    if (*line == 0 || *line == '#' || *line == '\n') return;
-
-    /* Remove newline at end */
+    /* Trim trailing whitespace (newlines, CRs, spaces) */
     int len = strlen(line);
-    if (len > 0 && line[len-1] == '\n') line[len-1] = 0;
+    while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r' || line[len-1] == ' ' || line[len-1] == '\t')) {
+        line[len-1] = 0;
+        len--;
+    }
+
+    /* Ignore empty lines and comments */
+    if (*line == 0 || *line == '#') return;
 
     serial("[CS] Executing line %d: %s\n", line_num, line);
 
@@ -75,7 +76,7 @@ static void cs_exec_line(char* line, int line_num) {
 
 /* Helper to read file content (similar to exec.cpp but for text) */
 static char* cs_read_script(const char* path, size_t* out_size) {
-    /* 1. Try Disk (FAT32) - Priority */
+    /* Try Disk (FAT32) Only */
     fat_automount();
 
     size_t max_size = 64 * 1024; // 64KB script limit
@@ -89,18 +90,6 @@ static char* cs_read_script(const char* path, size_t* out_size) {
         }
         kfree(buf);
     }
-
-    /* 2. Try RAMFS (Fallback) */
-    const FSNode* node = fs_find(path);
-    if (node && node->data) {
-        size_t len = strlen(node->data);
-        buf = (char*)kmalloc(len + 1);
-        if (!buf) return nullptr;
-        strcpy(buf, node->data);
-        *out_size = len;
-        return buf;
-    }
-
     return nullptr;
 }
 

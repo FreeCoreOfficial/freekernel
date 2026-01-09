@@ -123,6 +123,9 @@ OBJS = \
 	$(BUILD)/cmds/cs.o \
 	$(BUILD)/cmds/vt_cmd.o \
 	$(BUILD)/cmds/color.o \
+	$(BUILD)/cmds/rm.o \
+	$(BUILD)/cmds/mkdir.o \
+	$(BUILD)/cmds/cd.o \
 	$(BUILD)/hardware/pci.o \
 	$(BUILD)/hardware/acpi.o \
 	$(BUILD)/arch/interrupts.o \
@@ -505,6 +508,15 @@ $(BUILD)/cmds/vt_cmd.o: kernel/cmds/vt_cmd.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/cmds/color.o: kernel/cmds/color.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/rm.o: kernel/cmds/rm.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/mkdir.o: kernel/cmds/mkdir.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/cd.o: kernel/cmds/cd.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/hardware/pci.o: kernel/hardware/pci.cpp

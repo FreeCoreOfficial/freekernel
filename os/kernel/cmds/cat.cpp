@@ -16,21 +16,19 @@ extern "C" void cmd_cat(int argc, char** argv) {
     const char* path = argv[1];
 
     /* Try Disk (FAT32) first */
-    if (strncmp(path, "/root", 5) == 0) {
-        fat_automount();
+    fat_automount();
 
-        char *buf = (char*)kmalloc(4096);
-        if (buf) {
-            int bytes = fat32_read_file(path, buf, 4095);
-            if (bytes >= 0) {
-                buf[bytes] = 0;
-                terminal_writestring(buf);
-                terminal_writestring("\n");
-                kfree(buf);
-                return;
-            }
+    char *buf = (char*)kmalloc(4096);
+    if (buf) {
+        int bytes = fat32_read_file(path, buf, 4095);
+        if (bytes >= 0) {
+            buf[bytes] = 0;
+            terminal_writestring(buf);
+            terminal_writestring("\n");
             kfree(buf);
+            return;
         }
+        kfree(buf);
     }
 
     /* Fallback to RAMFS */

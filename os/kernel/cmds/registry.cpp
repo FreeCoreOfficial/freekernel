@@ -5,7 +5,7 @@
 #include "registry.h"
 
 #include "clear.h"
-#include "reboot.h"
+//#include "reboot.h"
 #include "shutdown.h"
 #include "ls.h"
 #include "cat.h"
@@ -37,8 +37,10 @@
 #include "cs.h"
 #include "vt_cmd.h"
 #include "color.h"
+#include "rm.h"
+#include "mkdir.h"
+#include "cd.h"
 // Minimal freestanding helpers (no libc)
-typedef unsigned long size_t;
 
 /*
  * Wrappers:
@@ -108,7 +110,7 @@ static int wrap_cmd_echo(int argc, char **argv)      { return wrap_old_style(cmd
 static int wrap_cmd_fortune(int argc, char **argv)   { return wrap_old_style(cmd_fortune,   argc, argv); }
 static int wrap_cmd_help(int argc, char **argv)      { return wrap_old_style(cmd_help,      argc, argv); }
 static int wrap_cmd_play(int argc, char **argv)      { return wrap_old_style(cmd_play,      argc, argv); }
-static int wrap_cmd_reboot(int argc, char **argv)    { return wrap_old_style(cmd_reboot,    argc, argv); }
+//static int wrap_cmd_reboot(int argc, char **argv)    { return wrap_old_style(cmd_reboot,    argc, argv); }
 static int wrap_cmd_shutdown(int argc, char **argv)  { return wrap_old_style(cmd_shutdown,  argc, argv); }
 static int wrap_cmd_sysfetch(int argc, char **argv)  { return wrap_old_style(cmd_sysfetch,  argc, argv); }
 static int wrap_cmd_ticks(int argc, char **argv)     { return wrap_old_style(cmd_ticks,     argc, argv); }
@@ -135,6 +137,9 @@ static int wrap_cmd_write(int argc, char **argv)     { return wrap_new_int(cmd_w
 static int wrap_cmd_cs(int argc, char **argv)        { return wrap_new_int(cmd_cs_main, argc, argv); }    /* int cmd_cs(int,char**) */
 static int wrap_cmd_vt(int argc, char **argv)        { return wrap_new_int(cmd_vt, argc, argv); }         /* int cmd_vt(int,char**) */
 static int wrap_cmd_color(int argc, char **argv)     { return wrap_new_int(cmd_color, argc, argv); }      /* int cmd_color(int,char**) */
+static int wrap_cmd_rm(int argc, char **argv)        { return wrap_new_int(cmd_rm, argc, argv); }         /* int cmd_rm(int,char**) */
+static int wrap_cmd_mkdir(int argc, char **argv)     { return wrap_new_int(cmd_mkdir, argc, argv); }      /* int cmd_mkdir(int,char**) */
+static int wrap_cmd_cd(int argc, char **argv)        { return wrap_new_int(cmd_cd, argc, argv); }         /* int cmd_cd(int,char**) */
 /* Wrapper for execve */
 static int wrap_cmd_exec(int argc, char **argv) {
     if (argc < 2) return -1;
@@ -148,6 +153,7 @@ Command command_table[] = {
     { "beep",      wrap_cmd_beep },
     { "cs",        wrap_cmd_cs },
     { "chrysver",  wrap_cmd_chrysver },
+    { "cd",        wrap_cmd_cd },
     { "crash",     wrap_cmd_crash },
     { "cat",       wrap_cmd_cat },
     { "color",     wrap_cmd_color },
@@ -165,11 +171,13 @@ Command command_table[] = {
     { "fortune",   wrap_cmd_fortune },
     { "help",      wrap_cmd_help },
     { "ls",        wrap_cmd_ls },
+    { "mkdir",     wrap_cmd_mkdir },
     { "login",     wrap_cmd_login },
     { "mem",       wrap_cmd_mem },
     { "pmm",       wrap_cmd_pmm },
     { "play",      wrap_cmd_play },
-    { "reboot",    wrap_cmd_reboot },
+   // { "reboot",    wrap_cmd_reboot },
+    { "rm",        wrap_cmd_rm },
     { "shutdown",  wrap_cmd_shutdown },
     { "sysfetch",  wrap_cmd_sysfetch },
     { "ticks",     wrap_cmd_ticks },

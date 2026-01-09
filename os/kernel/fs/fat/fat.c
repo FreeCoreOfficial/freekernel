@@ -1,6 +1,9 @@
 #include "fat.h"
-#include "../../storage/ahci/ahci.h"
+#include "../../cmds/disk.h"
 #include "../../string.h"
+
+/* Import serial logging */
+extern void serial(const char *fmt, ...);
 
 /* BPB Structure for FAT32 */
 typedef struct {
@@ -50,21 +53,24 @@ typedef struct {
     uint32_t size;
 } __attribute__((packed)) fat_dir_entry_t;
 
-static uint8_t fs_buf[512];
-static int fs_port = -1;
+static uint8_t fs_buf[512] __attribute__((aligned(16)));
 static uint64_t fs_part_lba = 0;
 static uint64_t data_start_lba = 0;
 static uint8_t sec_per_clus = 0;
 static uint32_t root_clus = 0;
 
 int fat32_init(int port, uint64_t part_lba) {
-    if (ahci_read_lba(port, part_lba, 1, fs_buf) != 0) return -1;
+    (void)port; /* Port is handled automatically by disk_read_sector */
+    if (disk_read_sector((uint32_t)part_lba, fs_buf) != 0) return -1;
     
     fat32_bpb_t *bpb = (fat32_bpb_t*)fs_buf;
     
     /* Basic validation */
     if (bpb->bytes_per_sector != 512) {
-        serial("[FAT] Unsupported sector size: %d\n", bpb->bytes_per_sector);
+        serial("[FAT] Unsupported sector size: %d (0x%x)\n", bpb->bytes_per_sector, bpb->bytes_per_sector);
+        serial("[FAT] Dump (0-15): %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+               fs_buf[0], fs_buf[1], fs_buf[2], fs_buf[3], fs_buf[4], fs_buf[5], fs_buf[6], fs_buf[7],
+               fs_buf[8], fs_buf[9], fs_buf[10], fs_buf[11], fs_buf[12], fs_buf[13], fs_buf[14], fs_buf[15]);
         return -2;
     }
     if (bpb->total_sectors_16 != 0) {
@@ -72,7 +78,6 @@ int fat32_init(int port, uint64_t part_lba) {
         return -3;
     }
 
-    fs_port = port;
     fs_part_lba = part_lba;
     sec_per_clus = bpb->sectors_per_cluster;
     root_clus = bpb->root_cluster;
@@ -88,14 +93,12 @@ int fat32_init(int port, uint64_t part_lba) {
 }
 
 void fat32_list_root(void) {
-    if (fs_port == -1) return;
-
     /* Calculate LBA of root cluster */
     /* FirstSectorofCluster = ((N – 2) * BPB_SecPerClus) + FirstDataSector */
     uint64_t root_lba = ((root_clus - 2) * sec_per_clus) + data_start_lba;
 
     /* Read first sector of root dir */
-    if (ahci_read_lba(fs_port, root_lba, 1, fs_buf) == 0) {
+    if (disk_read_sector((uint32_t)root_lba, fs_buf) == 0) {
         fat_dir_entry_t *entry = (fat_dir_entry_t*)fs_buf;
         serial("[FAT] Root Directory Listing:\n");
         for (int i = 0; i < 16; i++) { /* Check first 16 entries */
