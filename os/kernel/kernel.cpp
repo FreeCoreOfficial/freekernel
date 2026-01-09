@@ -395,7 +395,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     user_init();
 
     // 8) Shell: text UI
-    shell_init();
+    // shell_init(); // Moved later (after WM init) to run inside a window
 
     // 19) Heap + buddy allocator + kmalloc (MOVED UP - CRITICAL for drivers)
     extern uint8_t __heap_start;
@@ -560,42 +560,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     /* Initialize Virtual Terminals (must be after fb_cons_init) */
     vt_init();
 
-    /* Initialize Compositor */
-    compositor_init();
+    /* GUI Subsystems (Compositor, WM) are now initialized by 'launch' command */
+    /* compositor_init(); wm_init(); */
 
-    /* Initialize Window Manager */
-    wm_init();
-
-    /* Create a FlyUI Demo Window */
-    surface_t* fly_surf = surface_create(300, 200);
-    if (fly_surf) {
-        /* Initialize FlyUI context bound to this surface */
-        flyui_context_t* ctx = flyui_init(fly_surf);
-        
-        if (ctx) {
-            /* Create Root Panel */
-            fly_widget_t* root = fly_panel_create(300, 200);
-            flyui_set_root(ctx, root);
-            
-            /* Add Label */
-            fly_widget_t* lbl = fly_label_create("Hello FlyUI!");
-            lbl->x = 10; lbl->y = 10;
-            fly_widget_add(root, lbl);
-            
-            /* Add Button */
-            fly_widget_t* btn = fly_button_create("Click Me");
-            btn->x = 10; btn->y = 40; btn->w = 100; btn->h = 30;
-            fly_widget_add(root, btn);
-            
-            /* Render UI to surface */
-            flyui_render(ctx);
-            
-            /* Create Window containing the UI */
-            wm_create_window(fly_surf, 150, 150);
-        }
-    }
-
-    wm_render();
+    /* Initialize Shell (Text Mode) */
+    shell_init();
 
     /* === NEW ARCHITECTURE INIT (Moved after Paging) === */
     input_init();
@@ -782,43 +751,94 @@ pci_init(); // DISABLED: Potential crash source
             }
         }
         
-        // shell_poll_input(); // Redundant acum, facem polling manual mai sus
-
-#if TASKS_ENABLED
-        // If you truly want automated scheduling when TASKS_ENABLED==1, replace
-        // the following line with task_yield() once you verified switch_to and
-        // have tested on a VM snapshot (so you can revert on triple fault).
-        // task_yield();
-#endif
-
         asm volatile("hlt"); // reduce power until next interrupt
     }
 }
 
 // =========================
-// Notes for modders (concise checklist)
+// Notes for modders & distro builders
 // =========================
 //
-// - To get real preemptive scheduling:
+// Chrysalis OS is designed to be hacked, extended, and redistributed.
+// You are encouraged to build your own distro on top of it (Linux-style),
+// with your own UI, drivers, scheduler, or userland.
 //
-//   * Implement a robust arch/i386/switch.S that saves/restores full context
-//     (pushad / push eflags / save cs/ss if necessary). The simple `movl %esp, (prev)`
-//     + `movl (next), %esp` + `ret` technique is fragile for complex kernels.
-//   * In the PIT IRQ handler, save the CPU context and call schedule().
-//   * Add a safe trampoline for user-mode tasks (iret frame).
+// LICENSE & OWNERSHIP:
 //
-// - To avoid triple-faults and display panics instead:
+// - Chrysalis OS is released under the MIT License.
+// - You have full freedom to:
+//     * modify
+//     * fork
+//     * redistribute
+//     * rebrand
+//     * ship commercially or non-commercially
+// - The ONLY requirement is to preserve the MIT license notice and copyright
+//   attribution to the original owner.
 //
-//   * Install a double-fault handler in the IDT that calls a panic handler which
-//     prints debug info and halts (or drops to a safe console). If a double-fault
-//     handler is itself invalid, the CPU triple-faults and resets (not catchable).
+// You own your fork. Do whatever you want — responsibly.
 //
-// - Diagnostics tips:
+// -------------------------
+// Scheduler & context switching (advanced)
+// -------------------------
 //
-//   * Keep serial outputs in early boot — easiest way to see what failed.
-//   * When enabling TASKS_ENABLED, run inside a VM snapshot so you can revert
-//     quickly if a triple-fault occurs.
-//   * Create a small `switch_test` routine that exercises switching in a controlled
-//     environment (no interrupts, tiny stacks), then expand to IRQ-driven scheduling.
+// To implement REAL preemptive multitasking:
+//
+//   * Implement a robust arch/i386/switch.S that saves and restores full CPU state:
+//       - General registers (pushad)
+//       - EFLAGS
+//       - Segment registers if you use them (cs, ss via iret frame)
+//   * Avoid simplistic stack swapping like:
+//       movl %esp, (prev)
+//       movl (next), %esp
+//       ret
+//     These techniques break easily in non-trivial kernels.
+//
+//   * In the PIT (or APIC) IRQ handler:
+//       - Save CPU context
+//       - Call schedule()
+//       - Restore context and return via iret
+//
+//   * User-mode tasks require a safe iret trampoline
+//     with a properly constructed privilege transition frame.
+//
+// -------------------------
+// Fault handling & stability
+// -------------------------
+//
+// To avoid silent resets (triple-faults):
+//
+//   * Install a valid double-fault handler in the IDT.
+//   * The double-fault handler MUST:
+//       - Use a known-good stack (TSS recommended)
+//       - Print diagnostic info
+//       - Halt or drop into a safe recovery console
+//
+//   * If the double-fault handler itself is broken,
+//     the CPU will triple-fault and reset (not catchable).
+//
+// -------------------------
+// Diagnostics & development tips
+// -------------------------
+//
+//   * Keep serial() logging enabled during early boot.
+//     It is the most reliable debug channel.
+//
+//   * When enabling TASKS_ENABLED or SMP:
+//       - Always test inside a VM
+//       - Use snapshots before major changes
+//
+//   * Create a small "switch_test" routine:
+//       - No interrupts
+//       - Tiny stacks
+//       - Deterministic switching
+//     Then expand gradually to IRQ-driven scheduling.
+//
+// -------------------------
+// Final note
+// -------------------------
+//
+// Chrysalis OS aims to be a foundation, not a cage.
+// Build your own distro. Replace everything if you want.
+// Just keep the MIT notice — the rest is yours.
 //
 // End of file

@@ -18,6 +18,11 @@ void shell_poll_input(void);
 void shell_init_context(int id);
 void shell_set_active_context(int id);
 
+/* GUI Integration */
+void shell_create_window(void);
+void shell_destroy_window(void);
+int  shell_is_window_active(void);
+
 #ifdef __cplusplus
 }
 #endif

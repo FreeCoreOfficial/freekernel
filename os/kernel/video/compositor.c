@@ -1,5 +1,8 @@
 #include "compositor.h"
 #include "framebuffer.h" /* fb_putpixel, fb_clear, fb_get_info */
+#include "../mem/kmalloc.h"
+#include "../string.h"
+#include "gpu.h"
 
 /* Import serial logging */
 extern void serial(const char *fmt, ...);
@@ -51,52 +54,71 @@ void compositor_remove_surface(surface_t* surface) {
 }
 
 void compositor_render(void) {
-    serial("[COMPOSITOR] Rendering frame...\n");
-
-    /* 1. Clear Framebuffer (Background) */
-    /* Using a default background color (Black) */
-    fb_clear(0x000000);
-
-    uint32_t fb_w = 0, fb_h = 0;
-    fb_get_info(&fb_w, &fb_h, 0, 0, 0);
+    uint32_t fb_w = 0, fb_h = 0, fb_pitch = 0;
+    fb_get_info(&fb_w, &fb_h, &fb_pitch, 0, 0);
 
     if (fb_w == 0 || fb_h == 0) {
-        serial("[COMPOSITOR] Error: Framebuffer not ready (w=%d, h=%d)\n", fb_w, fb_h);
         return;
     }
 
-    /* 2. Iterate Surfaces */
-    for (int i = 0; i < MAX_SURFACES; i++) {
-        surface_t* s = surfaces[i];
-        if (!s || !s->visible) continue;
+    /* Allocate one scanline buffer (32bpp) */
+    uint32_t* scanline = (uint32_t*)kmalloc(fb_w * 4);
+    if (!scanline) return;
 
-        /* 3. Blit Surface */
-        /* Simple clipping logic */
-        int32_t start_x = (s->x < 0) ? -s->x : 0;
-        int32_t start_y = (s->y < 0) ? -s->y : 0;
-        
-        int32_t end_x = s->width;
-        int32_t end_y = s->height;
+    /* Background color: Windows 1.0 Teal */
+    uint32_t bg_color = 0xFF008080;
+    
+    gpu_device_t* gpu = gpu_get_primary();
+    uint8_t* fb_base = (gpu && gpu->virt_addr) ? (uint8_t*)gpu->virt_addr : 0;
 
-        /* Clip against screen right/bottom */
-        if (s->x + end_x > (int32_t)fb_w) end_x = (int32_t)fb_w - s->x;
-        if (s->y + end_y > (int32_t)fb_h) end_y = (int32_t)fb_h - s->y;
+    for (uint32_t y = 0; y < fb_h; y++) {
+        /* 1. Clear scanline to background */
+        for (uint32_t x = 0; x < fb_w; x++) scanline[x] = bg_color;
 
-        /* Draw visible pixels */
-        for (int32_t y = start_y; y < end_y; y++) {
-            for (int32_t x = start_x; x < end_x; x++) {
-                /* Get pixel from surface buffer */
-                uint32_t color = s->pixels[y * s->width + x];
+        /* 2. Compose surfaces on this line */
+        for (int i = 0; i < MAX_SURFACES; i++) {
+            surface_t* s = surfaces[i];
+            if (!s || !s->visible) continue;
+
+            /* Check if surface intersects this line */
+            int s_y = s->y;
+            int s_h = s->height;
+            if ((int)y >= s_y && (int)y < s_y + s_h) {
+                /* Calculate source row */
+                int src_y = (int)y - s_y;
                 
-                /* Draw to framebuffer */
-                /* Coordinates on screen */
-                uint32_t screen_x = s->x + x;
-                uint32_t screen_y = s->y + y;
+                /* Calculate horizontal intersection */
+                int s_x = s->x;
+                int s_w = s->width;
                 
-                /* Note: fb_putpixel handles bounds checking internally usually, 
-                   but our clipping above ensures we are mostly safe. */
-                fb_putpixel(screen_x, screen_y, color);
+                /* Determine intersection with screen width */
+                int draw_start_x = (s_x < 0) ? 0 : s_x;
+                int draw_end_x = (s_x + s_w > (int)fb_w) ? (int)fb_w : (s_x + s_w);
+                
+                if (draw_start_x < draw_end_x) {
+                    /* Copy pixels */
+                    uint32_t* src_row = s->pixels + (src_y * s->width);
+                    int src_start_off = draw_start_x - s_x;
+                    
+                    for (int x = draw_start_x; x < draw_end_x; x++) {
+                        /* Simple opaque copy */
+                        scanline[x] = src_row[src_start_off + (x - draw_start_x)];
+                    }
+                }
+            }
+        }
+
+        /* 3. Blit scanline to Framebuffer */
+        if (fb_base) {
+            /* Fast path: direct memory copy */
+            memcpy(fb_base + (y * gpu->pitch), scanline, fb_w * 4);
+        } else {
+            /* Slow path: putpixel */
+            for (uint32_t x = 0; x < fb_w; x++) {
+                fb_putpixel(x, y, scanline[x]);
             }
         }
     }
+    
+    kfree(scanline);
 }

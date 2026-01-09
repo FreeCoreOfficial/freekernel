@@ -40,6 +40,7 @@
 #include "rm.h"
 #include "mkdir.h"
 #include "cd.h"
+#include "win.h"
 // Minimal freestanding helpers (no libc)
 
 /*
@@ -140,6 +141,7 @@ static int wrap_cmd_color(int argc, char **argv)     { return wrap_new_int(cmd_c
 static int wrap_cmd_rm(int argc, char **argv)        { return wrap_new_int(cmd_rm, argc, argv); }         /* int cmd_rm(int,char**) */
 static int wrap_cmd_mkdir(int argc, char **argv)     { return wrap_new_int(cmd_mkdir, argc, argv); }      /* int cmd_mkdir(int,char**) */
 static int wrap_cmd_cd(int argc, char **argv)        { return wrap_new_int(cmd_cd, argc, argv); }         /* int cmd_cd(int,char**) */
+static int wrap_cmd_launch(int argc, char **argv)    { return wrap_new_int(cmd_launch, argc, argv); }     /* int cmd_launch(int,char**) */
 /* Wrapper for execve */
 static int wrap_cmd_exec(int argc, char **argv) {
     if (argc < 2) return -1;
@@ -171,6 +173,7 @@ Command command_table[] = {
     { "fortune",   wrap_cmd_fortune },
     { "help",      wrap_cmd_help },
     { "ls",        wrap_cmd_ls },
+    { "launch",    wrap_cmd_launch },
     { "mkdir",     wrap_cmd_mkdir },
     { "login",     wrap_cmd_login },
     { "mem",       wrap_cmd_mem },
@@ -185,6 +188,7 @@ Command command_table[] = {
     { "uptime",    wrap_cmd_uptime },
     { "vfs",       wrap_cmd_vfs },
     { "write",     wrap_cmd_write },
+    { "win",       wrap_cmd_launch },
     { "vt",        wrap_cmd_vt },
 };
 

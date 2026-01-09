@@ -8,6 +8,9 @@
 #include "../events/event_queue.h"
 #include "../proc/exec.h"
 #include "../cmds/cd.h"
+#include "../ui/wm/wm.h"
+#include "../video/surface.h"
+#include "../ui/flyui/draw.h"
 
 /* Configuration */
 #define SHELL_BUF_SIZE 256
@@ -358,10 +361,49 @@ static void shell_autocomplete() {
 
 /* --- Public API --- */
 
+static window_t* shell_win = NULL;
+
 void shell_init() {
+    /* Text Mode Init Only */
     shell_init_context(0);
-    serial("[SHELL] Initialized.\n");
+    terminal_clear();
+    serial("[SHELL] Initialized (Text Mode).\n");
     shell_prompt();
+}
+
+void shell_create_window() {
+    int win_w = 640;
+    int win_h = 400 + 24; /* +24 for title bar */
+    surface_t* s = surface_create(win_w, win_h);
+    if (s) {
+        surface_clear(s, 0xFFFFFFFF); /* White background */
+        
+        /* Draw Title Bar (Windows 1.0 style: Black background, White text centered) */
+        fly_draw_rect_fill(s, 0, 0, win_w, 24, 0xFF000000);
+        const char* title = "Chrysalis OS MS-DOS Executive";
+        int title_len = strlen(title);
+        int title_x = (win_w - (title_len * 8)) / 2;
+        fly_draw_text(s, title_x, 4, title, 0xFFFFFFFF);
+        
+        shell_win = wm_create_window(s, 50, 50);
+        
+        terminal_set_surface(s);
+        terminal_set_rect(0, 24, win_w, 400);
+        
+        serial("[SHELL] Window created and terminal attached.\n");
+    }
+}
+
+void shell_destroy_window() {
+    if (shell_win) {
+        wm_destroy_window(shell_win);
+        shell_win = NULL;
+        terminal_set_surface(NULL);
+    }
+}
+
+int shell_is_window_active() {
+    return (shell_win != NULL);
 }
 
 void shell_init_context(int id) {

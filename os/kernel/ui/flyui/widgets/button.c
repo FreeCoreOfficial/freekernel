@@ -11,9 +11,11 @@ typedef struct {
 } button_data_t;
 
 static void button_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
-    /* Draw background */
+    /* Windows 1.0 Style: White background, Black border */
     fly_draw_rect_fill(surf, x, y, w->w, w->h, w->bg_color);
     fly_draw_rect_outline(surf, x, y, w->w, w->h, FLY_COLOR_BORDER);
+    /* Double border for "3D" effect (flat in Win1.0 but distinct) */
+    fly_draw_rect_outline(surf, x + 2, y + 2, w->w - 4, w->h - 4, FLY_COLOR_BORDER);
     
     /* Draw text centered */
     button_data_t* d = (button_data_t*)w->internal_data;

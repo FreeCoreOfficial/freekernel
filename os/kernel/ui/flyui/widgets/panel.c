@@ -4,6 +4,7 @@
 
 static void panel_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
     fly_draw_rect_fill(surf, x, y, w->w, w->h, w->bg_color);
+    /* Simple single border for panels */
     fly_draw_rect_outline(surf, x, y, w->w, w->h, FLY_COLOR_BORDER);
 }
 

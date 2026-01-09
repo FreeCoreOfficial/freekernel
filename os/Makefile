@@ -126,6 +126,7 @@ OBJS = \
 	$(BUILD)/cmds/rm.o \
 	$(BUILD)/cmds/mkdir.o \
 	$(BUILD)/cmds/cd.o \
+	$(BUILD)/cmds/win.o \
 	$(BUILD)/hardware/pci.o \
 	$(BUILD)/hardware/acpi.o \
 	$(BUILD)/arch/interrupts.o \
@@ -536,6 +537,9 @@ $(BUILD)/cmds/mkdir.o: kernel/cmds/mkdir.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/cmds/cd.o: kernel/cmds/cd.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/win.o: kernel/cmds/win.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/hardware/pci.o: kernel/hardware/pci.cpp

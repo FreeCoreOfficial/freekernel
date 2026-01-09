@@ -5,11 +5,11 @@
 extern "C" {
 #endif
 
-#define FLY_COLOR_BG        0xFF303030
-#define FLY_COLOR_PANEL     0xFF404040
-#define FLY_COLOR_BUTTON    0xFF606060
-#define FLY_COLOR_TEXT      0xFFEEEEEE
-#define FLY_COLOR_BORDER    0xFF202020
+#define FLY_COLOR_BG        0xFFFFFFFF  /* White Window Background */
+#define FLY_COLOR_PANEL     0xFFFFFFFF  /* White Panels */
+#define FLY_COLOR_BUTTON    0xFFFFFFFF  /* White Buttons */
+#define FLY_COLOR_TEXT      0xFF000000  /* Black Text */
+#define FLY_COLOR_BORDER    0xFF000000  /* Black Borders */
 
 #ifdef __cplusplus
 }

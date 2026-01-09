@@ -2,6 +2,7 @@
 #include "../../video/compositor.h"
 #include "../../mem/kmalloc.h"
 #include <stddef.h>
+#include "../../terminal.h"
 
 /* Import serial logging */
 extern void serial(const char *fmt, ...);
@@ -12,6 +13,7 @@ static window_t* windows_list = NULL;
 static window_t* focused_window = NULL;
 static wm_layout_t* current_layout = &wm_layout_floating;
 static uint32_t next_win_id = 1;
+static bool wm_dirty = true;
 
 /* Array for layout processing */
 static window_t* win_array[MAX_WINDOWS];
@@ -22,7 +24,16 @@ void wm_init(void) {
     focused_window = NULL;
     current_layout = &wm_layout_floating;
     win_count = 0;
+    wm_dirty = true;
     serial("[WM] Initialized\n");
+}
+
+void wm_mark_dirty(void) {
+    wm_dirty = true;
+}
+
+bool wm_is_dirty(void) {
+    return wm_dirty;
 }
 
 static void rebuild_win_array(void) {
@@ -66,6 +77,7 @@ window_t* wm_create_window(surface_t* surface, int x, int y) {
     }
 
     wm_focus_window(win);
+    wm_dirty = true;
     return win;
 }
 
@@ -103,6 +115,7 @@ void wm_destroy_window(window_t* win) {
 
     serial("[WM] Window destroyed id=%u\n", win->id);
     window_destroy(win);
+    wm_dirty = true;
 }
 
 void wm_focus_window(window_t* win) {
@@ -117,6 +130,7 @@ void wm_focus_window(window_t* win) {
     if (hooks && hooks->on_focus_change) {
         hooks->on_focus_change(old, win);
     }
+    wm_dirty = true;
 }
 
 window_t* wm_get_focused(void) {
@@ -128,9 +142,12 @@ void wm_set_layout(wm_layout_t* layout) {
         current_layout = layout;
         serial("[WM] Layout set to %s\n", layout->name);
     }
+    wm_dirty = true;
 }
 
 void wm_render(void) {
+    if (!wm_dirty && !terminal_is_dirty()) return;
+
     /* 1. Apply Layout */
     if (current_layout && current_layout->apply) {
         current_layout->apply(win_array, win_count);
@@ -154,4 +171,7 @@ void wm_render(void) {
     /* 4. Render */
     serial("[WM] Rendering\n");
     compositor_render();
+    
+    wm_dirty = false;
+    terminal_clear_dirty();
 }

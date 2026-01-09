@@ -47,8 +47,8 @@ static void render_widget_recursive(fly_widget_t* w, surface_t* surf, int x_off,
 void flyui_render(flyui_context_t* ctx) {
     if (!ctx || !ctx->surface) return;
     
-    /* Clear background */
-    flyui_surface_clear(ctx->surface, FLY_COLOR_BG);
+    /* Clear background only if root exists and we want to enforce it */
+    /* flyui_surface_clear(ctx->surface, FLY_COLOR_BG); */
     
     if (ctx->root) {
         render_widget_recursive(ctx->root, ctx->surface, 0, 0);

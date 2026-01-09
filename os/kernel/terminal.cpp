@@ -4,12 +4,25 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include "vt/vt.h"
+#include "drivers/serial.h"
+#include "video/surface.h"
+#include "string.h"
+#include "video/font8x16.h"
+
+extern "C" void serial(const char *fmt, ...);
 
 static uint16_t* vga = (uint16_t*)0xB8000;
 static int row = 0;
 static int col = 0;
 static const uint8_t color = 0x0F;
 static bool use_fb_console = false;
+static terminal_mode_t term_mode = TERMINAL_MODE_VGA;
+static surface_t* term_surface = NULL;
+static int term_x = 0;
+static int term_y = 0;
+static int term_w = 0;
+static int term_h = 0;
+static bool term_dirty = true;
 
 /* Redirection State */
 static char* capture_buf = 0;
@@ -33,11 +46,85 @@ static void scroll() {
     row = 24;
 }
 
+/* Window Mode Helpers */
+static void term_window_scroll() {
+    if (!term_surface) return;
+    /* Move pixels up by 16 rows */
+    uint32_t pitch = term_surface->width; // 32bpp assumed
+    uint32_t* pixels = term_surface->pixels;
+    int total_rows = term_h / 16;
+    
+    /* Scroll only the rect area */
+    for (int y = 1; y < total_rows; y++) {
+        int dst_y = term_y + (y - 1) * 16;
+        int src_y = term_y + y * 16;
+        
+        /* Move 16 scanlines */
+        for (int i = 0; i < 16; i++) {
+            uint32_t* dst_row = pixels + (dst_y + i) * pitch + term_x;
+            uint32_t* src_row = pixels + (src_y + i) * pitch + term_x;
+            memmove(dst_row, src_row, term_w * 4);
+        }
+    }
+
+    /* Clear bottom line */
+    int bottom_y = term_y + (total_rows - 1) * 16;
+    for (int i = 0; i < 16; i++) {
+        uint32_t* row_ptr = pixels + (bottom_y + i) * pitch + term_x;
+        for (int x = 0; x < term_w; x++) row_ptr[x] = 0xFFFFFFFF; /* White */
+    }
+    
+    row = total_rows - 1;
+}
+
+static void term_window_putpixel(int x, int y, uint32_t color) {
+    if (!term_surface) return;
+    int px = term_x + x;
+    int py = term_y + y;
+    if (px < 0 || py < 0 || px >= (int)term_surface->width || py >= (int)term_surface->height) return;
+    if (x >= term_w || y >= term_h) return;
+    
+    term_surface->pixels[py * term_surface->width + px] = color;
+}
+
+static void term_window_draw_char(char c, int x, int y) {
+    const uint8_t* glyph = &font8x16[(uint8_t)c * 16];
+    for (int i = 0; i < 16; i++) {
+        for (int j = 0; j < 8; j++) {
+            /* Windows 1.0 Console: Black text (0xFF000000) on White background (0xFFFFFFFF) */
+            uint32_t color = (glyph[i] & (1 << (7-j))) ? 0xFF000000 : 0xFFFFFFFF;
+            term_window_putpixel(x + j, y + i, color);
+        }
+    }
+}
+
 extern "C" void terminal_set_backend_fb(bool active) {
     use_fb_console = active;
+    term_mode = active ? TERMINAL_MODE_FB : TERMINAL_MODE_VGA;
+    serial("[TERM] Mode set to %s\n", active ? "FB" : "VGA");
+}
+
+extern "C" bool terminal_is_dirty(void) {
+    return term_dirty;
+}
+
+extern "C" void terminal_clear_dirty(void) {
+    term_dirty = false;
 }
 
 extern "C" void terminal_clear() {
+    if (term_mode == TERMINAL_MODE_WINDOW && term_surface) {
+        /* Clear only the rect */
+        uint32_t pitch = term_surface->width;
+        uint32_t* pixels = term_surface->pixels;
+        for (int y = 0; y < term_h; y++) {
+            uint32_t* row_ptr = pixels + (term_y + y) * pitch + term_x;
+            for (int x = 0; x < term_w; x++) row_ptr[x] = 0xFFFFFFFF;
+        }
+        row = 0; col = 0;
+        term_dirty = true;
+        return;
+    }
     if (use_fb_console) {
         fb_cons_clear();
         return;
@@ -57,6 +144,36 @@ extern "C" void terminal_putchar(char c) {
             capture_buf[(*capture_written)++] = c;
         }
         return; /* Do not print to screen when piped */
+    }
+
+    if (term_mode == TERMINAL_MODE_WINDOW && term_surface) {
+        int max_cols = term_w / 8;
+        int max_rows = term_h / 16;
+
+        if (c == '\n') {
+            row++; col = 0;
+            if (row >= max_rows) term_window_scroll();
+            term_dirty = true;
+            return;
+        }
+        if (c == '\r') { col = 0; return; }
+        if (c == '\b') {
+            if (col > 0) {
+                col--;
+                term_window_draw_char(' ', col * 8, row * 16);
+            }
+            term_dirty = true;
+            return;
+        }
+
+        term_window_draw_char(c, col * 8, row * 16);
+        col++;
+        if (col >= max_cols) {
+            col = 0; row++;
+            if (row >= max_rows) term_window_scroll();
+        }
+        term_dirty = true;
+        return;
     }
 
     if (use_fb_console) {
@@ -93,6 +210,10 @@ extern "C" void terminal_putchar(char c) {
 }
 
 extern "C" void terminal_writestring(const char* s) {
+    if (term_mode == TERMINAL_MODE_WINDOW) {
+        while (*s) terminal_putchar(*s++);
+        return;
+    }
     if (use_fb_console) {
         fb_cons_puts(s);
         return;
@@ -104,6 +225,38 @@ extern "C" void terminal_writestring(const char* s) {
 
 extern "C" void terminal_init() {
     terminal_clear();
+}
+
+extern "C" void terminal_set_surface(surface_t* s) {
+    if (s) {
+        term_surface = s;
+        term_mode = TERMINAL_MODE_WINDOW;
+        term_x = 0;
+        term_y = 0;
+        term_w = s->width;
+        term_h = s->height;
+        row = 0;
+        col = 0;
+        term_dirty = true;
+        serial("[TERM] Surface attached (0x%x). Mode: WINDOW\n", s);
+    } else {
+        term_surface = NULL;
+        term_mode = use_fb_console ? TERMINAL_MODE_FB : TERMINAL_MODE_VGA;
+        row = 0;
+        col = 0;
+        term_dirty = true;
+        serial("[TERM] Surface detached. Mode: TEXT/FB\n");
+    }
+}
+
+extern "C" void terminal_set_rect(int x, int y, int w, int h) {
+    term_x = x;
+    term_y = y;
+    term_w = w;
+    term_h = h;
+    row = 0;
+    col = 0;
+    term_dirty = true;
 }
 
 /* ---------- PRINT HELPERS (expanded) ---------- */

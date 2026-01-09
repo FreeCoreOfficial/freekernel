@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "video/surface.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +16,20 @@ void terminal_init();
 
 /* Switch backend to Framebuffer Console */
 void terminal_set_backend_fb(bool active);
+
+/* Terminal Modes */
+typedef enum {
+    TERMINAL_MODE_VGA = 0,
+    TERMINAL_MODE_FB,
+    TERMINAL_MODE_WINDOW
+} terminal_mode_t;
+
+void terminal_set_surface(surface_t* s);
+void terminal_set_rect(int x, int y, int w, int h);
+
+/* Dirty flag API */
+bool terminal_is_dirty(void);
+void terminal_clear_dirty(void);
 
 /* ===== NEW: printf support ===== */
 void terminal_printf(const char* fmt, ...);
