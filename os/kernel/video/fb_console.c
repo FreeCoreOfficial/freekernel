@@ -3,6 +3,7 @@
 #include "gpu.h"
 #include "font8x16.h"
 #include "../drivers/serial.h"
+#include "../colors/cl.h"
 #include "../string.h"
 #include "../mem/kmalloc.h"
 
@@ -34,11 +35,8 @@ static uint32_t* active_cursor_y = &cursor_y;
 
 #define FONT_W 8
 #define FONT_H 16
-#define DEFAULT_FG 0x00CCCCCC /* Light Grey (Linux-like) */
-#define DEFAULT_BG 0x00000000 /* Black */
 
-static uint32_t current_fg = DEFAULT_FG;
-static uint32_t current_bg = DEFAULT_BG;
+static cl_color_t current_attr = 0;
 
 /* Helper to draw a character using GPU ops */
 static void draw_char_at(uint32_t cx, uint32_t cy, char c, uint32_t fg, uint32_t bg) {
@@ -85,8 +83,10 @@ void fb_cons_redraw(void) {
             }
 
             for (uint32_t x = 0; x < max_cols; x++) {
-                console_cell_t cell = src_row ? src_row[x] : (console_cell_t){' ', current_fg, current_bg};
-                draw_char_at(x, y, cell.c, cell.fg, cell.bg);
+                console_cell_t cell = src_row ? src_row[x] : (console_cell_t){' ', current_attr};
+                uint32_t fg = cl_rgb(cl_fg(cell.attr));
+                uint32_t bg = cl_rgb(cl_bg(cell.attr));
+                draw_char_at(x, y, cell.c, fg, bg);
             }
         }
         return;
@@ -95,7 +95,9 @@ void fb_cons_redraw(void) {
     for (uint32_t y = 0; y < max_rows; y++) {
         for (uint32_t x = 0; x < max_cols; x++) {
             console_cell_t* cell = &active_text_buffer[y * max_cols + x];
-            draw_char_at(x, y, cell->c, cell->fg, cell->bg);
+            uint32_t fg = cl_rgb(cl_fg(cell->attr));
+            uint32_t bg = cl_rgb(cl_bg(cell->attr));
+            draw_char_at(x, y, cell->c, fg, bg);
         }
     }
 }
@@ -124,8 +126,7 @@ static void scroll(void) {
     console_cell_t* last_row = active_text_buffer + count;
     for (uint32_t i = 0; i < max_cols; i++) {
         last_row[i].c = ' ';
-        last_row[i].fg = current_fg;
-        last_row[i].bg = current_bg;
+        last_row[i].attr = current_attr;
     }
 
     /* Redraw screen from buffer (Faster and cleaner than VRAM read/write) */
@@ -153,9 +154,13 @@ static void draw_cursor(int on) {
     if (!on) {
         if (active_text_buffer) {
             console_cell_t* cell = &active_text_buffer[(*active_cursor_y) * max_cols + (*active_cursor_x)];
-            draw_char_at((*active_cursor_x), visual_y, cell->c, cell->fg, cell->bg);
+            uint32_t fg = cl_rgb(cl_fg(cell->attr));
+            uint32_t bg = cl_rgb(cl_bg(cell->attr));
+            draw_char_at((*active_cursor_x), visual_y, cell->c, fg, bg);
         } else {
-             draw_char_at((*active_cursor_x), visual_y, ' ', current_fg, current_bg);
+             uint32_t fg = cl_rgb(cl_fg(current_attr));
+             uint32_t bg = cl_rgb(cl_bg(current_attr));
+             draw_char_at((*active_cursor_x), visual_y, ' ', fg, bg);
         }
         return;
     }
@@ -186,6 +191,7 @@ void fb_cons_init(void) {
     max_rows = cons_height / FONT_H;
     cursor_x = 0;
     cursor_y = 0;
+    current_attr = cl_default();
     
     /* Allocate text buffer */
     /* Note: This initial buffer is used for VT0 or boot log until VT init takes over */
@@ -203,8 +209,7 @@ void fb_cons_init(void) {
     /* Initialize text buffer */
     for (uint32_t i = 0; i < max_cols * max_rows; i++) {
         active_text_buffer[i].c = ' ';
-        active_text_buffer[i].fg = current_fg;
-        active_text_buffer[i].bg = current_bg;
+        active_text_buffer[i].attr = current_attr;
     }
     
     history_head = 0;
@@ -212,7 +217,7 @@ void fb_cons_init(void) {
     view_offset = 0;
 
     /* Clear screen */
-    gpu->ops->clear(gpu, current_bg);
+    gpu->ops->clear(gpu, cl_rgb(cl_bg(current_attr)));
     serial("[FB_CONS] Screen cleared.\n");
     
     draw_cursor(1);
@@ -254,9 +259,10 @@ static void fb_cons_putc_internal(char c) {
             
             console_cell_t* cell = &active_text_buffer[(*active_cursor_y) * max_cols + (*active_cursor_x)];
             cell->c = ' ';
-            cell->fg = current_fg;
-            cell->bg = current_bg;
-            draw_char_at(*active_cursor_x, *active_cursor_y, ' ', current_fg, current_bg);
+            cell->attr = current_attr;
+            uint32_t fg = cl_rgb(cl_fg(current_attr));
+            uint32_t bg = cl_rgb(cl_bg(current_attr));
+            draw_char_at(*active_cursor_x, *active_cursor_y, ' ', fg, bg);
             (*active_cursor_x)++;
         }
     } else if (c >= ' ') {
@@ -273,9 +279,10 @@ static void fb_cons_putc_internal(char c) {
         if (*active_cursor_x < max_cols && *active_cursor_y < max_rows) {
             console_cell_t* cell = &active_text_buffer[(*active_cursor_y) * max_cols + (*active_cursor_x)];
             cell->c = c;
-            cell->fg = current_fg;
-            cell->bg = current_bg;
-            draw_char_at(*active_cursor_x, *active_cursor_y, c, current_fg, current_bg);
+            cell->attr = current_attr;
+            uint32_t fg = cl_rgb(cl_fg(current_attr));
+            uint32_t bg = cl_rgb(cl_bg(current_attr));
+            draw_char_at(*active_cursor_x, *active_cursor_y, c, fg, bg);
         }
         (*active_cursor_x)++;
     }
@@ -322,8 +329,7 @@ void fb_cons_clear(void) {
     /* Clear text buffer */
     for (uint32_t i = 0; i < max_cols * max_rows; i++) {
         active_text_buffer[i].c = ' ';
-        active_text_buffer[i].fg = current_fg;
-        active_text_buffer[i].bg = current_bg;
+        active_text_buffer[i].attr = current_attr;
     }
     
     /* Reset cursor */
@@ -334,7 +340,7 @@ void fb_cons_clear(void) {
     view_offset = 0;
     
     /* Clear screen and redraw cursor */
-    gpu->ops->clear(gpu, current_bg);
+    gpu->ops->clear(gpu, cl_rgb(cl_bg(current_attr)));
     draw_cursor(1);
     serial("[FB_CONS] Clear done.\n");
 }
@@ -368,4 +374,8 @@ void fb_cons_set_state(console_cell_t* new_buf, uint32_t* new_cx, uint32_t* new_
     active_text_buffer = new_buf;
     active_cursor_x = new_cx;
     active_cursor_y = new_cy;
+}
+
+void fb_cons_set_attr(cl_color_t attr) {
+    current_attr = attr;
 }

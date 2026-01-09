@@ -36,6 +36,7 @@
 #include "write.h"
 #include "cs.h"
 #include "vt_cmd.h"
+#include "color.h"
 // Minimal freestanding helpers (no libc)
 typedef unsigned long size_t;
 
@@ -133,6 +134,7 @@ static int wrap_cmd_pmm(int argc, char **argv)       { return wrap_new_int(cmd_p
 static int wrap_cmd_write(int argc, char **argv)     { return wrap_new_int(cmd_write, argc, argv); }      /* int cmd_write(int,char**) */
 static int wrap_cmd_cs(int argc, char **argv)        { return wrap_new_int(cmd_cs_main, argc, argv); }    /* int cmd_cs(int,char**) */
 static int wrap_cmd_vt(int argc, char **argv)        { return wrap_new_int(cmd_vt, argc, argv); }         /* int cmd_vt(int,char**) */
+static int wrap_cmd_color(int argc, char **argv)     { return wrap_new_int(cmd_color, argc, argv); }      /* int cmd_color(int,char**) */
 /* Wrapper for execve */
 static int wrap_cmd_exec(int argc, char **argv) {
     if (argc < 2) return -1;
@@ -148,6 +150,7 @@ Command command_table[] = {
     { "chrysver",  wrap_cmd_chrysver },
     { "crash",     wrap_cmd_crash },
     { "cat",       wrap_cmd_cat },
+    { "color",     wrap_cmd_color },
     { "clear",     wrap_cmd_clear },
     { "credits",   wrap_cmd_credits },
     { "date",      wrap_cmd_date },

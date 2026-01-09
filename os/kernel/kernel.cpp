@@ -79,6 +79,7 @@
 #include "video/gpu_bochs.h"
 #include "smp/multiboot.h"
 #include "vt/vt.h"
+#include "colors/cl.h"
 
 
 
@@ -531,6 +532,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
              gpu->ops->fillrect(gpu, 350, 100, 200, 150, 0x00FF0000);
         }
         
+        /* Initialize Colors */
+        cl_init();
+
         /* Initialize Framebuffer Console and redirect terminal output */
         fb_cons_init();
         terminal_set_backend_fb(true);

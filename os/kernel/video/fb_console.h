@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include "../colors/cl.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -8,8 +9,7 @@ extern "C" {
 
 typedef struct {
     char c;
-    uint32_t fg;
-    uint32_t bg;
+    cl_color_t attr;
 } console_cell_t;
 
 void fb_cons_init(void);
@@ -17,6 +17,9 @@ void fb_cons_putc(char c);
 void fb_cons_puts(const char* s);
 void fb_cons_clear(void);
 void fb_cons_scroll(int lines);
+
+/* Set current text attribute (color) */
+void fb_cons_set_attr(cl_color_t attr);
 
 /* VT Integration API */
 void fb_cons_get_dims(uint32_t* cols, uint32_t* rows);

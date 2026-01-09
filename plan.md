@@ -141,7 +141,7 @@ This level separates hobby kernels from serious systems.
 | ✅     | Piping            |
 | ✅    | Scrollback        |
 | ✅     | Scripting         |
-| 🔲     | Virtual Terminals |
+| ✅     | Virtual Terminals |
 | ✅     | Cursor            |
 | 🔲     | Colors            |
 | 🔲     | Text Editor       |

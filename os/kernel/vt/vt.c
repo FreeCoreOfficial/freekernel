@@ -8,6 +8,7 @@
 #include "../drivers/serial.h"
 #include "../shell/shell.h"
 #include "../string.h"
+#include "../colors/cl.h"
 
 /* Max dimensions for static allocation */
 #define VT_MAX_COLS 160
@@ -55,8 +56,7 @@ void vt_init(void) {
         /* Initialize buffer with spaces */
         for (uint32_t j = 0; j < VT_MAX_ROWS * VT_MAX_COLS; j++) {
             vts[i].buffer[j].c = ' ';
-            vts[i].buffer[j].fg = 0x00CCCCCC;
-            vts[i].buffer[j].bg = 0x00000000;
+            vts[i].buffer[j].attr = cl_default();
         }
         
         /* Initialize shell context for this VT */
@@ -129,8 +129,7 @@ void vt_clear(int id) {
         /* Clear background buffer */
         for (uint32_t j = 0; j < VT_MAX_ROWS * VT_MAX_COLS; j++) {
             vts[id].buffer[j].c = ' ';
-            vts[id].buffer[j].fg = 0x00CCCCCC;
-            vts[id].buffer[j].bg = 0x00000000;
+            vts[id].buffer[j].attr = cl_default();
         }
         vts[id].cursor_x = 0;
         vts[id].cursor_y = 0;

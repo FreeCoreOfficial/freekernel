@@ -122,6 +122,7 @@ OBJS = \
 	$(BUILD)/cmds/write.o \
 	$(BUILD)/cmds/cs.o \
 	$(BUILD)/cmds/vt_cmd.o \
+	$(BUILD)/cmds/color.o \
 	$(BUILD)/hardware/pci.o \
 	$(BUILD)/hardware/acpi.o \
 	$(BUILD)/arch/interrupts.o \
@@ -152,6 +153,7 @@ OBJS = \
 	$(BUILD)/gpu.o \
 	$(BUILD)/gpu_bochs.o \
 	$(BUILD)/vt.o \
+	$(BUILD)/colors/cl.o \
 
 
 
@@ -178,6 +180,7 @@ dirs: $(BUILD)
 	mkdir -p $(BUILD)/arch/i386/apic
 	mkdir -p $(BUILD)/smp
 	mkdir -p $(BUILD)/hardware
+	mkdir -p ${BUILD}/colors
 
 
 
@@ -501,6 +504,9 @@ $(BUILD)/cmds/write.o: kernel/cmds/write.cpp | dirs
 $(BUILD)/cmds/vt_cmd.o: kernel/cmds/vt_cmd.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(BUILD)/cmds/color.o: kernel/cmds/color.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(BUILD)/hardware/pci.o: kernel/hardware/pci.cpp
 	@mkdir -p $(BUILD)/hardware
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -622,6 +628,9 @@ $(BUILD)/gpu_bochs.o: kernel/video/gpu_bochs.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/vt.o: kernel/vt/vt.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/colors/cl.o: kernel/colors/cl.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # -------------------------
