@@ -1,4 +1,6 @@
 #pragma once
+#include "../input/input.h"
+#include "../ui/wm/window.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +24,10 @@ void shell_set_active_context(int id);
 void shell_create_window(void);
 void shell_destroy_window(void);
 int  shell_is_window_active(void);
+
+/* Event handling for window mode */
+bool shell_handle_event(input_event_t* ev);
+window_t* shell_get_window(void);
 
 #ifdef __cplusplus
 }

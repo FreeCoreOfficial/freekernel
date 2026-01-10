@@ -175,6 +175,7 @@ OBJS = \
 	$(BUILD)/ui/flyui/widgets/label.o \
 	$(BUILD)/ui/flyui/widgets/button.o \
 	$(BUILD)/ui/flyui/widgets/panel.o \
+	$(BUILD)/apps/clock_app.o \
 
 
 
@@ -204,6 +205,7 @@ dirs: $(BUILD)
 	mkdir -p ${BUILD}/colors
 	mkdir -p $(BUILD)/ui/wm
 	mkdir -p $(BUILD)/ui/flyui
+	mkdir -p $(BUILD)/apps
 
 
 
@@ -734,6 +736,10 @@ $(BUILD)/ui/flyui/widgets/button.o: kernel/ui/flyui/widgets/button.c | dirs
 $(BUILD)/ui/flyui/widgets/panel.o: kernel/ui/flyui/widgets/panel.c | dirs
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/apps/clock_app.o: kernel/apps/clock_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # -------------------------
 # LINK

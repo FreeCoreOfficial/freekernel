@@ -385,6 +385,13 @@ void shell_create_window() {
         int title_x = (win_w - (title_len * 8)) / 2;
         fly_draw_text(s, title_x, 4, title, 0xFFFFFFFF);
         
+        /* Close Button [X] */
+        int bx = win_w - 20;
+        int by = 4;
+        fly_draw_rect_fill(s, bx, by, 16, 16, 0xFFC0C0C0);
+        fly_draw_rect_outline(s, bx, by, 16, 16, 0xFFFFFFFF);
+        fly_draw_text(s, bx + 4, by, "X", 0xFF000000);
+        
         shell_win = wm_create_window(s, 50, 50);
         
         terminal_set_surface(s);
@@ -401,11 +408,34 @@ void shell_destroy_window() {
         wm_destroy_window(shell_win);
         shell_win = NULL;
         terminal_set_surface(NULL);
+        terminal_set_rendering(false);
     }
 }
 
 int shell_is_window_active() {
     return (shell_win != NULL);
+}
+
+window_t* shell_get_window(void) {
+    return shell_win;
+}
+
+bool shell_handle_event(input_event_t* ev) {
+    if (!shell_win) return false;
+
+    if (ev->type == INPUT_MOUSE_CLICK && ev->pressed) {
+        int lx = ev->mouse_x - shell_win->x;
+        int ly = ev->mouse_y - shell_win->y;
+        
+        /* Close Button Rect: x=W-20, y=4, w=16, h=16 */
+        if (lx >= shell_win->w - 20 && lx <= shell_win->w - 4 && ly >= 4 && ly <= 20) {
+            serial("[SHELL] Close button clicked.\n");
+            shell_destroy_window();
+            wm_mark_dirty();
+            return true;
+        }
+    }
+    return false;
 }
 
 void shell_init_context(int id) {

@@ -9,6 +9,7 @@
 #include "../ui/flyui/theme.h"
 #include "../shell/shell.h"
 #include "../ui/flyui/bmp.h"
+#include "../apps/clock_app.h"
 
 extern "C" void serial(const char *fmt, ...);
 
@@ -39,6 +40,16 @@ static bool terminal_btn_event(fly_widget_t* w, fly_event_t* e) {
     else if (e->type == FLY_EVENT_MOUSE_DOWN) {
         /* Consumăm evenimentul de click și redesenăm pentru efect vizual */
         wm_mark_dirty();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Ceasul */
+static bool clock_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        clock_app_create();
         return true;
     }
     return false;
@@ -80,6 +91,12 @@ static void create_program_manager() {
     btn->x = 10; btn->y = 80; btn->w = 100; btn->h = 30;
     btn->on_event = terminal_btn_event;
     fly_widget_add(root, btn);
+
+    /* Clock Button */
+    fly_widget_t* btn_clk = fly_button_create("Clock");
+    btn_clk->x = 120; btn_clk->y = 80; btn_clk->w = 100; btn_clk->h = 30;
+    btn_clk->on_event = clock_btn_event;
+    fly_widget_add(root, btn_clk);
 
     /* 4. Initial Render */
     flyui_render(progman_ctx);
@@ -132,6 +149,9 @@ extern "C" int cmd_launch(int argc, char** argv) {
     int drag_off_y = 0;
 
     while (is_gui_running) {
+        /* Update Apps */
+        clock_app_update();
+
         /* Poll Input */
         while (input_pop(&ev)) {
             /* Handle Global Keys */
@@ -178,6 +198,18 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     } else {
                         /* Mouse Up: Stop Dragging */
                         drag_win = NULL;
+                    }
+                }
+
+                /* 3.1 Dispatch to Clock App */
+                if (target == clock_app_get_window()) {
+                    clock_app_handle_event(&ev);
+                }
+
+                /* 3.2 Dispatch to Shell Window */
+                if (target == shell_get_window()) {
+                    if (shell_handle_event(&ev)) {
+                        target = NULL; /* Window destroyed */
                     }
                 }
 
