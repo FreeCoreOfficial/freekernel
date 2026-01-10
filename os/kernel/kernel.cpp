@@ -582,10 +582,15 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     int ahci_ports = ahci_init();
     io_sched_init(); /* Init Async IO Scheduler */
 
-    if (ahci_ports > 0) {
-        serial("[KERNEL] AHCI initialized %d ports. Disabling Legacy ATA.\n", ahci_ports);
-    } else {
-        serial("[KERNEL] AHCI not available or no ports active. Fallback to ATA.\n");
+    /* Robust Disk Initialization Logic */
+    bool disk_found = (ahci_ports > 0); /* Assume if ports found, devices might be there */
+    
+    if (disk_found) {
+        serial("[KERNEL] AHCI initialized (%d ports).\n", ahci_ports);
+    } 
+    
+    if (ahci_ports == 0) {
+        serial("[KERNEL] AHCI not active or ahci0 missing. Initializing Legacy ATA...\n");
         ata_init();
     }
     
@@ -704,8 +709,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 // );
 
 terminal_writestring("[kernel] initializing PCI\n");
-pci_init(); // DISABLED: Potential crash source
-//terminal_writestring("[kernel] pci_init skipped for stability\n");
+pci_init();
 
     /* Initialize USB Subsystem (UHCI) */
     usb_core_init();

@@ -6,6 +6,7 @@ extern "C" {
 
 /* Entry point pentru mediul grafic (comanda 'launch' sau 'win') */
 int cmd_launch(int argc, char** argv);
+int cmd_launch_exit(int argc, char** argv);
 
 #ifdef __cplusplus
 }

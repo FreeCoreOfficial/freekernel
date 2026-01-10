@@ -134,8 +134,27 @@ void pmm_init(uint32_t mb_magic, void* mb_addr)
             tag = (struct multiboot2_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
         }
     } else if (!is_mb2 && mmap_addr != 0) {
-        // Legacy Multiboot 1 logic (omitted for brevity as we are on MB2 now, but structure is similar)
-        // ...
+        /* Legacy Multiboot 1 logic */
+        multiboot_memory_map_t* mmap = (multiboot_memory_map_t*)mmap_addr;
+        uintptr_t mmap_end = mmap_addr + mmap_len;
+
+        while ((uintptr_t)mmap < mmap_end) {
+            if (mmap->type == 1) { /* 1 = Available */
+                uint64_t start = mmap->addr;
+                uint64_t end = mmap->addr + mmap->len;
+
+                for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
+                    uint32_t frame = (uint32_t)(addr / PAGE_SIZE);
+                    if (frame < total_frames) {
+                        if (bitmap_test(frame)) {
+                            bitmap_clear(frame);
+                            used_frames--;
+                        }
+                    }
+                }
+            }
+            mmap = (multiboot_memory_map_t*)((uintptr_t)mmap + mmap->size + sizeof(uint32_t));
+        }
     }
 
     /* 4. reserve kernel frames (0 .. kernel_end_frame) + bitmap frames */

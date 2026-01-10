@@ -14,6 +14,7 @@ extern "C" void serial(const char *fmt, ...);
 /* Program Manager State */
 static window_t* progman_win = NULL;
 static flyui_context_t* progman_ctx = NULL;
+static bool is_gui_running = false;
 
 /* Button Handler */
 /* Button Handler: Lansează Terminalul */
@@ -81,8 +82,24 @@ static void create_program_manager() {
     progman_win = wm_create_window(s, 100, 100);
 }
 
+extern "C" int cmd_launch_exit(int argc, char** argv) {
+    (void)argc; (void)argv;
+    if (is_gui_running) {
+        is_gui_running = false;
+        return 0;
+    }
+    terminal_writestring("GUI is not running.\n");
+    return 1;
+}
+
 extern "C" int cmd_launch(int argc, char** argv) {
     (void)argc; (void)argv;
+    
+    if (is_gui_running) {
+        terminal_writestring("GUI is already running.\n");
+        return 1;
+    }
+    is_gui_running = true;
     
     serial("[WIN] Starting GUI environment...\n");
 
@@ -97,7 +114,6 @@ extern "C" int cmd_launch(int argc, char** argv) {
     create_program_manager();
     
     /* 4. Main GUI Loop */
-    bool running = true;
     input_event_t ev;
     
     /* Force initial render */
@@ -109,13 +125,13 @@ extern "C" int cmd_launch(int argc, char** argv) {
     int drag_off_x = 0;
     int drag_off_y = 0;
 
-    while (running) {
+    while (is_gui_running) {
         /* Poll Input */
         while (input_pop(&ev)) {
             /* Handle Global Keys */
             if (ev.type == INPUT_KEYBOARD && ev.pressed) {
                 if (ev.keycode == 0x58) { /* F12 to Exit */
-                     running = false;
+                     is_gui_running = false;
                 }
                 
                 /* Route keyboard to Shell if it's active and focused (or if progman isn't focused) */
@@ -211,5 +227,6 @@ extern "C" int cmd_launch(int argc, char** argv) {
     terminal_set_rendering(true);
     terminal_clear(); /* Clear artifacts */
     serial("[WIN] GUI shutdown. Returning to text mode.\n");
+    is_gui_running = false;
     return 0;
 }

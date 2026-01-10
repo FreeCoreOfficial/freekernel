@@ -142,6 +142,7 @@ static int wrap_cmd_rm(int argc, char **argv)        { return wrap_new_int(cmd_r
 static int wrap_cmd_mkdir(int argc, char **argv)     { return wrap_new_int(cmd_mkdir, argc, argv); }      /* int cmd_mkdir(int,char**) */
 static int wrap_cmd_cd(int argc, char **argv)        { return wrap_new_int(cmd_cd, argc, argv); }         /* int cmd_cd(int,char**) */
 static int wrap_cmd_launch(int argc, char **argv)    { return wrap_new_int(cmd_launch, argc, argv); }     /* int cmd_launch(int,char**) */
+static int wrap_cmd_launch_exit(int argc, char **argv) { return wrap_new_int(cmd_launch_exit, argc, argv); } /* int cmd_launch_exit(int,char**) */
 /* Wrapper for execve */
 static int wrap_cmd_exec(int argc, char **argv) {
     if (argc < 2) return -1;
@@ -174,6 +175,7 @@ Command command_table[] = {
     { "help",      wrap_cmd_help },
     { "ls",        wrap_cmd_ls },
     { "launch",    wrap_cmd_launch },
+    { "launch-exit", wrap_cmd_launch_exit },
     { "mkdir",     wrap_cmd_mkdir },
     { "login",     wrap_cmd_login },
     { "mem",       wrap_cmd_mem },

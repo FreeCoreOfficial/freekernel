@@ -58,6 +58,13 @@ typedef struct {
     uint8_t  framebuffer_blue_mask_size;
 } __attribute__((packed)) multiboot_info_t;
 
+typedef struct {
+    uint32_t size;
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+} __attribute__((packed)) multiboot_memory_map_t;
+
 /* Multiboot 2 Tag Header */
 struct multiboot2_tag {
     uint32_t type;
