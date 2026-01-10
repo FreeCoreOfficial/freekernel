@@ -10,6 +10,8 @@
 #include "../shell/shell.h"
 #include "../ui/flyui/bmp.h"
 #include "../apps/clock_app.h"
+#include "../apps/calculator_app.h"
+#include "../apps/notepad_app.h"
 
 extern "C" void serial(const char *fmt, ...);
 
@@ -50,6 +52,26 @@ static bool clock_btn_event(fly_widget_t* w, fly_event_t* e) {
     (void)w;
     if (e->type == FLY_EVENT_MOUSE_UP) {
         clock_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Calculatorul */
+static bool calc_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        calculator_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Notepad */
+static bool note_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        notepad_app_create();
         return true;
     }
     return false;
@@ -97,6 +119,18 @@ static void create_program_manager() {
     btn_clk->x = 120; btn_clk->y = 80; btn_clk->w = 100; btn_clk->h = 30;
     btn_clk->on_event = clock_btn_event;
     fly_widget_add(root, btn_clk);
+
+    /* Calculator Button */
+    fly_widget_t* btn_calc = fly_button_create("Calc");
+    btn_calc->x = 230; btn_calc->y = 80; btn_calc->w = 100; btn_calc->h = 30;
+    btn_calc->on_event = calc_btn_event;
+    fly_widget_add(root, btn_calc);
+
+    /* Notepad Button */
+    fly_widget_t* btn_note = fly_button_create("Notepad");
+    btn_note->x = 10; btn_note->y = 120; btn_note->w = 100; btn_note->h = 30;
+    btn_note->on_event = note_btn_event;
+    fly_widget_add(root, btn_note);
 
     /* 4. Initial Render */
     flyui_render(progman_ctx);
@@ -161,10 +195,12 @@ extern "C" int cmd_launch(int argc, char** argv) {
                 }
                 
                 /* Route keyboard to Shell if it's active and focused (or if progman isn't focused) */
-                /* Dacă fereastra Program Manager NU are focusul, presupunem că e la Terminal */
-                if (wm_get_focused() != progman_win) {
+                window_t* focused = wm_get_focused();
+                if (focused == shell_get_window()) {
                      shell_handle_char((char)ev.keycode);
-                }
+                } else if (focused == notepad_app_get_window()) {
+                     notepad_app_handle_key((char)ev.keycode);
+                } 
             }
             
             /* Mouse Event Handling */
@@ -211,6 +247,16 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     if (shell_handle_event(&ev)) {
                         target = NULL; /* Window destroyed */
                     }
+                }
+
+                /* 3.3 Dispatch to Calculator */
+                if (target == calculator_app_get_window()) {
+                    calculator_app_handle_event(&ev);
+                }
+
+                /* 3.4 Dispatch to Notepad */
+                if (target == notepad_app_get_window()) {
+                    notepad_app_handle_event(&ev);
                 }
 
                 /* 3. Dispatch to Program Manager (only if it's the target and we are NOT dragging) */

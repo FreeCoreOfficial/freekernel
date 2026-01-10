@@ -176,6 +176,8 @@ OBJS = \
 	$(BUILD)/ui/flyui/widgets/button.o \
 	$(BUILD)/ui/flyui/widgets/panel.o \
 	$(BUILD)/apps/clock_app.o \
+	$(BUILD)/apps/calculator_app.o \
+	$(BUILD)/apps/notepad_app.o \
 
 
 
@@ -738,6 +740,14 @@ $(BUILD)/ui/flyui/widgets/panel.o: kernel/ui/flyui/widgets/panel.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/apps/clock_app.o: kernel/apps/clock_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/calculator_app.o: kernel/apps/calculator_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/notepad_app.o: kernel/apps/notepad_app.cpp | dirs
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
