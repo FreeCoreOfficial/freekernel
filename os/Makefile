@@ -179,6 +179,14 @@ OBJS = \
 	$(BUILD)/apps/calculator_app.o \
 	$(BUILD)/apps/notepad_app.o \
 	$(BUILD)/apps/calendar_app.o \
+	$(BUILD)/apps/file_manager_app.o \
+	$(BUILD)/apps/image_viewer_app.o \
+	$(BUILD)/apps/sysinfo_app.o \
+	$(BUILD)/apps/run_dialog_app.o \
+	$(BUILD)/apps/task_manager_app.o \
+	$(BUILD)/apps/paint_app.o \
+	$(BUILD)/apps/demo3d_app.o \
+	$(BUILD)/apps/app_manager.o \
 
 
 
@@ -753,6 +761,38 @@ $(BUILD)/apps/notepad_app.o: kernel/apps/notepad_app.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/apps/calendar_app.o: kernel/apps/calendar_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/file_manager_app.o: kernel/apps/file_manager_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/image_viewer_app.o: kernel/apps/image_viewer_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/sysinfo_app.o: kernel/apps/sysinfo_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/run_dialog_app.o: kernel/apps/run_dialog_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/task_manager_app.o: kernel/apps/task_manager_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/paint_app.o: kernel/apps/paint_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/demo3d_app.o: kernel/apps/demo3d_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/app_manager.o: kernel/apps/app_manager.cpp | dirs
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

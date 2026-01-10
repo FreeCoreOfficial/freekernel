@@ -13,6 +13,16 @@ void fat_automount(void);
 /* Listează conținutul unui director (path="/" pentru root) */
 void fat32_list_directory(const char* path);
 
+/* Structure for directory listing API */
+typedef struct {
+    char name[13];
+    uint32_t size;
+    uint8_t is_dir;
+} fat_file_info_t;
+
+/* Read directory entries into a buffer. Returns number of entries read. */
+int fat32_read_directory(const char* path, fat_file_info_t* out, int max_entries);
+
 /* Citește un fișier complet (limitat la max_size) */
 int fat32_read_file(const char* path, void* buf, uint32_t max_size);
 

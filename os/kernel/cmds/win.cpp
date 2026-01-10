@@ -10,13 +10,12 @@
 #include "../ui/flyui/theme.h"
 #include "../shell/shell.h"
 #include "../ui/flyui/bmp.h"
-#include "../apps/clock_app.h"
-#include "../apps/calculator_app.h"
-#include "../apps/notepad_app.h"
-#include "../apps/calendar_app.h"
+#include "../apps/apps.h"
 #include "../string.h"
 #include "../time/clock.h"
 #include "../ui/flyui/draw.h"
+#include "../apps/app_manager.h"
+#include "../apps/demo3d_app.h"
 
 extern "C" void serial(const char *fmt, ...);
 
@@ -95,6 +94,66 @@ static bool cal_btn_event(fly_widget_t* w, fly_event_t* e) {
     return false;
 }
 
+/* Button Handler: Lansează File Manager */
+static bool files_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        file_manager_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Image Viewer */
+static bool img_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        image_viewer_app_create(NULL);
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează SysInfo */
+static bool info_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        sysinfo_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Task Manager */
+static bool task_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        task_manager_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Paint */
+static bool paint_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        paint_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Demo 3D */
+static bool demo_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        demo3d_app_create();
+        return true;
+    }
+    return false;
+}
+
 /* Taskbar Clock Widget Draw */
 static void taskbar_clock_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
     /* Background */
@@ -163,6 +222,16 @@ static bool popup_no_event(fly_widget_t* w, fly_event_t* e) {
             popup_ctx = NULL;
             wm_mark_dirty();
         }
+        return true;
+    }
+    return false;
+}
+
+/* Run Button Handler */
+static bool run_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        run_dialog_app_create();
         return true;
     }
     return false;
@@ -246,51 +315,93 @@ static void create_taskbar() {
 
     int x = 10;
     int y = 5;
-    int bw = 90;
+    int bw = 60; /* Reduced width to fit more apps */
     int bh = 30;
-    int gap = 10;
+    int gap = 5;
 
     /* Start Button (<) */
     fly_widget_t* btn_start = fly_button_create("<");
-    btn_start->x = x; btn_start->y = y; btn_start->w = 40; btn_start->h = bh;
+    btn_start->x = x; btn_start->y = y; btn_start->w = 30; btn_start->h = bh;
     btn_start->on_event = start_btn_event;
     fly_widget_add(root, btn_start);
+    x += 30 + gap;
+
+    /* Run Button */
+    fly_widget_t* btn_run = fly_button_create("Run");
+    btn_run->x = x; btn_run->y = y; btn_run->w = 40; btn_run->h = bh;
+    btn_run->on_event = run_btn_event;
+    fly_widget_add(root, btn_run);
     x += 40 + gap;
 
     /* Terminal Button */
-    fly_widget_t* btn = fly_button_create("Terminal");
+    fly_widget_t* btn = fly_button_create("Term");
     btn->x = x; btn->y = y; btn->w = bw; btn->h = bh;
     btn->on_event = terminal_btn_event;
     fly_widget_add(root, btn);
     x += bw + gap;
 
-    /* Clock Button */
-    fly_widget_t* btn_clk = fly_button_create("Clock");
-    btn_clk->x = x; btn_clk->y = y; btn_clk->w = bw; btn_clk->h = bh;
-    btn_clk->on_event = clock_btn_event;
-    fly_widget_add(root, btn_clk);
-    x += bw + gap;
-
-    /* Calculator Button */
-    fly_widget_t* btn_calc = fly_button_create("Calc");
-    btn_calc->x = x; btn_calc->y = y; btn_calc->w = bw; btn_calc->h = bh;
-    btn_calc->on_event = calc_btn_event;
-    fly_widget_add(root, btn_calc);
+    /* File Manager */
+    fly_widget_t* btn_files = fly_button_create("Files");
+    btn_files->x = x; btn_files->y = y; btn_files->w = bw; btn_files->h = bh;
+    btn_files->on_event = files_btn_event;
+    fly_widget_add(root, btn_files);
     x += bw + gap;
 
     /* Notepad Button */
-    fly_widget_t* btn_note = fly_button_create("Notepad");
-    btn_note->x = x; btn_note->y = y; btn_note->w = bw; btn_note->h = bh;
+    fly_widget_t* btn_note = fly_button_create("Edit");
+    btn_note->x = x; btn_note->y = y; btn_note->w = 50; btn_note->h = bh;
     btn_note->on_event = note_btn_event;
     fly_widget_add(root, btn_note);
-    x += bw + gap;
+    x += 50 + gap;
+
+    /* Paint */
+    fly_widget_t* btn_paint = fly_button_create("Paint");
+    btn_paint->x = x; btn_paint->y = y; btn_paint->w = 50; btn_paint->h = bh;
+    btn_paint->on_event = paint_btn_event;
+    fly_widget_add(root, btn_paint);
+    x += 50 + gap;
+
+    /* Calculator Button */
+    fly_widget_t* btn_calc = fly_button_create("Calc");
+    btn_calc->x = x; btn_calc->y = y; btn_calc->w = 50; btn_calc->h = bh;
+    btn_calc->on_event = calc_btn_event;
+    fly_widget_add(root, btn_calc);
+    x += 50 + gap;
+
+    /* Clock Button */
+    fly_widget_t* btn_clk = fly_button_create("Clock");
+    btn_clk->x = x; btn_clk->y = y; btn_clk->w = 50; btn_clk->h = bh;
+    btn_clk->on_event = clock_btn_event;
+    fly_widget_add(root, btn_clk);
+    x += 50 + gap;
 
     /* Calendar Button */
-    fly_widget_t* btn_cal = fly_button_create("Calendar");
-    btn_cal->x = x; btn_cal->y = y; btn_cal->w = bw; btn_cal->h = bh;
+    fly_widget_t* btn_cal = fly_button_create("Cal");
+    btn_cal->x = x; btn_cal->y = y; btn_cal->w = 40; btn_cal->h = bh;
     btn_cal->on_event = cal_btn_event;
     fly_widget_add(root, btn_cal);
-    x += bw + gap;
+    x += 40 + gap;
+
+    /* Task Manager */
+    fly_widget_t* btn_task = fly_button_create("Tasks");
+    btn_task->x = x; btn_task->y = y; btn_task->w = 50; btn_task->h = bh;
+    btn_task->on_event = task_btn_event;
+    fly_widget_add(root, btn_task);
+    x += 50 + gap;
+
+    /* Info */
+    fly_widget_t* btn_info = fly_button_create("Info");
+    btn_info->x = x; btn_info->y = y; btn_info->w = 40; btn_info->h = bh;
+    btn_info->on_event = info_btn_event;
+    fly_widget_add(root, btn_info);
+    x += 40 + gap;
+
+    /* 3D Demo */
+    fly_widget_t* btn_3d = fly_button_create("3D");
+    btn_3d->x = x; btn_3d->y = y; btn_3d->w = 30; btn_3d->h = bh;
+    btn_3d->on_event = demo_btn_event;
+    fly_widget_add(root, btn_3d);
+    x += 30 + gap;
 
     /* Clock Widget (Right Aligned) */
     fly_widget_t* sys_clock = fly_panel_create(100, h);
@@ -335,6 +446,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
     /* 2. Initialize GUI Subsystems */
     compositor_init();
     wm_init();
+    app_manager_init();
     
     /* 3. Create Taskbar */
     create_taskbar();
@@ -354,6 +466,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
     while (is_gui_running) {
         /* Update Apps */
         clock_app_update();
+        demo3d_app_update();
 
         /* Update Taskbar Clock */
         datetime t;
@@ -379,6 +492,8 @@ extern "C" int cmd_launch(int argc, char** argv) {
                      shell_handle_char((char)ev.keycode);
                 } else if (focused == notepad_app_get_window()) {
                      notepad_app_handle_key((char)ev.keycode);
+                } else if (focused == run_dialog_app_get_window()) {
+                     run_dialog_app_handle_key((char)ev.keycode);
                 } 
             }
             
@@ -404,7 +519,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
                             
                             /* Check for Title Bar Hit (0-24px relative to window) */
                             int rel_y = ev.mouse_y - target->y;
-                            if (rel_y >= 0 && rel_y < 24) {
+                            if (rel_y >= 0 && rel_y < 24 && target != taskbar_win) { /* Fix: Don't drag taskbar */
                                 drag_win = target;
                                 drag_off_x = ev.mouse_x - target->x;
                                 drag_off_y = ev.mouse_y - target->y;
@@ -441,6 +556,41 @@ extern "C" int cmd_launch(int argc, char** argv) {
                 /* 3.5 Dispatch to Calendar */
                 if (target == calendar_app_get_window()) {
                     calendar_app_handle_event(&ev);
+                }
+
+                /* 3.6 Dispatch to File Manager */
+                if (target == file_manager_app_get_window()) {
+                    file_manager_app_handle_event(&ev);
+                }
+
+                /* 3.7 Dispatch to Image Viewer */
+                if (target == image_viewer_app_get_window()) {
+                    image_viewer_app_handle_event(&ev);
+                }
+
+                /* 3.8 Dispatch to SysInfo */
+                if (target == sysinfo_app_get_window()) {
+                    sysinfo_app_handle_event(&ev);
+                }
+
+                /* 3.9 Dispatch to Run Dialog */
+                if (target == run_dialog_app_get_window()) {
+                    run_dialog_app_handle_event(&ev);
+                }
+
+                /* 3.10 Dispatch to Task Manager */
+                if (target == task_manager_app_get_window()) {
+                    task_manager_app_handle_event(&ev);
+                }
+
+                /* 3.11 Dispatch to Paint */
+                if (target == paint_app_get_window()) {
+                    paint_app_handle_event(&ev);
+                }
+
+                /* 3.12 Dispatch to Demo 3D */
+                if (target == demo3d_app_get_window()) {
+                    demo3d_app_handle_event(&ev);
                 }
 
                 /* 3.6 Dispatch to Popup */

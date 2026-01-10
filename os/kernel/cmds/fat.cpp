@@ -526,6 +526,87 @@ done_listing:
     kfree(sector);
 }
 
+extern "C" int fat32_read_directory(const char* path, fat_file_info_t* out, int max_entries) {
+    if (!is_fat_initialized) return 0;
+
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return 0;
+
+    /* 1. Read BPB */
+    disk_read_sector(current_lba, sector);
+    struct fat_bpb* bpb = (struct fat_bpb*)sector;
+
+    uint32_t fat_start = current_lba + bpb->reserved_sectors;
+    uint32_t data_start = fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
+    uint32_t root_cluster = bpb->root_cluster;
+    uint8_t spc = bpb->sectors_per_cluster;
+    uint16_t bps = bpb->bytes_per_sector;
+
+    uint32_t target_cluster = root_cluster;
+
+    /* Resolve path (simplified) */
+    if (path && path[0] && !(path[0] == '/' && path[1] == 0)) {
+        char target[11];
+        to_dos_name(path, target);
+        
+        uint32_t dir_lba = data_start + (root_cluster - 2) * spc;
+        bool found = false;
+        for (int i = 0; i < spc; i++) {
+            disk_read_sector(dir_lba + i, sector);
+            struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+            for (int j = 0; j < 512 / 32; j++) {
+                if (memcmp(entries[j].name, target, 11) == 0 && (entries[j].attr & 0x10)) {
+                    target_cluster = (entries[j].cluster_hi << 16) | entries[j].cluster_low;
+                    if (target_cluster == 0) target_cluster = root_cluster;
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+        if (!found) { kfree(sector); return 0; }
+    }
+
+    int count = 0;
+    uint32_t current_cluster = target_cluster;
+    
+    while (count < max_entries) {
+        uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
+        
+        for (int i = 0; i < spc && count < max_entries; i++) {
+            disk_read_sector(cluster_lba + i, sector);
+            struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+            
+            for (int j = 0; j < 512 / 32 && count < max_entries; j++) {
+                if (entries[j].name[0] == 0) goto done_reading;
+                if ((uint8_t)entries[j].name[0] == 0xE5) continue;
+                if (entries[j].attr == 0x0F) continue;
+                
+                /* Format Name */
+                char name[13];
+                int k = 0;
+                for (int m = 0; m < 8; m++) { if (entries[j].name[m] != ' ') name[k++] = entries[j].name[m]; }
+                if (entries[j].name[8] != ' ') {
+                    name[k++] = '.';
+                    for (int m = 8; m < 11; m++) { if (entries[j].name[m] != ' ') name[k++] = entries[j].name[m]; }
+                }
+                name[k] = 0;
+
+                memcpy(out[count].name, name, 13);
+                out[count].size = entries[j].size;
+                out[count].is_dir = (entries[j].attr & 0x10) ? 1 : 0;
+                count++;
+            }
+        }
+        
+        /* Next cluster logic omitted for brevity (single cluster dir support for now) */
+        break; 
+    }
+done_reading:
+    kfree(sector);
+    return count;
+}
+
 extern "C" int fat32_delete_file(const char* path) {
     if (!is_fat_initialized) return -1;
 
