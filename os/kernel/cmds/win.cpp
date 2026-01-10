@@ -23,6 +23,8 @@ extern "C" void serial(const char *fmt, ...);
 /* Program Manager State */
 static window_t* taskbar_win = NULL;
 static flyui_context_t* taskbar_ctx = NULL;
+static window_t* popup_win = NULL;
+static flyui_context_t* popup_ctx = NULL;
 static bool is_gui_running = false;
 static int taskbar_last_min = -1;
 
@@ -137,6 +139,89 @@ static void taskbar_clock_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
     fly_draw_text(surf, dx, dy, date_str, 0xFF000000);
 }
 
+/* Popup Handlers */
+static bool popup_yes_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        if (popup_win) {
+            wm_destroy_window(popup_win);
+            popup_win = NULL;
+            popup_ctx = NULL;
+        }
+        is_gui_running = false;
+        return true;
+    }
+    return false;
+}
+
+static bool popup_no_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        if (popup_win) {
+            wm_destroy_window(popup_win);
+            popup_win = NULL;
+            popup_ctx = NULL;
+            wm_mark_dirty();
+        }
+        return true;
+    }
+    return false;
+}
+
+static void create_exit_popup() {
+    if (popup_win) return;
+
+    int w = 320;
+    int h = 140;
+    surface_t* s = surface_create(w, h);
+    if (!s) return;
+    surface_clear(s, 0xFFE0E0E0);
+
+    popup_ctx = flyui_init(s);
+    fly_widget_t* root = fly_panel_create(w, h);
+    root->bg_color = 0xFFE0E0E0;
+    flyui_set_root(popup_ctx, root);
+
+    /* Title/Question */
+    fly_widget_t* lbl = fly_label_create("Want to exit the GUI enviroment?");
+    lbl->x = 20; lbl->y = 40;
+    fly_widget_add(root, lbl);
+
+    /* Yes Button */
+    fly_widget_t* btn_yes = fly_button_create("Yes");
+    btn_yes->x = 60; btn_yes->y = 90; btn_yes->w = 80; btn_yes->h = 30;
+    btn_yes->on_event = popup_yes_event;
+    fly_widget_add(root, btn_yes);
+
+    /* No Button */
+    fly_widget_t* btn_no = fly_button_create("No");
+    btn_no->x = 180; btn_no->y = 90; btn_no->w = 80; btn_no->h = 30;
+    btn_no->on_event = popup_no_event;
+    fly_widget_add(root, btn_no);
+
+    /* X Button */
+    fly_widget_t* btn_x = fly_button_create("X");
+    btn_x->x = w - 30; btn_x->y = 5; btn_x->w = 25; btn_x->h = 25;
+    btn_x->on_event = popup_no_event;
+    fly_widget_add(root, btn_x);
+
+    flyui_render(popup_ctx);
+
+    gpu_device_t* gpu = gpu_get_primary();
+    int sx = (gpu->width - w) / 2;
+    int sy = (gpu->height - h) / 2;
+    popup_win = wm_create_window(s, sx, sy);
+}
+
+static bool start_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        create_exit_popup();
+        return true;
+    }
+    return false;
+}
+
 static void create_taskbar() {
     gpu_device_t* gpu = gpu_get_primary();
     if (!gpu) return;
@@ -164,6 +249,13 @@ static void create_taskbar() {
     int bw = 90;
     int bh = 30;
     int gap = 10;
+
+    /* Start Button (<) */
+    fly_widget_t* btn_start = fly_button_create("<");
+    btn_start->x = x; btn_start->y = y; btn_start->w = 40; btn_start->h = bh;
+    btn_start->on_event = start_btn_event;
+    fly_widget_add(root, btn_start);
+    x += 40 + gap;
 
     /* Terminal Button */
     fly_widget_t* btn = fly_button_create("Terminal");
@@ -351,6 +443,29 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     calendar_app_handle_event(&ev);
                 }
 
+                /* 3.6 Dispatch to Popup */
+                if (target == popup_win && popup_ctx) {
+                    fly_event_t fev;
+                    fev.mx = ev.mouse_x - popup_win->x;
+                    fev.my = ev.mouse_y - popup_win->y;
+                    fev.keycode = 0;
+                    fev.type = FLY_EVENT_NONE;
+
+                    if (ev.type == INPUT_MOUSE_MOVE) {
+                        fev.type = FLY_EVENT_MOUSE_MOVE;
+                    } else if (ev.type == INPUT_MOUSE_CLICK) {
+                        fev.type = ev.pressed ? FLY_EVENT_MOUSE_DOWN : FLY_EVENT_MOUSE_UP;
+                    }
+
+                    if (fev.type != FLY_EVENT_NONE) {
+                        flyui_dispatch_event(popup_ctx, &fev);
+                        if (fev.type != FLY_EVENT_MOUSE_MOVE) {
+                            flyui_render(popup_ctx);
+                            wm_mark_dirty();
+                        }
+                    }
+                }
+
                 /* 3. Dispatch to Taskbar (only if it's the target and we are NOT dragging) */
                 if (target == taskbar_win && taskbar_ctx && !drag_win) {
                     fly_event_t fev;
@@ -394,6 +509,9 @@ extern "C" int cmd_launch(int argc, char** argv) {
     if (taskbar_win) wm_destroy_window(taskbar_win);
     taskbar_win = NULL;
     taskbar_ctx = NULL;
+    if (popup_win) wm_destroy_window(popup_win);
+    popup_win = NULL;
+    popup_ctx = NULL;
     
     /* Dacă terminalul a fost deschis, îl închidem curat */
     if (shell_is_window_active()) {
