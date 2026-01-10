@@ -178,6 +178,7 @@ OBJS = \
 	$(BUILD)/apps/clock_app.o \
 	$(BUILD)/apps/calculator_app.o \
 	$(BUILD)/apps/notepad_app.o \
+	$(BUILD)/apps/calendar_app.o \
 
 
 
@@ -748,6 +749,10 @@ $(BUILD)/apps/calculator_app.o: kernel/apps/calculator_app.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/apps/notepad_app.o: kernel/apps/notepad_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/apps/calendar_app.o: kernel/apps/calendar_app.cpp | dirs
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

@@ -1,6 +1,7 @@
 #include "win.h"
 #include "../ui/wm/wm.h"
 #include "../video/compositor.h"
+#include "../video/gpu.h"
 #include "../input/input.h"
 #include "../drivers/serial.h"
 #include "../terminal.h"
@@ -12,13 +13,18 @@
 #include "../apps/clock_app.h"
 #include "../apps/calculator_app.h"
 #include "../apps/notepad_app.h"
+#include "../apps/calendar_app.h"
+#include "../string.h"
+#include "../time/clock.h"
+#include "../ui/flyui/draw.h"
 
 extern "C" void serial(const char *fmt, ...);
 
 /* Program Manager State */
-static window_t* progman_win = NULL;
-static flyui_context_t* progman_ctx = NULL;
+static window_t* taskbar_win = NULL;
+static flyui_context_t* taskbar_ctx = NULL;
 static bool is_gui_running = false;
+static int taskbar_last_min = -1;
 
 /* Button Handler */
 /* Button Handler: Lansează Terminalul */
@@ -77,66 +83,137 @@ static bool note_btn_event(fly_widget_t* w, fly_event_t* e) {
     return false;
 }
 
-static void create_program_manager() {
-    int w = 400;
-    int h = 300;
+/* Button Handler: Lansează Calendarul */
+static bool cal_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        calendar_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Taskbar Clock Widget Draw */
+static void taskbar_clock_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
+    /* Background */
+    fly_draw_rect_fill(surf, x, y, w->w, w->h, w->bg_color);
+    
+    datetime t;
+    time_get_local(&t);
+    
+    char time_str[16];
+    char date_str[16];
+    char tmp[8];
+    
+    /* Time: HH:MM */
+    time_str[0] = '0' + (t.hour / 10);
+    time_str[1] = '0' + (t.hour % 10);
+    time_str[2] = ':';
+    time_str[3] = '0' + (t.minute / 10);
+    time_str[4] = '0' + (t.minute % 10);
+    time_str[5] = 0;
+    
+    /* Date: DD.MM.YYYY */
+    date_str[0] = '0' + (t.day / 10);
+    date_str[1] = '0' + (t.day % 10);
+    date_str[2] = '.';
+    date_str[3] = '0' + (t.month / 10);
+    date_str[4] = '0' + (t.month % 10);
+    date_str[5] = '.';
+    
+    itoa_dec(tmp, t.year);
+    strcpy(date_str + 6, tmp);
+    
+    /* Draw Time (Top) */
+    int time_w = strlen(time_str) * 8;
+    int tx = x + (w->w - time_w) / 2;
+    int ty = y + 4;
+    fly_draw_text(surf, tx, ty, time_str, 0xFF000000);
+    
+    /* Draw Date (Bottom) */
+    int date_w = strlen(date_str) * 8;
+    int dx = x + (w->w - date_w) / 2;
+    int dy = y + 20;
+    fly_draw_text(surf, dx, dy, date_str, 0xFF000000);
+}
+
+static void create_taskbar() {
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
+
+    int w = gpu->width;
+    int h = 40; /* Taskbar height */
     
     /* 1. Create Surface */
     surface_t* s = surface_create(w, h);
     if (!s) return;
     
-    /* Try to load wallpaper, fallback to solid color */
-    if (fly_load_bmp_to_surface(s, "/bg.bmp") != 0) {
-        serial("[WIN] Wallpaper not found or invalid, using default color.\n");
-        surface_clear(s, FLY_COLOR_BG);
-    }
+    /* Solid gray background for taskbar */
+    surface_clear(s, 0xFFC0C0C0);
 
     /* 2. Init FlyUI */
-    progman_ctx = flyui_init(s);
+    taskbar_ctx = flyui_init(s);
     
     /* 3. Create Widgets */
     fly_widget_t* root = fly_panel_create(w, h);
-    flyui_set_root(progman_ctx, root);
+    root->bg_color = 0xFFC0C0C0;
+    flyui_set_root(taskbar_ctx, root);
 
-    /* Title Label */
-    fly_widget_t* lbl = fly_label_create("Chrysalis OS Program Manager");
-    lbl->x = 10; lbl->y = 10;
-    fly_widget_add(root, lbl);
-
-    /* Info Label */
-    fly_widget_t* info = fly_label_create("Welcome to the GUI Environment.");
-    info->x = 10; info->y = 40;
-    fly_widget_add(root, info);
+    int x = 10;
+    int y = 5;
+    int bw = 90;
+    int bh = 30;
+    int gap = 10;
 
     /* Terminal Button */
     fly_widget_t* btn = fly_button_create("Terminal");
-    btn->x = 10; btn->y = 80; btn->w = 100; btn->h = 30;
+    btn->x = x; btn->y = y; btn->w = bw; btn->h = bh;
     btn->on_event = terminal_btn_event;
     fly_widget_add(root, btn);
+    x += bw + gap;
 
     /* Clock Button */
     fly_widget_t* btn_clk = fly_button_create("Clock");
-    btn_clk->x = 120; btn_clk->y = 80; btn_clk->w = 100; btn_clk->h = 30;
+    btn_clk->x = x; btn_clk->y = y; btn_clk->w = bw; btn_clk->h = bh;
     btn_clk->on_event = clock_btn_event;
     fly_widget_add(root, btn_clk);
+    x += bw + gap;
 
     /* Calculator Button */
     fly_widget_t* btn_calc = fly_button_create("Calc");
-    btn_calc->x = 230; btn_calc->y = 80; btn_calc->w = 100; btn_calc->h = 30;
+    btn_calc->x = x; btn_calc->y = y; btn_calc->w = bw; btn_calc->h = bh;
     btn_calc->on_event = calc_btn_event;
     fly_widget_add(root, btn_calc);
+    x += bw + gap;
 
     /* Notepad Button */
     fly_widget_t* btn_note = fly_button_create("Notepad");
-    btn_note->x = 10; btn_note->y = 120; btn_note->w = 100; btn_note->h = 30;
+    btn_note->x = x; btn_note->y = y; btn_note->w = bw; btn_note->h = bh;
     btn_note->on_event = note_btn_event;
     fly_widget_add(root, btn_note);
+    x += bw + gap;
+
+    /* Calendar Button */
+    fly_widget_t* btn_cal = fly_button_create("Calendar");
+    btn_cal->x = x; btn_cal->y = y; btn_cal->w = bw; btn_cal->h = bh;
+    btn_cal->on_event = cal_btn_event;
+    fly_widget_add(root, btn_cal);
+    x += bw + gap;
+
+    /* Clock Widget (Right Aligned) */
+    fly_widget_t* sys_clock = fly_panel_create(100, h);
+    sys_clock->x = w - 105; /* 5px margin from right */
+    sys_clock->y = 0;
+    sys_clock->bg_color = 0xFFC0C0C0;
+    sys_clock->on_draw = taskbar_clock_draw;
+    fly_widget_add(root, sys_clock);
 
     /* 4. Initial Render */
-    flyui_render(progman_ctx);
+    flyui_render(taskbar_ctx);
 
     /* 5. Create WM Window */
-    progman_win = wm_create_window(s, 100, 100);
+    /* Position at bottom of screen */
+    taskbar_win = wm_create_window(s, 0, gpu->height - h);
 }
 
 extern "C" int cmd_launch_exit(int argc, char** argv) {
@@ -167,8 +244,8 @@ extern "C" int cmd_launch(int argc, char** argv) {
     compositor_init();
     wm_init();
     
-    /* 3. Create Program Manager (The Desktop Shell) */
-    create_program_manager();
+    /* 3. Create Taskbar */
+    create_taskbar();
     
     /* 4. Main GUI Loop */
     input_event_t ev;
@@ -185,6 +262,16 @@ extern "C" int cmd_launch(int argc, char** argv) {
     while (is_gui_running) {
         /* Update Apps */
         clock_app_update();
+
+        /* Update Taskbar Clock */
+        datetime t;
+        time_get_local(&t);
+        if (t.minute != taskbar_last_min) {
+            taskbar_last_min = t.minute;
+            /* Redraw taskbar to update clock */
+            flyui_render(taskbar_ctx);
+            wm_mark_dirty();
+        }
 
         /* Poll Input */
         while (input_pop(&ev)) {
@@ -259,11 +346,16 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     notepad_app_handle_event(&ev);
                 }
 
-                /* 3. Dispatch to Program Manager (only if it's the target and we are NOT dragging) */
-                if (target == progman_win && progman_ctx && !drag_win) {
+                /* 3.5 Dispatch to Calendar */
+                if (target == calendar_app_get_window()) {
+                    calendar_app_handle_event(&ev);
+                }
+
+                /* 3. Dispatch to Taskbar (only if it's the target and we are NOT dragging) */
+                if (target == taskbar_win && taskbar_ctx && !drag_win) {
                     fly_event_t fev;
-                    fev.mx = ev.mouse_x - progman_win->x;
-                    fev.my = ev.mouse_y - progman_win->y;
+                    fev.mx = ev.mouse_x - taskbar_win->x;
+                    fev.my = ev.mouse_y - taskbar_win->y;
                     fev.keycode = 0;
                     fev.type = FLY_EVENT_NONE;
 
@@ -274,12 +366,12 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     }
 
                     if (fev.type != FLY_EVENT_NONE) {
-                        flyui_dispatch_event(progman_ctx, &fev);
+                        flyui_dispatch_event(taskbar_ctx, &fev);
                         
                         /* Only redraw on interaction (clicks), NOT on mouse move.
                            This prevents the "Rendering" spam. */
                         if (fev.type != FLY_EVENT_MOUSE_MOVE) {
-                            flyui_render(progman_ctx);
+                            flyui_render(taskbar_ctx);
                             wm_mark_dirty();
                         }
                     }
@@ -299,9 +391,9 @@ extern "C" int cmd_launch(int argc, char** argv) {
     }
     
     /* 5. Cleanup & Return to Text Mode */
-    if (progman_win) wm_destroy_window(progman_win);
-    progman_win = NULL;
-    progman_ctx = NULL;
+    if (taskbar_win) wm_destroy_window(taskbar_win);
+    taskbar_win = NULL;
+    taskbar_ctx = NULL;
     
     /* Dacă terminalul a fost deschis, îl închidem curat */
     if (shell_is_window_active()) {
