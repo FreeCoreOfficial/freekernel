@@ -931,6 +931,54 @@ extern "C" int fat32_format(uint32_t lba, uint32_t sector_count, const char* lab
     return 0;
 }
 
+extern "C" int32_t fat32_get_file_size(const char* path) {
+    if (!is_fat_initialized) return -1;
+
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return -1;
+
+    /* 1. Read BPB */
+    if (disk_read_sector(current_lba, sector) != 0) { kfree(sector); return -1; }
+    struct fat_bpb* bpb = (struct fat_bpb*)sector;
+
+    if (bpb->bytes_per_sector == 0) { kfree(sector); return -1; }
+
+    uint32_t fat_start = current_lba + bpb->reserved_sectors;
+    uint32_t data_start = fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
+    uint32_t root_cluster = bpb->root_cluster;
+    uint8_t spc = bpb->sectors_per_cluster;
+
+    /* 2. Find File */
+    char target[11];
+    to_dos_name(path, target);
+
+    uint32_t current_cluster = root_cluster;
+    uint32_t file_size = 0;
+    bool found = false;
+
+    /* Scan root dir (simplified) */
+    uint32_t lba = data_start + (current_cluster - 2) * spc;
+    for (int i = 0; i < spc; i++) {
+        disk_read_sector(lba + i, sector);
+        struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+        for (int j = 0; j < 512 / 32; j++) {
+            if (entries[j].name[0] == 0) break;
+            if ((uint8_t)entries[j].name[0] == 0xE5) continue;
+            if (entries[j].attr & 0x0F) continue;
+
+            if (memcmp(entries[j].name, target, 11) == 0) {
+                file_size = entries[j].size;
+                found = true;
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    kfree(sector);
+    return found ? (int32_t)file_size : -1;
+}
+
 /* Încearcă să monteze automat prima partiție FAT găsită */
 void fat_automount(void) {
     if (is_fat_initialized) return;

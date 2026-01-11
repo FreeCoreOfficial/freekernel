@@ -16,6 +16,7 @@
 #include "../ui/flyui/draw.h"
 #include "../apps/app_manager.h"
 #include "../apps/demo3d_app.h"
+#include "../apps/doom_app.h"
 
 extern "C" void serial(const char *fmt, ...);
 
@@ -149,6 +150,16 @@ static bool demo_btn_event(fly_widget_t* w, fly_event_t* e) {
     (void)w;
     if (e->type == FLY_EVENT_MOUSE_UP) {
         demo3d_app_create();
+        return true;
+    }
+    return false;
+}
+
+/* Button Handler: Lansează Doom */
+static bool doom_btn_event(fly_widget_t* w, fly_event_t* e) {
+    (void)w;
+    if (e->type == FLY_EVENT_MOUSE_UP) {
+        doom_app_create();
         return true;
     }
     return false;
@@ -403,6 +414,13 @@ static void create_taskbar() {
     fly_widget_add(root, btn_3d);
     x += 30 + gap;
 
+    /* Doom Button */
+    fly_widget_t* btn_doom = fly_button_create("Doom");
+    btn_doom->x = x; btn_doom->y = y; btn_doom->w = 50; btn_doom->h = bh;
+    btn_doom->on_event = doom_btn_event;
+    fly_widget_add(root, btn_doom);
+    x += 50 + gap;
+
     /* Clock Widget (Right Aligned) */
     fly_widget_t* sys_clock = fly_panel_create(100, h);
     sys_clock->x = w - 105; /* 5px margin from right */
@@ -467,6 +485,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
         /* Update Apps */
         clock_app_update();
         demo3d_app_update();
+        doom_app_update();
 
         /* Update Taskbar Clock */
         datetime t;
@@ -591,6 +610,11 @@ extern "C" int cmd_launch(int argc, char** argv) {
                 /* 3.12 Dispatch to Demo 3D */
                 if (target == demo3d_app_get_window()) {
                     demo3d_app_handle_event(&ev);
+                }
+
+                /* 3.13 Dispatch to Doom */
+                if (target == doom_app_get_window()) {
+                    doom_app_handle_event(&ev);
                 }
 
                 /* 3.6 Dispatch to Popup */

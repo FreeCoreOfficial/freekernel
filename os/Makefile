@@ -112,6 +112,7 @@ OBJS = \
 	$(BUILD)/arch/syscall_asm.o \
 	$(BUILD)/arch/isr_default.o \
 	$(BUILD)/arch/syscall_dispatch.o \
+	$(BUILD)/arch/setjmp.o \
 	$(BUILD)/elf.o \
 	$(BUILD)/process.o \
 	$(BUILD)/exec.o \
@@ -187,7 +188,91 @@ OBJS = \
 	$(BUILD)/apps/paint_app.o \
 	$(BUILD)/apps/demo3d_app.o \
 	$(BUILD)/apps/app_manager.o \
-
+	$(BUILD)/apps/doom_app.o \
+	$(BUILD)/games/doom/doomgeneric/doomgeneric.o \
+	$(BUILD)/games/doom/doomgeneric/doomgeneric_chrysalis.o \
+	$(BUILD)/games/doom/doom_iwad.o \
+	$(BUILD)/games/doom/doomgeneric/m_swap.o \
+	$(BUILD)/posix_stubs.o \
+	$(BUILD)/games/doom/doomgeneric/am_map.o \
+	$(BUILD)/games/doom/doomgeneric/d_event.o \
+	$(BUILD)/games/doom/doomgeneric/d_items.o \
+	$(BUILD)/games/doom/doomgeneric/d_iwad.o \
+	$(BUILD)/games/doom/doomgeneric/d_loop.o \
+	$(BUILD)/games/doom/doomgeneric/d_main.o \
+	$(BUILD)/games/doom/doomgeneric/d_mode.o \
+	$(BUILD)/games/doom/doomgeneric/d_net.o \
+	$(BUILD)/games/doom/doomgeneric/doomdef.o \
+	$(BUILD)/games/doom/doomgeneric/doomstat.o \
+	$(BUILD)/games/doom/doomgeneric/dstrings.o \
+	$(BUILD)/games/doom/doomgeneric/f_finale.o \
+	$(BUILD)/games/doom/doomgeneric/f_wipe.o \
+	$(BUILD)/games/doom/doomgeneric/g_game.o \
+	$(BUILD)/games/doom/doomgeneric/hu_lib.o \
+	$(BUILD)/games/doom/doomgeneric/hu_stuff.o \
+	$(BUILD)/games/doom/doomgeneric/i_cdmus.o \
+	$(BUILD)/games/doom/doomgeneric/i_endoom.o \
+	$(BUILD)/games/doom/doomgeneric/i_input.o \
+	$(BUILD)/games/doom/doomgeneric/i_joystick.o \
+	$(BUILD)/games/doom/doomgeneric/i_scale.o \
+	$(BUILD)/games/doom/doomgeneric/i_sound.o \
+	$(BUILD)/games/doom/doomgeneric/i_system.o \
+	$(BUILD)/games/doom/doomgeneric/i_timer.o \
+	$(BUILD)/games/doom/doomgeneric/i_video.o \
+	$(BUILD)/games/doom/doomgeneric/info.o \
+	$(BUILD)/games/doom/doomgeneric/m_argv.o \
+	$(BUILD)/games/doom/doomgeneric/m_bbox.o \
+	$(BUILD)/games/doom/doomgeneric/m_cheat.o \
+	$(BUILD)/games/doom/doomgeneric/m_config.o \
+	$(BUILD)/games/doom/doomgeneric/m_controls.o \
+	$(BUILD)/games/doom/doomgeneric/m_fixed.o \
+	$(BUILD)/games/doom/doomgeneric/m_menu.o \
+	$(BUILD)/games/doom/doomgeneric/m_misc.o \
+	$(BUILD)/games/doom/doomgeneric/m_random.o \
+	$(BUILD)/games/doom/doomgeneric/memio.o \
+	$(BUILD)/games/doom/doomgeneric/mus2mid.o \
+	$(BUILD)/games/doom/doomgeneric/p_ceilng.o \
+	$(BUILD)/games/doom/doomgeneric/p_doors.o \
+	$(BUILD)/games/doom/doomgeneric/p_enemy.o \
+	$(BUILD)/games/doom/doomgeneric/p_floor.o \
+	$(BUILD)/games/doom/doomgeneric/p_inter.o \
+	$(BUILD)/games/doom/doomgeneric/p_lights.o \
+	$(BUILD)/games/doom/doomgeneric/p_map.o \
+	$(BUILD)/games/doom/doomgeneric/p_maputl.o \
+	$(BUILD)/games/doom/doomgeneric/p_mobj.o \
+	$(BUILD)/games/doom/doomgeneric/p_plats.o \
+	$(BUILD)/games/doom/doomgeneric/p_pspr.o \
+	$(BUILD)/games/doom/doomgeneric/p_saveg.o \
+	$(BUILD)/games/doom/doomgeneric/p_setup.o \
+	$(BUILD)/games/doom/doomgeneric/p_sight.o \
+	$(BUILD)/games/doom/doomgeneric/p_spec.o \
+	$(BUILD)/games/doom/doomgeneric/p_switch.o \
+	$(BUILD)/games/doom/doomgeneric/p_telept.o \
+	$(BUILD)/games/doom/doomgeneric/p_tick.o \
+	$(BUILD)/games/doom/doomgeneric/p_user.o \
+	$(BUILD)/games/doom/doomgeneric/r_bsp.o \
+	$(BUILD)/games/doom/doomgeneric/r_data.o \
+	$(BUILD)/games/doom/doomgeneric/r_draw.o \
+	$(BUILD)/games/doom/doomgeneric/r_main.o \
+	$(BUILD)/games/doom/doomgeneric/r_plane.o \
+	$(BUILD)/games/doom/doomgeneric/r_segs.o \
+	$(BUILD)/games/doom/doomgeneric/r_sky.o \
+	$(BUILD)/games/doom/doomgeneric/r_things.o \
+	$(BUILD)/games/doom/doomgeneric/s_sound.o \
+	$(BUILD)/games/doom/doomgeneric/sha1.o \
+	$(BUILD)/games/doom/doomgeneric/sounds.o \
+	$(BUILD)/games/doom/doomgeneric/statdump.o \
+	$(BUILD)/games/doom/doomgeneric/st_lib.o \
+	$(BUILD)/games/doom/doomgeneric/st_stuff.o \
+	$(BUILD)/games/doom/doomgeneric/tables.o \
+	$(BUILD)/games/doom/doomgeneric/v_video.o \
+	$(BUILD)/games/doom/doomgeneric/w_checksum.o \
+	$(BUILD)/games/doom/doomgeneric/w_file.o \
+	$(BUILD)/games/doom/doomgeneric/w_file_stdc.o \
+	$(BUILD)/games/doom/doomgeneric/w_main.o \
+	$(BUILD)/games/doom/doomgeneric/w_wad.o \
+	$(BUILD)/games/doom/doomgeneric/wi_stuff.o \
+	$(BUILD)/games/doom/doomgeneric/z_zone.o \
 
 
 
@@ -217,6 +302,8 @@ dirs: $(BUILD)
 	mkdir -p $(BUILD)/ui/wm
 	mkdir -p $(BUILD)/ui/flyui
 	mkdir -p $(BUILD)/apps
+	mkdir -p $(BUILD)/games/doom/doomgeneric
+	mkdir -p $(BUILD)/games/doom/doomgeneric/doom
 
 
 
@@ -234,6 +321,8 @@ $(BUILD)/gdt_flush.o: kernel/arch/i386/gdt.asm | dirs
 $(BUILD)/interrupts.o: kernel/interrupts/interrupts.asm | dirs
 	$(AS) $(ASFLAGS) $< -o $@
 
+$(BUILD)/arch/setjmp.o: kernel/arch/i386/setjmp.asm | dirs
+	$(AS) $(ASFLAGS) $< -o $@
 # -------------------------
 # C++ OBJECTS
 # -------------------------
@@ -796,13 +885,38 @@ $(BUILD)/apps/app_manager.o: kernel/apps/app_manager.cpp | dirs
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(BUILD)/apps/doom_app.o: kernel/apps/doom_app.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/games/doom/doomgeneric/%.o: kernel/games/doom/doomgeneric/%.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -Ikernel/games/doom/doomgeneric -c $< -o $@
+
+$(BUILD)/games/doom/doomgeneric/doom/%.o: kernel/games/doom/doomgeneric/doom/%.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -Ikernel/games/doom/doomgeneric -Ikernel/games/doom/doomgeneric/doom -c $< -o $@
+
+$(BUILD)/games/doom/doom_iwad.o: \
+	kernel/games/doom/doom_iwad.c \
+	kernel/games/doom/freedoom1_wad.inc | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c kernel/games/doom/doom_iwad.c -o $@
+
+
+$(BUILD)/posix_stubs.o: kernel/posix_stubs.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # -------------------------
 # LINK
 # -------------------------
 
+LIBGCC := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
+
 $(ISO)/boot/$(KERNEL): $(OBJS) | dirs
 	@mkdir -p $(dir $@)
-	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS) $(LIBGCC)
 
 # -------------------------
 # ISO & RUN

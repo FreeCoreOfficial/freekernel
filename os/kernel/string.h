@@ -16,7 +16,9 @@ char* strcpy(char* dst, const char* src);
 char* strncpy(char* dst, const char* src, size_t n);
 char* strcat(char* dst, const char* src);
 char* strchr(const char* s, int c);
+char* strrchr(const char* s, int c);
 char* strstr(const char* haystack, const char* needle);
+char* strdup(const char* s);
 
 /* Memory helpers (byte-oriented) */
 void* memcpy(void* dest, const void* src, size_t n);

@@ -160,7 +160,7 @@ This level separates hobby kernels from serious systems.
 | ✅     | Window Manager          |
 | ✅     | GUI Toolkit             |
 | ✅     | Mouse-driven UI         |
-| 🔲     | Desktop Environment     |
+| ✅     | Desktop Environment     |
 
 ---
 

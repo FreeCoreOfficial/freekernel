@@ -6,6 +6,7 @@
 #include "string.h"
 #include <stddef.h>
 #include <stdint.h>
+#include "mem/kmalloc.h"
 
 /* ---------- string ops ---------- */
 
@@ -65,6 +66,15 @@ char* strchr(const char* s, int c)
         ++s;
     }
     return (uc == 0) ? (char*)s : NULL;
+}
+
+char* strrchr(const char* s, int c)
+{
+    const char* last = NULL;
+    do {
+        if (*s == (char)c) last = s;
+    } while (*s++);
+    return (char*)last;
 }
 
 char* strstr(const char* haystack, const char* needle)
@@ -157,4 +167,64 @@ char* utoa_hex(char* out, uint32_t v)
     while (i > 0) out[j++] = buf[--i];
     out[j] = '\0';
     return out;
+}
+
+/* ---------- case-insensitive string ops (needed by Doom) ---------- */
+
+static inline char tolower(char c) {
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    return c;
+}
+
+extern "C" int strcasecmp(const char *s1, const char *s2) {
+    const unsigned char *p1 = (const unsigned char *)s1;
+    const unsigned char *p2 = (const unsigned char *)s2;
+    int result;
+    if (p1 == p2) return 0;
+    while ((result = tolower(*p1) - tolower(*p2)) == 0 && *p1) {
+        p1++;
+        p2++;
+    }
+    return result;
+}
+
+extern "C" int strncasecmp(const char *s1, const char *s2, size_t n) {
+    const unsigned char *p1 = (const unsigned char *)s1;
+    const unsigned char *p2 = (const unsigned char *)s2;
+    int result = 0;
+    if (p1 == p2) return 0;
+    while (n > 0 && *p1) {
+        result = tolower(*p1) - tolower(*p2);
+        if (result != 0) return result;
+        p1++;
+        p2++;
+        n--;
+    }
+    if (n == 0) return 0;
+    return tolower(*p1) - tolower(*p2);
+}
+
+/* ---------- conversion ops ---------- */
+
+extern "C" int atoi(const char* str) {
+    int res = 0;
+    int sign = 1;
+    while (*str == ' ' || *str == '\t' || *str == '\n') str++;
+    if (*str == '-') { sign = -1; str++; }
+    else if (*str == '+') { str++; }
+    while (*str >= '0' && *str <= '9') {
+        res = res * 10 + (*str - '0');
+        str++;
+    }
+    return sign * res;
+}
+
+extern "C" char* strdup(const char* s) {
+    if (!s) return NULL;
+    size_t len = strlen(s) + 1;
+    char* new_str = (char*)kmalloc(len);
+    if (new_str) {
+        memcpy(new_str, s, len);
+    }
+    return new_str;
 }

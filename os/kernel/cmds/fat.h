@@ -44,6 +44,9 @@ int fat32_directory_exists(const char* path);
 /* Format a partition with FAT32 */
 int fat32_format(uint32_t lba, uint32_t sector_count, const char* label);
 
+/* Get file size (returns -1 if not found) */
+int32_t fat32_get_file_size(const char* path);
+
 #ifdef __cplusplus
 }
 #endif
