@@ -112,3 +112,17 @@ convert wallpaper.bmp \
   -resize 160x100! \
   -depth 8 \
   BMP3:wallpaper.bmp
+
+
+cd iso/boot/grub
+
+for f in *.png; do
+  echo "Fixing $f"
+  convert "$f" \
+    -alpha off \
+    -strip \
+    -colorspace RGB \
+    -depth 8 \
+    -interlace none \
+    "$f"
+done
