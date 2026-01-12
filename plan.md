@@ -253,7 +253,7 @@ Modern hardware compatibility.
 | 🔲     | Native linker   |
 | 🔲     | Full ports tree |
 
-#Final Note
+# Final Note
 **Chrysalis OS** is designed as a transformation: from a simple terminal kernel → into a complete, modular, and educational operating system.
 
 Not everything must be implemented — but everything is understood.
