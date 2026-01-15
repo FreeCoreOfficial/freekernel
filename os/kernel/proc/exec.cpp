@@ -77,11 +77,12 @@ static uint8_t* read_executable(const char* path, size_t* out_size) {
     /* 2. Try RAMFS */
     const FSNode* node = fs_find(path);
     if (node && node->data) {
-        size_t len = strlen(node->data); // RAMFS stores text/data as string currently
+        const char* text = (const char*)node->data; // RAMFS stores text/data as string currently
+        size_t len = strlen(text);
         /* Copy to new buffer to be safe/uniform */
         uint8_t* buf = (uint8_t*)kmalloc(len);
         if (!buf) return nullptr;
-        memcpy(buf, node->data, len);
+        memcpy(buf, text, len);
         *out_size = len;
         return buf;
     }

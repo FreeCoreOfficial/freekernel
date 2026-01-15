@@ -62,10 +62,11 @@ static uint8_t* read_file_debug(const char* path, uint32_t* out_size) {
     /* 2. Try RAMFS */
     const FSNode* node = fs_find(path);
     if (node && node->data) {
-        size_t len = strlen(node->data);
+        const char* text = (const char*)node->data;
+        size_t len = strlen(text);
         uint8_t* buf = (uint8_t*)kmalloc(len);
         if (!buf) return NULL;
-        memcpy(buf, node->data, len);
+        memcpy(buf, text, len);
         *out_size = (uint32_t)len;
         return buf;
     }

@@ -20,7 +20,7 @@
 //  - For harder safety, implement a double-fault handler in your IDT that calls panic()
 //    so many kernel faults will show a panic screen instead of resulting in a triple fault.
 
-#include "types.h"
+#include "include/types.h"
 #include <stdarg.h>
 
 #include "terminal.h"

@@ -38,9 +38,17 @@ void fs_init() {
 void fs_create(const char* name, const char* content) {
     if (node_count >= 32) return;
 
-    nodes[node_count].name = strdup(name);
+    /* Copiem numele în bufferul fix din FSNode */
+    char* dst_name = nodes[node_count].name;
+    int i = 0;
+    while (name[i] && i < (int)sizeof(nodes[node_count].name) - 1) {
+        dst_name[i] = name[i];
+        i++;
+    }
+    dst_name[i] = 0;
+
     nodes[node_count].data = strdup(content);
-    nodes[node_count].size = strlen(content);
+    nodes[node_count].length = strlen(content);
     node_count++;
 }
 

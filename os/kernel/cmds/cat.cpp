@@ -38,5 +38,6 @@ extern "C" void cmd_cat(int argc, char** argv) {
         return;
     }
 
-    terminal_writestring(node->data);
+    /* node->data este stocat ca buffer text în RAMFS */
+    terminal_writestring((const char*)node->data);
 }
