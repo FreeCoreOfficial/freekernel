@@ -4,7 +4,6 @@
 #include "keyboard.h"
 #include "../interrupts/irq.h"
 #include "../arch/i386/io.h"
-#include "../drivers/serial.h"
 #include "../input/input.h"
 #include "../video/fb_console.h"
 #include "mouse.h" /* Pentru mouse_init la reload */

@@ -91,13 +91,6 @@
 #include "detect/virtualbox.h"
 
 
-extern "C" void ramfs_create_file(const char* name, const void* data, size_t len);
-
-
-//#include "arch/i386/interrupts.h"
-//#include "detect/tpm.h"
-//#include "detect/videomemory.h"
-
 
 // ===== TASK SUBSYSTEM FALLBACK (in-file, no external headers) =====
 //
@@ -238,9 +231,6 @@ extern "C" {
    defined by the linker script (linker.ld) */
 extern "C" void buddy_init_from_heap(void);
 
-/* Debug/test flag: set to 1 to exercise framebuffer logic (if available) */
-#define VGA_TEST 0
-
 /* Helper to switch terminal backend */
 extern "C" void terminal_set_backend_fb(bool active);
 
@@ -313,7 +303,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
 
     // 3) Early boot safety check: detect RAM and panic cleanly if insufficient
-    // ram_check_or_panic(magic, addr); // Replaced with inline Multiboot2 logic below
 
     uint64_t total_ram_mb = 0;
     if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && addr != 0) {
@@ -360,14 +349,10 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // Must be initialized BEFORE paging or heap
     pmm_init(magic, (void*)addr);
 
-    // tpm_check_or_panic();
-    // video_check_or_panic(magic, addr);
-
     // 4) CPU/interrupt basic setup: GDT -> IDT -> PIC. Order matters.
     gdt_init();
 
-    syscall_init(); // DISABLED: Potential crash source until handler is verified
-  //  terminal_writestring("[kernel] syscall_init skipped for stability\n");
+    // syscall_init(); // DISABLED: Potential crash source until handler is verified
 
 
     uint32_t kernel_stack;
@@ -582,7 +567,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     vt_init();
 
     /* GUI Subsystems (Compositor, WM) are now initialized by 'launch' command */
-    /* compositor_init(); wm_init(); */
 
     /* Initialize Shell (Text Mode) */
     shell_init();
@@ -716,19 +700,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     terminal_writestring("[sched] TASKS_ENABLED=0 (scheduler disabled)\n");
 #endif
 
-
-// COMENTAT TEMPORAR: Cauzează Kernel Panic dacă handlerul int 0x80 nu e setat corect
-// static const char msg[] = "hello from syscall";
-//
-// asm volatile(
-//     "movl $1, %%eax\n"    /* SYS_WRITE */
-//     "movl %0, %%ebx\n"
-//     "int $0x80\n"
-//     :
-//     : "r"(msg)            /* %0 = pointer la msg */
-//     : "eax", "ebx"
-// );
-
 terminal_writestring("[kernel] initializing PCI\n");
 pci_init();
 
@@ -738,21 +709,6 @@ pci_init();
 
     /* Initialize Ethernet Subsystem */
     net_init();
-
-// definește string-ul (scope file-local e OK)
-//static const char test_msg[] = "Hello from syscall!";
-
-/* ...în kernel_main, în loc de mov $test_msg, %%ebx ... */
-/*asm volatile(
-    "movl $1, %%eax\n"        // SYS_WRITE
-    "movl %0, %%ebx\n"
-    "int $0x80\n"
-    :
-    : "r"(test_msg)           // %0 = pointer la test_msg
-    : "eax", "ebx"
-);*/
-
-
 
     // 22) Main loop: shell polling + halt (no unsafe yields)
     // If you want the shell to be preempted by tasks, move shell into its own
