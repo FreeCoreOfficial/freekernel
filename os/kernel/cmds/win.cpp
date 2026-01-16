@@ -70,8 +70,8 @@ static void taskbar_btn_draw(fly_widget_t* w, surface_t* s, int x, int y) {
     uint32_t bg = w->bg_color;
     fly_theme_t* th = theme_get();
     
-    /* Dotted pattern for active taskbar button? For now just darker */
-    if (d && d->pressed) bg = th->color_hi_1; /* Inverted look */
+    /* Draw button background */
+    if (d && d->pressed) bg = th->color_hi_1; /* Inverted look when pressed */
     
     fly_draw_rect_fill(s, x, y, w->w, w->h, bg);
     
@@ -86,21 +86,48 @@ static void taskbar_btn_draw(fly_widget_t* w, surface_t* s, int x, int y) {
 
     const icon_image_t* ic = icon_get(d->icon_type);
     
-    if (ic) {
-        /* Blit Icon */
-        int ix = x + (w->w - ic->w) / 2;
-        int iy = y + (w->h - ic->h) / 2;
-
-        for (int r = 0; r < ic->h; r++) {
-            for (int c = 0; c < ic->w; c++) {
-                uint32_t color = ic->pixels[r * ic->w + c];
-                if ((color & 0xFF000000) != 0) {
-                    if (ix + c < (int)s->width && iy + r < (int)s->height) {
-                        s->pixels[(iy + r) * s->width + (ix + c)] = color;
+    if (ic && ic->pixels) {
+        /* Scale icon to fit button size (28x28 inside 32x32) */
+        int target_size = w->h - 4;  /* Leave 2px margin */
+        int ix = x + (w->w - target_size) / 2;
+        int iy = y + (w->h - target_size) / 2;
+        
+        /* Scale down icon using nearest neighbor sampling */
+        if (ic->w > 0 && ic->h > 0) {
+            for (int py = 0; py < target_size; py++) {
+                for (int px = 0; px < target_size; px++) {
+                    /* Map target pixel to source icon pixel */
+                    int src_x = (px * ic->w) / target_size;
+                    int src_y = (py * ic->h) / target_size;
+                    
+                    /* Clamp to valid range */
+                    if (src_x >= (int)ic->w) src_x = ic->w - 1;
+                    if (src_y >= (int)ic->h) src_y = ic->h - 1;
+                    
+                    /* Get pixel - assuming RGBA8888 format from icons.mod */
+                    const uint8_t* pixel_ptr = (const uint8_t*)ic->pixels + (src_y * ic->w + src_x) * 4;
+                    uint8_t r = pixel_ptr[0];
+                    uint8_t g = pixel_ptr[1];
+                    uint8_t b = pixel_ptr[2];
+                    uint8_t a = pixel_ptr[3];
+                    
+                    /* Only draw if not fully transparent */
+                    if (a > 128) {
+                        int screen_x = ix + px;
+                        int screen_y = iy + py;
+                        if (screen_x >= 0 && screen_x < (int)s->width && 
+                            screen_y >= 0 && screen_y < (int)s->height) {
+                            /* Convert RGBA to ARGB for display */
+                            uint32_t color = (a << 24) | (r << 16) | (g << 8) | b;
+                            s->pixels[screen_y * s->width + screen_x] = color;
+                        }
                     }
                 }
             }
         }
+    } else if (d) {
+        /* DEBUG: Draw X if icon not found */
+        serial("[WIN] Icon %d not loaded for button at (%d,%d)\n", d->icon_type, x, y);
     }
 }
 

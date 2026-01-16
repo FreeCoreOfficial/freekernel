@@ -304,7 +304,7 @@ static void print_uint32(uint32_t v)
 }
 
 /* print signed 32-bit decimal */
-static void print_int32(int32_t v)
+static void __attribute__((unused)) print_int32(int32_t v)
 {
     if (v < 0) {
         terminal_putchar('-');

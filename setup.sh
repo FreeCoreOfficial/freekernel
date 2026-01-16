@@ -49,11 +49,13 @@ set default=0
 
 menuentry "Chrysalis OS" {
     multiboot /boot/chrysalis.bin
+    module /icons.mod
     boot
 }
 
 menuentry "Chrysalis OS (Debug Mode)" {
     multiboot /boot/chrysalis.bin --debug
+    module /icons.mod
     boot
 }
 EOF

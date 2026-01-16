@@ -130,6 +130,7 @@ OBJS = \
 	$(BUILD)/cmds/rm.o \
 	$(BUILD)/cmds/mkdir.o \
 	$(BUILD)/cmds/cd.o \
+	$(BUILD)/cmds/installer.o \
 	$(BUILD)/cmds/win.o \
 	$(BUILD)/cmds/net.o \
 	$(BUILD)/cmds/get.o \
@@ -591,6 +592,9 @@ $(BUILD)/cmds/rm.o: kernel/cmds/rm.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/cmds/mkdir.o: kernel/cmds/mkdir.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/installer.o: kernel/cmds/installer.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/cmds/cd.o: kernel/cmds/cd.cpp | dirs

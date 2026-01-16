@@ -10,7 +10,7 @@ static void print(const char* s) {
     terminal_writestring(s);
 }
 
-static void print_hex(uint32_t v) {
+static void __attribute__((unused)) print_hex(uint32_t v) {
     const char* hex = "0123456789ABCDEF";
     char buf[11] = "0x00000000";
 

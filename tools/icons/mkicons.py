@@ -20,7 +20,7 @@ icons = [
     (10, "info.png"),
     (11, "3D.png"),
     (12, "mine.png"),
-    (13, "net.webp"),
+    (13, "net.png"),
     (14, "x0.png"),
     (15, "run.png"),
 ]

@@ -89,6 +89,7 @@
 #include "ui/flyui/widgets/widgets.h"
 #include "ethernet/net.h"
 #include "detect/virtualbox.h"
+#include "string.h"
 
 
 
@@ -227,6 +228,13 @@ extern "C" {
     void kmalloc_init(void);
 }
 
+/* Global multiboot module info to preserve until kmalloc is ready */
+struct {
+    void* data;
+    uint32_t size;
+    const char* name;
+} g_multiboot_module = {NULL, 0, NULL};
+
 /* Buddy allocator wrapper that hooks the buddy allocator to the heap region
    defined by the linker script (linker.ld) */
 extern "C" void buddy_init_from_heap(void);
@@ -324,11 +332,13 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
                  }
                  total_ram_mb = total_bytes / (1024 * 1024);
             } else if (tag->type == MULTIBOOT2_TAG_TYPE_MODULE) {
-                 /* Detectare Modul (icons.mod) */
+                 /* Store Multiboot Module info (will copy to persistent location after kmalloc init) */
                  struct multiboot2_tag_module *mod = (struct multiboot2_tag_module*)tag;
                  uint32_t size = mod->mod_end - mod->mod_start;
-                 ramfs_create_file("icons.mod", (void*)mod->mod_start, size);
-                 serial("[KERNEL] Multiboot Module loaded: icons.mod at 0x%x (%u bytes)\n", mod->mod_start, size);
+                 g_multiboot_module.data = (void*)mod->mod_start;
+                 g_multiboot_module.size = size;
+                 g_multiboot_module.name = "icons.mod";
+                 serial("[KERNEL] Multiboot Module detected: icons.mod at 0x%x (%u bytes)\n", mod->mod_start, size);
             }
             tag = (struct multiboot2_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
         }
@@ -415,6 +425,14 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     heap_init(&__heap_start, (size_t)(&__heap_end - &__heap_start));
     buddy_init_from_heap();
     kmalloc_init();
+
+    /* Register multiboot module directly in RAMFS (don't copy - just point to it) */
+    /* The bootloader reserves this memory, so it won't be reallocated */
+    serial("[KERNEL] Checking multiboot module: data=0x%x size=%u\n", (uint32_t)g_multiboot_module.data, g_multiboot_module.size);
+    if (g_multiboot_module.data && g_multiboot_module.size > 0) {
+        ramfs_create_file("icons.mod", g_multiboot_module.data, g_multiboot_module.size);
+        serial("[KERNEL] Multiboot Module registered in RAMFS (bootloader memory, not copied)\n");
+    }
 
     // Sanity check PMM (if you have functions for total frames, check them here)
 
