@@ -30,6 +30,9 @@
     "//_storage": "Run with raw HDD image attached",
     "run:hdd": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 256 -smp 2 -boot order=d -cdrom chrysalis.iso -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std",
 
+    "//_installer": "Boot installer.iso with hdd.img attached",
+    "installer": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 256 -smp 2 -boot order=d -cdrom ../installer/installer.iso -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std",
+
     "//_boot": "Boot from HDD only (no CDROM)",
     "boot": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 256 -smp 2 -boot order=c -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std"
 ,
