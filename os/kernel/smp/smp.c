@@ -152,7 +152,7 @@ bool smp_prepare_aps(void) {
     
     uint16_t* gdt_desc_limit = (uint16_t*)(data_end - 18);
     uint32_t* gdt_desc_base  = (uint32_t*)(data_end - 16);
-    uint32_t* ap_stack_ptr   = (uint32_t*)(data_end - 12); // Placeholder, patched per-CPU
+    // uint32_t* ap_stack_ptr = (uint32_t*)(data_end - 12); // Patched per-CPU in smp_start_aps
     uint32_t* ap_cr3_ptr     = (uint32_t*)(data_end - 8);
     uint32_t* ap_entry_ptr   = (uint32_t*)(data_end - 4);
 

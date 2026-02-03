@@ -138,7 +138,7 @@ task_t *task_create(void (*entry)(void), int pid)
 
     k_memset(t, 0, sizeof(*t));
 
-    t->pid = (pid == 0) ? next_pid++ : pid;
+    t->pid = (pid == 0) ? (int)next_pid++ : pid;
 
     /* prepare stack in embedded kstack */
     uint32_t *sp = (uint32_t*)( (uintptr_t)t->kstack + sizeof(t->kstack) );

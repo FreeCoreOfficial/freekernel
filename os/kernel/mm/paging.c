@@ -38,6 +38,7 @@ static inline uint32_t virt_to_phys_addr(void* virt)
 uint32_t* get_pde_for(uint32_t* pagedir, uint32_t vaddr, int create)
 {
     if (!pagedir) return NULL;
+    (void)create;
     uint32_t pd_index = (vaddr >> 22) & 0x3FFu;
     return &pagedir[pd_index];
 }

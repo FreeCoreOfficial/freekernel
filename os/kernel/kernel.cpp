@@ -428,7 +428,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     /* Register multiboot module directly in RAMFS (don't copy - just point to it) */
     /* The bootloader reserves this memory, so it won't be reallocated */
-    serial("[KERNEL] Checking multiboot module: data=0x%x size=%u\n", (uint32_t)g_multiboot_module.data, g_multiboot_module.size);
     if (g_multiboot_module.data && g_multiboot_module.size > 0) {
         ramfs_create_file("icons.mod", g_multiboot_module.data, g_multiboot_module.size);
         serial("[KERNEL] Multiboot Module registered in RAMFS (bootloader memory, not copied)\n");

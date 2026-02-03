@@ -83,7 +83,7 @@ void* kmalloc(size_t size) {
     size = (size_t)ALIGN_UP(size, ALIGNMENT);
 
     /* search first-fit */
-    kmem_block_t* prev = NULL;
+    /* kmem_block_t* prev = NULL; */
     kmem_block_t* cur = free_list;
 
     while (cur) {
@@ -97,7 +97,7 @@ void* kmalloc(size_t size) {
 #endif
             return userptr;
         }
-        prev = cur;
+        /* prev = cur; */
         cur = cur->next;
     }
 

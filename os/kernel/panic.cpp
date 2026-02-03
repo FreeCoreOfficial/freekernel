@@ -92,6 +92,7 @@ static void draw_string(int x, int y, const char* s) {
     }
 }
 
+static void draw_string_center(int y, const char* s) __attribute__((unused));
 static void draw_string_center(int y, const char* s) {
     size_t len = strlen(s);
     int x = (VGA_WIDTH - (int)len) / 2;
@@ -122,6 +123,7 @@ static void u32_to_hex(uint32_t value, char* buf) {
     buf[10] = 0;
 }
 
+static void u32_to_dec(uint32_t value, char* buf) __attribute__((unused));
 static void u32_to_dec(uint32_t value, char* buf) {
     char temp[12];
     int i = 0;

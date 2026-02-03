@@ -33,10 +33,31 @@ struct AcpiState {
     MADT* madt;
 };
 
-static AcpiState acpi_state = {0};
+static AcpiState acpi_state = {
+    .s5_supported = false,
+    .pm1a_cnt = 0,
+    .pm1b_cnt = 0,
+    .slp_typa = 0,
+    .slp_typb = 0,
+    .sci_int = 0,
+    .smi_cmd = 0,
+    .acpi_enable = 0,
+    .acpi_disable = 0,
+    .cpu_count = 0,
+    .ioapic_count = 0,
+    .lapic_addr = 0,
+    .rsdt_phys = 0,
+    .fadt = NULL,
+    .madt = NULL
+};
 
 /* Global APIC Info */
-struct ApicInfo apic_info = {0};
+struct ApicInfo apic_info = {
+    .ioapics = {{0}},
+    .ioapic_count = 0,
+    .overrides = {{0}},
+    .override_count = 0
+};
 
 /* ============================================================
    Internal Helpers

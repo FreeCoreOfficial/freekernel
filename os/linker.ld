@@ -19,15 +19,15 @@ SECTIONS
     {
         *(.bss*)
         *(COMMON)
+
+        /* Reserved Kernel Heap (32MB) inside BSS so Bootloader respects it */
+        . = ALIGN(0x1000);
+        __heap_start = .;
+        . += 0x2000000;
+        __heap_end = .;
     }
 
-    /* ================== KERNEL HEAP ================== */
-    . = ALIGN(0x1000);
-    __heap_start = .;
-    . += 0x2000000; /* 32MB Heap for GUI buffers */
-    __heap_end = .;
-    . = ALIGN(0x1000);
-    /* ================================================= */
+    kernel_end = .;
 
     kernel_end = .;
 

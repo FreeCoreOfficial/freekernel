@@ -17,50 +17,41 @@ static vec3_t cube_verts[8] = {
 };
 
 /* Edges connecting vertices */
+/*
 static int cube_edges[12][2] = {
-    {0,1}, {1,2}, {2,3}, {3,0}, /* Front face */
-    {4,5}, {5,6}, {6,7}, {7,4}, /* Back face */
-    {0,4}, {1,5}, {2,6}, {3,7}  /* Connecting lines */
+    {0,1}, {1,2}, {2,3}, {3,0}, 
+    {4,5}, {5,6}, {6,7}, {7,4}, 
+    {0,4}, {1,5}, {2,6}, {3,7}  
 };
+*/
 
 /* Sin/Cos table (0..360 degrees scaled by 1024) */
 /* Simplified: we just compute on the fly or use a small table */
 /* Let's use a very simple approximation or just a small table */
+/* 
 static int sin_tbl[360];
 static int cos_tbl[360];
-static bool math_init = false;
+*/
+/* static bool math_init = false; */
 
+/*
 static void init_math() {
     if (math_init) return;
-    /* Generate rough table */
     for (int i=0; i<360; i++) {
-        /* Taylor series or just hardcoded values would be better but let's try a simple logic */
-        /* Actually, let's just use a few points and interpolate or just rotate by small increments */
-        /* For this demo, we will use a simple rotation matrix logic without full trig table if possible,
-           or just fill a small table manually. */
     }
     math_init = true;
 }
+*/
 
 /* Rotate point around Y axis */
+/* Unused rotation logic for now
 static void rotate_y(int angle, int* x, int* z) {
-    /* x' = x*cos(a) - z*sin(a) */
-    /* z' = x*sin(a) + z*cos(a) */
-    /* Using simplified integer rotation: 
-       We just rotate by a fixed small amount each frame without trig functions 
-       by using the previous values. But here we re-calculate from base vertices.
-       Let's use a very rough approximation: 
-       cos(a) ~ 1 - a^2/2, sin(a) ~ a ... for small a.
-       Better: Use a precomputed table for 0..63 (64 steps circle) */
-    
+    // ...
     static const int cos_64[16] = {1024, 1019, 1004, 980, 946, 903, 851, 792, 724, 716, 639, 555, 461, 362, 257, 146};
     static const int sin_64[16] = {0, 100, 199, 296, 390, 480, 566, 645, 716, 780, 836, 881, 916, 941, 956, 961};
-    
-    /* Map angle 0..360 to 0..64 */
-    /* ... actually, let's just implement a simple 2D rotation function */
-    /* Assume angle is 0..100 */
-    /* We will skip complex math and just draw a static cube if we can't do math easily. */
+    (void)angle; (void)x; (void)z; (void)cos_64; (void)sin_64; 
 }
+*/
 
 void demo3d_app_create(void) {
     if (demo_win) return;
@@ -116,19 +107,21 @@ void demo3d_app_update(void) {
     /* Project and Draw */
     /* Simple rotation around Y: x' = x*cos - z*sin, z' = x*sin + z*cos */
     /* We use a very rough approximation for cos/sin based on angle */
-    float rad = (float)angle * 3.14159f / 180.0f;
+    /* float rad = (float)angle * 3.14159f / 180.0f; */
+    /* (void)rad; */
     /* Since we don't have float math linked, we use fixed point */
     /* 1024 = 1.0 */
     /* We need a sin/cos table. For now, let's just oscillate vertices to simulate rotation */
     
-    vec3_t projected[8];
+    /* vec3_t projected[8]; */
     for(int i=0; i<8; i++) {
-        /* Fake rotation */
+        /* Fake rotation - unused calculation for now */
+        /*
         int x = cube_verts[i].x;
         int z = cube_verts[i].z;
-        /* Rotate (simplified) */
-        projected[i].x = cx + x + (z * angle / 100); /* Bogus math but moves points */
+        projected[i].x = cx + x + (z * angle / 100); 
         projected[i].y = cy + cube_verts[i].y;
+        */
     }
     
     /* Draw Edges */

@@ -39,6 +39,7 @@ static uint32_t dl_size = 0;
 static bool dl_complete = false;
 
 static void curl_tcp_callback(uint32_t src_ip, uint16_t src_port, uint16_t dst_port, uint8_t flags, uint32_t seq, uint32_t ack, const uint8_t* data, size_t len) {
+    (void)src_port; (void)dst_port; (void)flags; (void)seq; (void)ack; (void)data; (void)len;
     if (src_ip != server_ip_addr || dst_port != local_port) return;
 
     if (tcp_state == STATE_SYN_SENT) {

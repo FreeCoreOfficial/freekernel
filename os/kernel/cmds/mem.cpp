@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 /* Minimal local string helpers (avoid system libc includes) */
+static size_t k_strlen(const char* s) __attribute__((unused));
 static size_t k_strlen(const char* s) {
     const char* p = s;
     while (p && *p) ++p;
@@ -35,6 +36,7 @@ static const char* k_strstr(const char* haystack, const char* needle) {
     return NULL;
 }
 
+static void* k_memcpy(void* dest, const void* src, size_t n) __attribute__((unused));
 static void* k_memcpy(void* dest, const void* src, size_t n) {
     if (!dest || !src) return dest;
     unsigned char* d = (unsigned char*)dest;

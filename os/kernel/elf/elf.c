@@ -9,12 +9,13 @@ extern void* memset(void* dst, int c, uint32_t n);
 extern void terminal_printf(const char* fmt, ...);
 
 /* Basic bounds-safe accessor helpers */
+static int safe_read_u16(const void* base, uint32_t size, uint32_t off, uint16_t* out) __attribute__((unused));
 static int safe_read_u16(const void* base, uint32_t size, uint32_t off, uint16_t* out) {
     if (off + sizeof(uint16_t) > size) return -1;
-    const uint8_t* b = (const uint8_t*)base + off;
-    *out = (uint16_t)(b[0] | (b[1] << 8));
+    *out = *(const uint16_t*)((const uint8_t*)base + off);
     return 0;
 }
+static int safe_read_u32(const void* base, uint32_t size, uint32_t off, uint32_t* out) __attribute__((unused));
 static int safe_read_u32(const void* base, uint32_t size, uint32_t off, uint32_t* out) {
     if (off + sizeof(uint32_t) > size) return -1;
     const uint8_t* b = (const uint8_t*)base + off;
@@ -110,7 +111,8 @@ int elf_load_into_kernel_space(const void* data, uint32_t size, elf_load_info_t*
         }
         /* copy content from file into kernel buffer */
         if (s->filesz > 0) {
-            const void* src = (const uint8_t*)data + /* p_offset: must re-read phdr to know offset */ 0;
+            /* const void* src = ...; */
+    (void)data; /* unused if src is unused */
             /* We didn't store p_offset in elf_segment_t to keep header minimal.
                To avoid re-parsing offsets here, we will re-parse program headers
                directly from header data. Simpler approach: re-walk phdrs to copy. */

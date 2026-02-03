@@ -157,6 +157,39 @@ void pmm_init(uint32_t mb_magic, void* mb_addr)
         }
     }
 
+    /* 3.5. Reserve Multiboot Modules (crucial!) 
+       GRUB loads modules into "Available" RAM, so we must re-reserve them
+       to prevent PMM from handing them out as free frames.
+    */
+    if (is_mb2 && mb_addr != 0) {
+        serial("[PMM] Scanning for modules...\n");
+        struct multiboot2_tag *tag = (struct multiboot2_tag*)((uint8_t*)mb_addr + 8);
+        while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
+             /* serial("[PMM] Tag Type: %d\n", tag->type); */
+             if (tag->type == MULTIBOOT2_TAG_TYPE_MODULE) {
+                 struct multiboot2_tag_module *mod = (struct multiboot2_tag_module*)tag;
+                 uint32_t mod_start = mod->mod_start;
+                 uint32_t mod_end = mod->mod_end;
+                 uint32_t size = mod_end - mod_start;
+                 serial("[PMM] Reserving module at 0x%x len %u\n", mod_start, size);
+                 pmm_reserve_area(mod_start, size);
+             }
+             tag = (struct multiboot2_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
+        }
+    } else if (!is_mb2 && mb_addr != 0) {
+        /* Multiboot 1 Modules */
+        multiboot_info_t* mbi = (multiboot_info_t*)mb_addr;
+        if (mbi->flags & (1<<3)) { /* mods_* valid */
+            multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;
+            for (uint32_t i = 0; i < mbi->mods_count; i++) {
+                uint32_t start = mods[i].mod_start;
+                uint32_t end = mods[i].mod_end;
+                serial("[PMM] Reserving MB1 module at 0x%x len %u\n", start, end - start);
+                pmm_reserve_area(start, end - start);
+            }
+        }
+    }
+
     /* 4. reserve kernel frames (0 .. kernel_end_frame) + bitmap frames */
     // Reserve everything below 1MB (BIOS/VGA/Trampoline area)
     // Reserve kernel code/data

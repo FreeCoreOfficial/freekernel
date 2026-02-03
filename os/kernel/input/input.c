@@ -42,7 +42,7 @@ bool input_pop(input_event_t *out_event) {
 }
 
 void input_push_key(uint32_t keycode, bool pressed) {
-    input_event_t ev;
+    input_event_t ev = {0};
     ev.type = INPUT_KEYBOARD;
     ev.keycode = keycode;
     ev.pressed = pressed;

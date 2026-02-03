@@ -47,6 +47,7 @@ static int append_str_at(char *dst, int off, const char *src)
 }
 
 /* append single char */
+static int append_char_at(char *dst, int off, char c) __attribute__((unused));
 static int append_char_at(char *dst, int off, char c)
 {
     dst[off] = c;

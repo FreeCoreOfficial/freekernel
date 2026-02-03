@@ -31,7 +31,8 @@ void paging_map_kernel_higher_half(void) {
     
     uint32_t virt_start = KERNEL_BASE;
     uint32_t phys_start = KERNEL_PHYS_BASE;
-    uint32_t map_size   = 64 * 1024 * 1024; /* 64 MB to cover 32MB heap + kernel + bitmap */
+    /* Map 512MB to ensure we cover the kernel, heap, and large multiboot modules (icons.mod is ~67MB) */
+    uint32_t map_size   = 512 * 1024 * 1024;
     
     /* 1. Identity map the first 32MB (covers kernel low-half code, VGA, etc.)
      * This is CRITICAL: without this, enabling paging (CR0.PG=1) causes an

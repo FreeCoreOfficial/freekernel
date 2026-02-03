@@ -14,4 +14,4 @@
 __attribute__((section(".rodata")))
 const uint8_t *user_prog = (const uint8_t *)build_user_prog_bin;
 
-const uint32_t user_prog_len = (const uint32_t)build_user_prog_bin_len;
+const uint32_t user_prog_len = (uint32_t)build_user_prog_bin_len;

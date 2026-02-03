@@ -109,7 +109,7 @@ int fly_load_bmp_to_surface(surface_t* surf, const char* path) {
                 uint8_t b = px[0];
                 uint8_t g = px[1];
                 uint8_t r = px[2];
-                uint8_t a = px[3]; /* Alpha channel might be ignored or used */
+                /* uint8_t a = px[3]; */
                 color = 0xFF000000 | (r << 16) | (g << 8) | b; 
                 /* Notă: Multe BMP-uri 32bpp au alpha 0, deci forțăm FF la alpha pentru vizibilitate */
             }

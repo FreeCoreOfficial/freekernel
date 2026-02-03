@@ -162,7 +162,7 @@ static gpu_ops_t bochs_ops = {
 void gpu_bochs_init(void) {
     serial("[GPU] Probing PCI for Bochs/QEMU GPU...\n");
 
-    uint32_t pci_addr = 0;
+    /* uint32_t pci_addr = 0; */
     uint32_t bar0 = 0;
     int found = 0;
 
