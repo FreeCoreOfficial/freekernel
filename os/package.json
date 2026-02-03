@@ -9,6 +9,8 @@
   "//": "====================================================",
 
   "scripts": {
+    "//_hdd": "Create a new HDD image",
+    "qimg": "clear && qemu-img create -f raw hdd.img 2G",
     "//_build": "Build & ISO generation",
     "build": "clear && make clean && make dirs && make && make iso",
 
