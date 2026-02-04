@@ -99,7 +99,7 @@ static void build_path(char* out, size_t cap, const char* name) {
 
 static void create_new_file(void) {
     fat_automount();
-    char name[32];
+    char name[256];
     char path[256];
     int idx = 0;
     while (idx < 100) {
@@ -111,6 +111,7 @@ static void create_new_file(void) {
             strcat(name, buf);
             strcat(name, ".txt");
         }
+        name[255] = 0;
         build_path(path, sizeof(path), name);
         if (fat32_get_file_size(path) < 0) {
             fat32_create_file(path, "", 0);
@@ -122,7 +123,7 @@ static void create_new_file(void) {
 
 static void create_new_folder(void) {
     fat_automount();
-    char name[32];
+    char name[256];
     char path[256];
     int idx = 0;
     while (idx < 100) {
@@ -133,6 +134,7 @@ static void create_new_folder(void) {
             itoa_dec(buf, idx);
             strcat(name, buf);
         }
+        name[255] = 0;
         build_path(path, sizeof(path), name);
         if (!fat32_directory_exists(path)) {
             fat32_create_directory(path);
@@ -184,7 +186,7 @@ static void draw_fm(surface_t* s) {
         
         fly_draw_rect_fill(s, 5, y, s->width-10, 18, bg);
         
-        char label[64];
+        char label[256];
         if (files[i].is_dir) {
             /* Draw Folder Icon (Yellow Rect) */
             fly_draw_rect_fill(s, 10, y+2, 12, 12, 0xFFFFFF00);
@@ -195,6 +197,13 @@ static void draw_fm(surface_t* s) {
         }
         fly_draw_text(s, 25, y+2, label, fg);
         y += 20;
+    }
+
+    /* Selected item full name (status line) */
+    if (selected_idx >= 0 && selected_idx < file_count) {
+        fly_draw_rect_fill(s, 0, s->height - 18, s->width, 18, 0xFFF0F0F0);
+        fly_draw_rect_outline(s, 0, s->height - 18, s->width, 1, 0xFF000000);
+        fly_draw_text(s, 5, s->height - 16, files[selected_idx].name, 0xFF000000);
     }
 }
 

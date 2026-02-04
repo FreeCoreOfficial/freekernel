@@ -15,7 +15,7 @@ void fat32_list_directory(const char* path);
 
 /* Structure for directory listing API */
 typedef struct {
-    char name[13];
+    char name[256];
     uint32_t size;
     uint8_t is_dir;
 } fat_file_info_t;
@@ -40,6 +40,9 @@ int fat32_create_directory(const char* path);
 
 /* Check if a directory exists */
 int fat32_directory_exists(const char* path);
+
+/* Rename/move within same directory */
+int fat32_rename(const char* src, const char* dst);
 
 /* Format a partition with FAT32 */
 int fat32_format(uint32_t lba, uint32_t sector_count, const char* label);

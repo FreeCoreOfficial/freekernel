@@ -8,6 +8,7 @@
 #include "../video/fb_console.h"
 #include "mouse.h" /* Pentru mouse_init la reload */
 #include "../vt/vt.h"
+#include "../time/timer.h"
 #include "../cmds/win.h"
 
 /* PS/2 Ports */
@@ -53,6 +54,79 @@ static bool shift_pressed = false;
 static bool alt_pressed = false;
 static bool e0_prefix = false;
 static bool caps_lock = false;
+static uint32_t last_kbd_ms = 0;
+static uint32_t last_reset_ms = 0;
+
+static void handle_scancode(uint8_t scancode) {
+    /* Handle Extended Scancodes (E0) */
+    if (scancode == 0xE0) {
+        e0_prefix = true;
+        return;
+    }
+
+    /* Handle Break Codes (Key Release) */
+    if (scancode & 0x80) {
+        uint8_t sc = scancode & 0x7F;
+        if (sc == 0x2A || sc == 0x36) shift_pressed = false;
+        else if (sc == 0x1D) ctrl_pressed = false;
+        else if (sc == 0x38) alt_pressed = false;
+        e0_prefix = false;
+        return;
+    }
+
+    /* Handle Make Codes (Key Press) */
+    if (scancode == 0x2A || scancode == 0x36) { shift_pressed = true; return; }
+    if (scancode == 0x1D) { ctrl_pressed = true; return; }
+    if (scancode == 0x38) { alt_pressed = true; return; }
+    if (scancode == 0x3A) { caps_lock = !caps_lock; return; }
+
+    /* VT Switching: Ctrl + Alt + F1..F8 */
+    if (ctrl_pressed && alt_pressed && scancode >= 0x3B && scancode <= 0x42) {
+        int vt_idx = scancode - 0x3B;
+        vt_switch(vt_idx);
+        return;
+    }
+
+    /* Handle Special Keys with E0 prefix */
+    if (e0_prefix) {
+        if (!win_is_gui_running()) {
+            if (scancode == 0x49) fb_cons_scroll(-10);      /* Page Up */
+            else if (scancode == 0x51) fb_cons_scroll(10);  /* Page Down */
+            else if (scancode == 0x48) fb_cons_scroll(-1);  /* Arrow Up */
+            else if (scancode == 0x50) fb_cons_scroll(1);   /* Arrow Down */
+        }
+        e0_prefix = false;
+        return;
+    }
+
+    /* Keypad Scroll Fallback */
+    if (!win_is_gui_running()) {
+        if (scancode == 0x48) { fb_cons_scroll(-1); return; }     /* Keypad 8 */
+        else if (scancode == 0x50) { fb_cons_scroll(1); return; } /* Keypad 2 */
+    }
+
+    /* ASCII Translation */
+    char c = 0;
+    if (scancode < 128) {
+        c = shift_pressed ? keymap_us_shift[scancode] : keymap_us[scancode];
+    }
+
+    /* Caps Lock: toggle case for letters */
+    if (caps_lock && c) {
+        if (c >= 'a' && c <= 'z') c -= 32;
+        else if (c >= 'A' && c <= 'Z') c += 32;
+    }
+
+    /* Apply Control Modifier (Ctrl+A..Z -> 1..26) */
+    if (ctrl_pressed && c) {
+        if (c >= 'a' && c <= 'z') c -= 96;
+        else if (c >= 'A' && c <= 'Z') c -= 64;
+    }
+
+    if (c) {
+        input_push_key((uint32_t)c, true);
+    }
+}
 
 /* Helpers pentru sincronizare PS/2 */
 static void kbd_wait_write() {
@@ -99,85 +173,11 @@ extern "C" void keyboard_handler(registers_t* regs)
 
         /* Read Scancode */
         uint8_t scancode = inb(PS2_DATA);
+        last_kbd_ms = timer_uptime_ms();
 
-        /* If USB keyboard is active, ignore PS/2 to avoid duplicates */
-        if (input_is_usb_keyboard_active()) {
-            continue;
-        }
+        /* Allow PS/2 even if USB is active to avoid total input loss */
 
-        /* Handle Extended Scancodes (E0) */
-        if (scancode == 0xE0) {
-            e0_prefix = true;
-            continue;
-        }
-
-        /* Handle Break Codes (Key Release) */
-        if (scancode & 0x80) {
-            uint8_t sc = scancode & 0x7F;
-            if (sc == 0x2A || sc == 0x36) shift_pressed = false;
-            else if (sc == 0x1D) ctrl_pressed = false;
-            else if (sc == 0x38) alt_pressed = false;
-            
-            e0_prefix = false; 
-        } 
-        /* Handle Make Codes (Key Press) */
-        else {
-            if (scancode == 0x2A || scancode == 0x36) shift_pressed = true;
-            else if (scancode == 0x1D) ctrl_pressed = true;
-            else if (scancode == 0x38) alt_pressed = true;
-            else if (scancode == 0x3A) caps_lock = !caps_lock; /* Caps Lock */
-            else {
-                /* VT Switching: Ctrl + Alt + F1..F8 */
-                if (ctrl_pressed && alt_pressed && scancode >= 0x3B && scancode <= 0x42) {
-                    int vt_idx = scancode - 0x3B;
-                    vt_switch(vt_idx);
-                    return;
-                }
-
-                /* Handle Special Keys with E0 prefix */
-                if (e0_prefix) {
-                    if (!win_is_gui_running()) {
-                        if (scancode == 0x49) fb_cons_scroll(-10);      /* Page Up */
-                        else if (scancode == 0x51) fb_cons_scroll(10);  /* Page Down */
-                        else if (scancode == 0x48) fb_cons_scroll(-1);  /* Arrow Up */
-                        else if (scancode == 0x50) fb_cons_scroll(1);   /* Arrow Down */
-                    }
-                    
-                    e0_prefix = false;
-                } 
-                /* Standard Keys */
-                else {
-                    /* Keypad Scroll Fallback */
-                    if (!win_is_gui_running()) {
-                        if (scancode == 0x48) { fb_cons_scroll(-1); }      /* Keypad 8 */
-                        else if (scancode == 0x50) { fb_cons_scroll(1); }  /* Keypad 2 */
-                    }
-                    else {
-                        /* ASCII Translation */
-                        char c = 0;
-                        if (scancode < 128) {
-                            c = shift_pressed ? keymap_us_shift[scancode] : keymap_us[scancode];
-                        }
-
-                        /* Caps Lock: toggle case for letters */
-                        if (caps_lock && c) {
-                            if (c >= 'a' && c <= 'z') c -= 32;
-                            else if (c >= 'A' && c <= 'Z') c += 32;
-                        }
-
-                        /* Apply Control Modifier (Ctrl+A..Z -> 1..26) */
-                        if (ctrl_pressed && c) {
-                            if (c >= 'a' && c <= 'z') c -= 96;
-                            else if (c >= 'A' && c <= 'Z') c -= 64;
-                        }
-                        
-                        if (c) {
-                            input_push_key((uint32_t)c, true);
-                        }
-                    }
-                }
-            }
-        }
+        handle_scancode(scancode);
         loops++;
     }
 }
@@ -185,6 +185,7 @@ extern "C" void keyboard_handler(registers_t* regs)
 extern "C" void keyboard_init()
 {
     serial("[PS/2] Initializing keyboard...\n");
+    serial("[PS/2] Device init start (IRQ1)\n");
 
     /* 1. Disable Devices */
     kbd_wait_write();
@@ -243,6 +244,7 @@ static int watchdog_stuck_count = 0;
 
 void ps2_controller_watchdog(void) {
     uint8_t status = inb(PS2_STATUS);
+    uint32_t now = timer_uptime_ms();
     
     /* Verificăm dacă există date în buffer (Bit 0 = 1) */
     if (status & STATUS_OUTPUT_FULL) {
@@ -268,5 +270,20 @@ void ps2_controller_watchdog(void) {
     } else {
         /* Buffer gol, totul e OK */
         watchdog_stuck_count = 0;
+    }
+
+    /* Poll keyboard if IRQ isn't firing */
+    if ((status & STATUS_OUTPUT_FULL) && !(status & STATUS_AUX_FULL)) {
+        uint8_t scancode = inb(PS2_DATA);
+        handle_scancode(scancode);
+    }
+
+    /* If no keyboard scancodes seen for a while, re-init PS/2 */
+    if (!input_is_usb_keyboard_active()) {
+        if ((now - last_kbd_ms) > 5000 && (now - last_reset_ms) > 5000) {
+            serial("[PS/2] Watchdog: No scancodes, reinitializing...\n");
+            last_reset_ms = now;
+            keyboard_init();
+        }
     }
 }

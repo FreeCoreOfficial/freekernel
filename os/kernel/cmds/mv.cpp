@@ -64,6 +64,15 @@ extern "C" int cmd_mv(int argc, char** argv) {
 
     fat_automount();
 
+    int rr = fat32_rename(src, dst);
+    if (rr == 0) {
+        return 0;
+    }
+    if (rr == -2) {
+        terminal_printf("mv: %s exists\n", dst);
+        return -1;
+    }
+
     if (copy_file(src, dst) != 0) {
         return -1;
     }

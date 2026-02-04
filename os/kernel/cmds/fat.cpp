@@ -60,6 +60,189 @@ struct fat_dir_entry {
     uint32_t size;
 } __attribute__((packed));
 
+/* LFN entry (ATTR=0x0F) */
+struct fat_lfn_entry {
+    uint8_t seq;
+    uint16_t name1[5];
+    uint8_t attr;
+    uint8_t type;
+    uint8_t checksum;
+    uint16_t name2[6];
+    uint16_t zero;
+    uint16_t name3[2];
+} __attribute__((packed));
+
+static int str_casecmp(const char* a, const char* b) {
+    while (*a && *b) {
+        char ca = *a;
+        char cb = *b;
+        if (ca >= 'A' && ca <= 'Z') ca += 32;
+        if (cb >= 'A' && cb <= 'Z') cb += 32;
+        if (ca != cb) return (int)(unsigned char)ca - (int)(unsigned char)cb;
+        a++; b++;
+    }
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+}
+
+static bool is_valid_short_char(char c) {
+    if (c >= 'A' && c <= 'Z') return true;
+    if (c >= '0' && c <= '9') return true;
+    switch (c) {
+        case '!': case '#': case '$': case '%': case '&': case '\'':
+        case '(': case ')': case '-': case '@': case '^': case '_':
+        case '`': case '{': case '}': case '~':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool needs_lfn(const char* name, int len) {
+    if (len <= 0) return false;
+    if (len > 12) return true;
+    int dot_count = 0;
+    int base_len = 0;
+    int ext_len = 0;
+    for (int i = 0; i < len; i++) {
+        char c = name[i];
+        if (c == '.') { dot_count++; continue; }
+        if (c >= 'a' && c <= 'z') return true;
+        if (c == ' ') return true;
+        if (!is_valid_short_char(c)) return true;
+        if (dot_count == 0) base_len++;
+        else ext_len++;
+    }
+    if (dot_count > 1) return true;
+    if (base_len > 8 || ext_len > 3) return true;
+    return false;
+}
+
+static uint8_t lfn_checksum(const char short_name[11]) {
+    uint8_t sum = 0;
+    for (int i = 0; i < 11; i++) {
+        sum = (sum >> 1) | (sum << 7);
+        sum += (uint8_t)short_name[i];
+    }
+    return sum;
+}
+
+static void lfn_reset(char* buf) {
+    if (buf) buf[0] = 0;
+}
+
+static void lfn_put_part(char* out, int out_len, int seq, const struct fat_lfn_entry* lfn) {
+    if (!out || out_len <= 0) return;
+    int base = (seq - 1) * 13;
+    int idx = base;
+    for (int i = 0; i < 5; i++) {
+        uint16_t ch = lfn->name1[i];
+        if (ch == 0x0000 || ch == 0xFFFF) return;
+        if (idx < out_len - 1) out[idx++] = (char)(ch & 0xFF);
+    }
+    for (int i = 0; i < 6; i++) {
+        uint16_t ch = lfn->name2[i];
+        if (ch == 0x0000 || ch == 0xFFFF) return;
+        if (idx < out_len - 1) out[idx++] = (char)(ch & 0xFF);
+    }
+    for (int i = 0; i < 2; i++) {
+        uint16_t ch = lfn->name3[i];
+        if (ch == 0x0000 || ch == 0xFFFF) return;
+        if (idx < out_len - 1) out[idx++] = (char)(ch & 0xFF);
+    }
+}
+
+static void lfn_finalize(char* buf, int buf_len) {
+    for (int i = 0; i < buf_len; i++) {
+        unsigned char c = (unsigned char)buf[i];
+        if (c == 0xFF || c == 0x00) { buf[i] = 0; return; }
+    }
+    buf[buf_len - 1] = 0;
+}
+
+static void make_short_alias(const char* longname, char out[11], int suffix) {
+    memset(out, ' ', 11);
+    const char* dot = strrchr(longname, '.');
+    int base_len = dot ? (int)(dot - longname) : (int)strlen(longname);
+    int ext_len = dot ? (int)strlen(dot + 1) : 0;
+    if (base_len < 0) base_len = 0;
+    if (ext_len < 0) ext_len = 0;
+
+    int bi = 0;
+    for (int i = 0; i < base_len && bi < 8; i++) {
+        char c = longname[i];
+        if (c == ' ' || c == '.' ) continue;
+        if (c >= 'a' && c <= 'z') c -= 32;
+        out[bi++] = c;
+    }
+
+    if (suffix > 0) {
+        char suf[8];
+        int si = 0;
+        int tmp = suffix;
+        while (tmp > 0 && si < (int)sizeof(suf) - 1) {
+            suf[si++] = (char)('0' + (tmp % 10));
+            tmp /= 10;
+        }
+        if (si == 0) { suf[si++] = '0'; }
+        for (int i = 0; i < si / 2; i++) {
+            char t = suf[i];
+            suf[i] = suf[si - 1 - i];
+            suf[si - 1 - i] = t;
+        }
+        suf[si] = 0;
+        int max_base = 8 - (1 + si);
+        if (max_base < 1) max_base = 1;
+        if (bi > max_base) bi = max_base;
+        out[bi++] = '~';
+        for (int i = 0; i < si && bi < 8; i++) {
+            out[bi++] = suf[i];
+        }
+        while (bi < 8) out[bi++] = ' ';
+    }
+
+    int ei = 0;
+    for (int i = 0; i < ext_len && ei < 3; i++) {
+        char c = dot[1 + i];
+        if (c == ' ') continue;
+        if (c >= 'a' && c <= 'z') c -= 32;
+        out[8 + ei++] = c;
+    }
+}
+
+static void copy_component(char* out, int out_len, const char* in, int in_len) {
+    if (!out || out_len <= 0) return;
+    int n = in_len;
+    if (n >= out_len) n = out_len - 1;
+    if (n < 0) n = 0;
+    memcpy(out, in, n);
+    out[n] = 0;
+}
+
+static void lfn_build_entry(struct fat_lfn_entry* e, int seq, bool is_last, uint8_t checksum,
+                            const char* name, int name_len, int start) {
+    e->seq = (uint8_t)seq | (is_last ? 0x40 : 0x00);
+    e->attr = 0x0F;
+    e->type = 0;
+    e->checksum = checksum;
+    e->zero = 0;
+
+    for (int i = 0; i < 5; i++) e->name1[i] = 0xFFFF;
+    for (int i = 0; i < 6; i++) e->name2[i] = 0xFFFF;
+    for (int i = 0; i < 2; i++) e->name3[i] = 0xFFFF;
+
+    for (int i = 0; i < 13; i++) {
+        int idx = start + i;
+        uint16_t ch;
+        if (idx < name_len) ch = (uint8_t)name[idx];
+        else if (idx == name_len) ch = 0x0000;
+        else ch = 0xFFFF;
+
+        if (i < 5) e->name1[i] = ch;
+        else if (i < 11) e->name2[i - 5] = ch;
+        else e->name3[i - 11] = ch;
+    }
+}
+
 struct fat_fsinfo {
     uint32_t lead_sig;      // 0x41615252
     uint8_t  reserved1[480];
@@ -96,8 +279,16 @@ static int find_in_cluster(uint32_t dir_cluster, const char* name, int name_len,
                            uint32_t data_start, uint32_t fat_start, uint32_t spc, uint32_t bps,
                            uint32_t* out_cluster, uint32_t* out_size, uint32_t* out_sector, uint32_t* out_offset, bool* out_is_dir) 
 {
+    if (name_len <= 0 || name_len > 255) return -1;
+    char name_buf[256];
+    copy_component(name_buf, sizeof(name_buf), name, name_len);
+
     char target[11];
     to_dos_name_component(name, name_len, target);
+    char lfn_buf[256];
+    lfn_reset(lfn_buf);
+    bool lfn_active = false;
+    uint8_t lfn_chk = 0;
     
     uint8_t* sector = (uint8_t*)kmalloc(512);
     if (!sector) return -1;
@@ -111,7 +302,37 @@ static int find_in_cluster(uint32_t dir_cluster, const char* name, int name_len,
             for (int j = 0; j < 512 / 32; j++) {
                 if (entries[j].name[0] == 0) { kfree(sector); return -1; }
                 if ((uint8_t)entries[j].name[0] == 0xE5) continue;
-                if (entries[j].attr == 0x0F) continue;
+                if (entries[j].attr == 0x0F) {
+                    struct fat_lfn_entry* lfn = (struct fat_lfn_entry*)&entries[j];
+                    int seq = lfn->seq & 0x1F;
+                    if (lfn->seq & 0x40) {
+                        lfn_reset(lfn_buf);
+                        lfn_active = true;
+                        lfn_chk = lfn->checksum;
+                    }
+                    if (lfn_active) {
+                        lfn_put_part(lfn_buf, sizeof(lfn_buf), seq, lfn);
+                    }
+                    continue;
+                }
+
+                if (lfn_active) {
+                    lfn_finalize(lfn_buf, sizeof(lfn_buf));
+                    uint8_t short_chk = lfn_checksum((const char*)entries[j].name);
+                    if (lfn_chk == short_chk && str_casecmp(lfn_buf, name_buf) == 0) {
+                        if (out_cluster) {
+                            *out_cluster = (entries[j].cluster_hi << 16) | entries[j].cluster_low;
+                            if (*out_cluster == 0) *out_cluster = 0;
+                        }
+                        if (out_size) *out_size = entries[j].size;
+                        if (out_sector) *out_sector = cluster_lba + i;
+                        if (out_offset) *out_offset = j;
+                        if (out_is_dir) *out_is_dir = (entries[j].attr & 0x10) ? true : false;
+                        kfree(sector);
+                        return 0;
+                    }
+                    lfn_active = false;
+                }
 
                 if (memcmp(entries[j].name, target, 11) == 0) {
                     if (out_cluster) {
@@ -138,6 +359,285 @@ static int find_in_cluster(uint32_t dir_cluster, const char* name, int name_len,
     return -1;
 }
 
+static bool short_name_exists(const uint8_t* dirbuf, int total_entries, const char short_name[11]) {
+    const struct fat_dir_entry* entries = (const struct fat_dir_entry*)dirbuf;
+    for (int i = 0; i < total_entries; i++) {
+        if (entries[i].name[0] == 0) break;
+        if ((uint8_t)entries[i].name[0] == 0xE5) continue;
+        if (entries[i].attr == 0x0F) continue;
+        if (memcmp(entries[i].name, short_name, 11) == 0) return true;
+    }
+    return false;
+}
+
+static uint32_t fat_get_next_cluster(uint32_t cluster, uint32_t fat_start, uint16_t bps, uint8_t* sector);
+
+static bool short_name_exists_in_dir(uint32_t dir_cluster, uint32_t data_start, uint32_t fat_start,
+                                     uint8_t spc, uint16_t bps, const char short_name[11]) {
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return false;
+    int entries_per_sector = 512 / 32;
+    uint32_t current_cluster = dir_cluster;
+    while (current_cluster < 0x0FFFFFF8) {
+        uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
+        for (int i = 0; i < spc; i++) {
+            disk_read_sector(cluster_lba + i, sector);
+            if (short_name_exists(sector, entries_per_sector, short_name)) {
+                kfree(sector);
+                return true;
+            }
+        }
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+    }
+    kfree(sector);
+    return false;
+}
+
+static uint32_t fat_get_next_cluster(uint32_t cluster, uint32_t fat_start, uint16_t bps, uint8_t* sector) {
+    uint32_t fat_sector = fat_start + (cluster * 4) / bps;
+    uint32_t fat_offset = (cluster * 4) % bps;
+    disk_read_sector(fat_sector, sector);
+    return (*(uint32_t*)(sector + fat_offset)) & 0x0FFFFFFF;
+}
+
+static void fat_set_next_cluster(uint32_t cluster, uint32_t value, uint32_t fat_start, uint16_t bps, uint8_t* sector) {
+    uint32_t fat_sector = fat_start + (cluster * 4) / bps;
+    uint32_t fat_offset = (cluster * 4) % bps;
+    disk_read_sector(fat_sector, sector);
+    *(uint32_t*)(sector + fat_offset) = value;
+    disk_write_sector(fat_sector, sector);
+}
+
+static uint32_t fat_alloc_cluster(uint32_t fat_start, uint32_t sectors_per_fat, uint8_t* sector) {
+    for (uint32_t s = 0; s < sectors_per_fat; s++) {
+        disk_read_sector(fat_start + s, sector);
+        uint32_t* table = (uint32_t*)sector;
+        for (int k = 0; k < 128; k++) {
+            if ((table[k] & 0x0FFFFFFF) == 0) {
+                uint32_t cluster = s * 128 + k;
+                if (cluster < 2) continue;
+                table[k] = 0x0FFFFFFF;
+                disk_write_sector(fat_start + s, sector);
+                return cluster;
+            }
+        }
+    }
+    return 0;
+}
+
+static bool dir_locate_entry(uint32_t dir_cluster, uint32_t entry_idx,
+                             uint32_t data_start, uint32_t fat_start, uint8_t spc, uint16_t bps,
+                             uint32_t* out_sector_lba, uint32_t* out_offset) {
+    int entries_per_sector = 512 / 32;
+    int entries_per_cluster = spc * entries_per_sector;
+    uint32_t cluster_steps = entry_idx / entries_per_cluster;
+    uint32_t offset_in_cluster = entry_idx % entries_per_cluster;
+    uint32_t sector_idx = offset_in_cluster / entries_per_sector;
+    uint32_t offset = offset_in_cluster % entries_per_sector;
+
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return false;
+
+    uint32_t cluster = dir_cluster;
+    for (uint32_t i = 0; i < cluster_steps; i++) {
+        cluster = fat_get_next_cluster(cluster, fat_start, bps, sector);
+        if (cluster >= 0x0FFFFFF8) { kfree(sector); return false; }
+    }
+
+    *out_sector_lba = data_start + (cluster - 2) * spc + sector_idx;
+    *out_offset = offset;
+    kfree(sector);
+    return true;
+}
+
+static int dir_calc_entry_index(uint32_t dir_cluster, uint32_t target_sector, uint32_t target_offset,
+                                uint32_t data_start, uint32_t fat_start, uint8_t spc, uint16_t bps) {
+    int entries_per_sector = 512 / 32;
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return -1;
+    uint32_t current_cluster = dir_cluster;
+    int index = 0;
+    while (current_cluster < 0x0FFFFFF8) {
+        uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
+        for (int i = 0; i < spc; i++) {
+            uint32_t lba = cluster_lba + i;
+            disk_read_sector(lba, sector);
+            if (lba == target_sector) {
+                kfree(sector);
+                return index + (int)target_offset;
+            }
+            index += entries_per_sector;
+        }
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+    }
+    kfree(sector);
+    return -1;
+}
+
+static bool dir_find_free_run(uint32_t dir_cluster, uint32_t data_start, uint32_t fat_start, uint8_t spc, uint16_t bps,
+                              int need_entries, uint32_t* out_sector_lba, uint32_t* out_offset, int* out_run_start) {
+    if (need_entries <= 0) return false;
+    int entries_per_sector = 512 / 32;
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return false;
+
+    int run_start = -1;
+    int run_len = 0;
+    int entry_index = 0;
+    uint32_t current_cluster = dir_cluster;
+
+    while (current_cluster < 0x0FFFFFF8) {
+        uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
+        for (int i = 0; i < spc; i++) {
+            uint32_t lba = cluster_lba + i;
+            disk_read_sector(lba, sector);
+            struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+            for (int j = 0; j < entries_per_sector; j++, entry_index++) {
+                uint8_t first = entries[j].name[0];
+                bool free = (first == 0 || first == 0xE5);
+                if (free) {
+                    if (run_start < 0) run_start = entry_index;
+                    run_len++;
+                    if (run_len >= need_entries) {
+                        *out_sector_lba = lba;
+                        *out_offset = j;
+                        if (out_run_start) *out_run_start = run_start;
+                        kfree(sector);
+                        return true;
+                    }
+                } else {
+                    run_start = -1;
+                    run_len = 0;
+                }
+            }
+        }
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+    }
+
+    kfree(sector);
+    return false;
+}
+
+static void dir_mark_lfn_deleted(uint32_t parent_cluster, int entry_idx,
+                                 uint32_t data_start, uint32_t fat_start, uint8_t spc, uint16_t bps) {
+    if (entry_idx <= 0) return;
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return;
+    for (int idx = entry_idx - 1; idx >= 0; idx--) {
+        uint32_t lfn_sector;
+        uint32_t lfn_offset;
+        if (!dir_locate_entry(parent_cluster, (uint32_t)idx, data_start, fat_start, spc, bps, &lfn_sector, &lfn_offset)) {
+            break;
+        }
+        disk_read_sector(lfn_sector, sector);
+        struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+        if (entries[lfn_offset].attr != 0x0F) break;
+        entries[lfn_offset].name[0] = 0xE5;
+        disk_write_sector(lfn_sector, sector);
+    }
+    kfree(sector);
+}
+
+static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* name_buf, int name_len,
+                                         uint32_t cluster, uint32_t size, uint8_t attr,
+                                         uint32_t data_start, uint32_t fat_start, uint8_t spc, uint16_t bps,
+                                         uint32_t sectors_per_fat) {
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return -1;
+
+    int lfn_entries = 0;
+    bool need_lfn = needs_lfn(name_buf, name_len);
+    if (need_lfn) lfn_entries = (name_len + 12) / 13;
+    int need_entries = lfn_entries + 1;
+
+    uint32_t entry_sector_lba = 0;
+    uint32_t entry_offset = 0;
+    int free_run_start = -1;
+
+    if (!dir_find_free_run(parent_cluster, data_start, fat_start, spc, bps,
+                           need_entries, &entry_sector_lba, &entry_offset, &free_run_start)) {
+        /* Extend directory by one cluster and retry */
+        uint8_t* fatbuf = (uint8_t*)kmalloc(512);
+        if (!fatbuf) { kfree(sector); return -1; }
+        uint32_t current = parent_cluster;
+        int cluster_index = 0;
+        while (true) {
+            uint32_t next = fat_get_next_cluster(current, fat_start, bps, fatbuf);
+            if (next >= 0x0FFFFFF8) break;
+            current = next;
+            cluster_index++;
+        }
+        uint32_t new_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, fatbuf);
+        if (new_cluster == 0) { kfree(fatbuf); kfree(sector); return -1; }
+        fat_set_next_cluster(current, new_cluster, fat_start, bps, fatbuf);
+        fat_set_next_cluster(new_cluster, 0x0FFFFFFF, fat_start, bps, fatbuf);
+
+        memset(sector, 0, 512);
+        uint32_t new_lba = data_start + (new_cluster - 2) * spc;
+        for (int i = 0; i < spc; i++) {
+            disk_write_sector(new_lba + i, sector);
+        }
+        kfree(fatbuf);
+
+        int entries_per_sector = 512 / 32;
+        int entries_per_cluster = spc * entries_per_sector;
+        free_run_start = (cluster_index + 1) * entries_per_cluster;
+        uint32_t short_idx = free_run_start + need_entries - 1;
+        if (!dir_locate_entry(parent_cluster, short_idx, data_start, fat_start, spc, bps,
+                              &entry_sector_lba, &entry_offset)) {
+            kfree(sector); return -1;
+        }
+    }
+
+    char short_name[11];
+    if (!need_lfn) {
+        to_dos_name_component(name_buf, name_len, short_name);
+    } else {
+        int suffix = 0;
+        while (suffix <= 9999) {
+            make_short_alias(name_buf, short_name, suffix);
+            if (!short_name_exists_in_dir(parent_cluster, data_start, fat_start, spc, bps, short_name)) break;
+            suffix++;
+        }
+        if (suffix > 9999) { kfree(sector); return -1; }
+    }
+
+    if (need_lfn) {
+        uint8_t checksum = lfn_checksum(short_name);
+        for (int i = 0; i < lfn_entries; i++) {
+            int seq = i + 1;
+            bool is_last = (i == lfn_entries - 1);
+            struct fat_lfn_entry lfn;
+            lfn_build_entry(&lfn, seq, is_last, checksum, name_buf, name_len, i * 13);
+
+            int entry_idx = free_run_start + (lfn_entries - 1 - i);
+            uint32_t lfn_sector;
+            uint32_t lfn_offset;
+            if (!dir_locate_entry(parent_cluster, (uint32_t)entry_idx, data_start, fat_start, spc, bps,
+                                  &lfn_sector, &lfn_offset)) {
+                kfree(sector); return -1;
+            }
+            disk_read_sector(lfn_sector, sector);
+            struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+            memcpy(&entries[lfn_offset], &lfn, sizeof(lfn));
+            disk_write_sector(lfn_sector, sector);
+        }
+    }
+
+    disk_read_sector(entry_sector_lba, sector);
+    struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+    struct fat_dir_entry* entry = &entries[entry_offset];
+    memcpy(entry->name, short_name, 11);
+    entry->attr = attr;
+    entry->cluster_hi = (cluster >> 16);
+    entry->cluster_low = (cluster & 0xFFFF);
+    entry->size = size;
+    disk_write_sector(entry_sector_lba, sector);
+
+    kfree(sector);
+    return 0;
+}
+
 /* Resolve path to parent directory cluster and final filename component */
 static int resolve_parent(const char* path, uint32_t root_cluster, uint32_t data_start, uint32_t fat_start, uint32_t spc, uint32_t bps,
                           uint32_t* out_parent_cluster, const char** out_filename, int* out_filename_len) {
@@ -150,6 +650,7 @@ static int resolve_parent(const char* path, uint32_t root_cluster, uint32_t data
         const char* end = p;
         while (*end && *end != '/') end++;
         int len = end - p;
+        if (len > 255) return -1;
         
         if (*end == 0) {
             /* Last component */
@@ -362,64 +863,93 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
         kfree(sector); return -1;
     }
 
-    char target[11];
-    to_dos_name_component(fname, fname_len, target);
+    if (fname_len <= 0 || fname_len > 255) { kfree(sector); return -1; }
+    char name_buf[256];
+    copy_component(name_buf, sizeof(name_buf), fname, fname_len);
 
-    uint32_t dir_lba = data_start + (parent_cluster - 2) * spc;
     uint32_t entry_sector_lba = 0;
     uint32_t entry_offset = 0;
     bool found_existing = false;
-    bool found_free = false;
     uint32_t file_cluster = 0;
+    int free_run_start = -1;
+    int lfn_entries = 0;
+    bool need_lfn = needs_lfn(name_buf, fname_len);
+    if (need_lfn) lfn_entries = (fname_len + 12) / 13;
+    int need_entries = lfn_entries + 1;
+    char short_name[11];
     
-    /* Scan root dir for existing file or free slot */
-    for (int i = 0; i < spc; i++) {
-        disk_read_sector(dir_lba + i, sector);
-        struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
-        
-        for (int j = 0; j < 512 / 32; j++) {
-            /* Check for match */
-            if (memcmp(entries[j].name, target, 11) == 0) {
-                entry_sector_lba = dir_lba + i;
-                entry_offset = j;
-                file_cluster = (entries[j].cluster_hi << 16) | entries[j].cluster_low;
-                found_existing = true;
-                break;
-            }
-            /* Check for free slot if not found yet */
-            if (!found_free && (entries[j].name[0] == 0 || (uint8_t)entries[j].name[0] == 0xE5)) {
-                entry_sector_lba = dir_lba + i;
-                entry_offset = j;
-                found_free = true;
-                /* Don't break, keep looking for match in case it exists later */
-            }
-        }
-        if (found_existing) break;
+    /* Check for existing entry by long/short name */
+    bool is_dir = false;
+    if (find_in_cluster(parent_cluster, fname, fname_len, data_start, fat_start, spc, bpb->bytes_per_sector,
+                        &file_cluster, NULL, &entry_sector_lba, &entry_offset, &is_dir) == 0) {
+        if (is_dir) { kfree(sector); return -1; }
+        found_existing = true;
     }
 
-    if (!found_existing && !found_free) { kfree(sector); return -1; /* Root dir full */ }
+    if (!found_existing) {
+        if (!dir_find_free_run(parent_cluster, data_start, fat_start, spc, bpb->bytes_per_sector,
+                               need_entries, &entry_sector_lba, &entry_offset, &free_run_start)) {
+            /* Extend directory by one cluster and retry */
+            uint32_t new_cluster = 0;
+            uint8_t* fatbuf = (uint8_t*)kmalloc(512);
+            if (!fatbuf) { kfree(sector); return -1; }
+            uint32_t current = parent_cluster;
+            int cluster_index = 0;
+            while (true) {
+                uint32_t next = fat_get_next_cluster(current, fat_start, bpb->bytes_per_sector, fatbuf);
+                if (next >= 0x0FFFFFF8) break;
+                current = next;
+                cluster_index++;
+            }
+            new_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, fatbuf);
+            if (new_cluster == 0) { kfree(fatbuf); kfree(sector); return -1; }
+            fat_set_next_cluster(current, new_cluster, fat_start, bpb->bytes_per_sector, fatbuf);
+            fat_set_next_cluster(new_cluster, 0x0FFFFFFF, fat_start, bpb->bytes_per_sector, fatbuf);
+
+            /* zero new dir cluster */
+            memset(sector, 0, 512);
+            uint32_t new_lba = data_start + (new_cluster - 2) * spc;
+            for (int i = 0; i < spc; i++) {
+                disk_write_sector(new_lba + i, sector);
+            }
+            kfree(fatbuf);
+
+            int entries_per_sector = 512 / 32;
+            int entries_per_cluster = spc * entries_per_sector;
+            free_run_start = (cluster_index + 1) * entries_per_cluster;
+            uint32_t short_idx = free_run_start + need_entries - 1;
+            if (!dir_locate_entry(parent_cluster, short_idx, data_start, fat_start, spc, bpb->bytes_per_sector,
+                                  &entry_sector_lba, &entry_offset)) {
+                kfree(sector); return -1;
+            }
+        }
+    }
 
     /* 3. Allocate Cluster (Simple: Find first free in FAT) */
     /* Note: If file exists, we reuse its cluster. If new, we alloc. */
     if (file_cluster == 0) {
-        /* Find free cluster */
-        uint32_t fat_sector_0 = fat_start;
-        for (uint32_t s = 0; s < sectors_per_fat; s++) {
-            disk_read_sector(fat_sector_0 + s, sector);
-            uint32_t* table = (uint32_t*)sector;
-            for (int k = 0; k < 128; k++) {
-                if ((table[k] & 0x0FFFFFFF) == 0) {
-                    file_cluster = s * 128 + k;
-                    /* Mark as EOC */
-                    table[k] = 0x0FFFFFFF;
-                    disk_write_sector(fat_sector_0 + s, sector);
-                    goto alloc_done;
-                }
-            }
-        }
-        kfree(sector); return -2; /* Disk full */
+        file_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
+        if (file_cluster == 0) { kfree(sector); return -2; }
     }
-alloc_done:
+
+    /* Prepare short name */
+    if (found_existing) {
+        disk_read_sector(entry_sector_lba, sector);
+        struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+        memcpy(short_name, entries[entry_offset].name, 11);
+    } else {
+        if (!need_lfn) {
+            to_dos_name_component(name_buf, fname_len, short_name);
+        } else {
+            int suffix = 0;
+            while (suffix <= 9999) {
+                make_short_alias(name_buf, short_name, suffix);
+                if (!short_name_exists_in_dir(parent_cluster, data_start, fat_start, spc, bpb->bytes_per_sector, short_name)) break;
+                suffix++;
+            }
+            if (suffix > 9999) { kfree(sector); return -1; }
+        }
+    }
 
     /* 4. Write Data */
     uint32_t cluster_lba = data_start + (file_cluster - 2) * spc;
@@ -435,15 +965,35 @@ alloc_done:
         written += chunk;
     }
 
-    /* 5. Update Directory Entry */
+    /* 5. Update Directory Entry (and LFN if needed) */
+    if (!found_existing && need_lfn) {
+        uint8_t checksum = lfn_checksum(short_name);
+        for (int i = 0; i < lfn_entries; i++) {
+            int seq = i + 1;
+            bool is_last = (i == lfn_entries - 1);
+            struct fat_lfn_entry lfn;
+            lfn_build_entry(&lfn, seq, is_last, checksum, name_buf, fname_len, i * 13);
+
+            int entry_idx = free_run_start + (lfn_entries - 1 - i);
+            uint32_t lfn_sector;
+            uint32_t lfn_offset;
+            if (!dir_locate_entry(parent_cluster, entry_idx, data_start, fat_start, spc, bpb->bytes_per_sector,
+                                  &lfn_sector, &lfn_offset)) {
+                kfree(sector); return -1;
+            }
+            disk_read_sector(lfn_sector, sector);
+            struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+            memcpy(&entries[lfn_offset], &lfn, sizeof(lfn));
+            disk_write_sector(lfn_sector, sector);
+        }
+    }
+
     disk_read_sector(entry_sector_lba, sector);
-    /* Re-locate entry pointer in refreshed buffer */
     struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
     struct fat_dir_entry* entry = &entries[entry_offset];
-
     if (entry) {
-        memcpy(entry->name, target, 11);
-        entry->attr = 0x20; /* Archive */
+        if (!found_existing) memcpy(entry->name, short_name, 11);
+        entry->attr = 0x20;
         entry->cluster_hi = (file_cluster >> 16);
         entry->cluster_low = (file_cluster & 0xFFFF);
         entry->size = size;
@@ -518,6 +1068,10 @@ extern "C" void fat32_list_directory(const char* path) {
     while (true) {
         uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
         
+        char lfn_buf[256];
+        bool lfn_active = false;
+        uint8_t lfn_chk = 0;
+        lfn_reset(lfn_buf);
         for (int i = 0; i < spc; i++) {
             disk_read_sector(cluster_lba + i, sector);
             struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
@@ -525,7 +1079,27 @@ extern "C" void fat32_list_directory(const char* path) {
             for (int j = 0; j < 512 / 32; j++) {
                 if (entries[j].name[0] == 0) goto done_listing;
                 if ((uint8_t)entries[j].name[0] == 0xE5) continue;
-                if (entries[j].attr == 0x0F) continue;
+                if (entries[j].attr == 0x0F) {
+                    struct fat_lfn_entry* lfn = (struct fat_lfn_entry*)&entries[j];
+                    int seq = lfn->seq & 0x1F;
+                    if (lfn->seq & 0x40) {
+                        lfn_reset(lfn_buf);
+                        lfn_active = true;
+                        lfn_chk = lfn->checksum;
+                    }
+                    if (lfn_active) {
+                        lfn_put_part(lfn_buf, sizeof(lfn_buf), seq, lfn);
+                    }
+                    continue;
+                }
+                const char* display_name = 0;
+                if (lfn_active) {
+                    lfn_finalize(lfn_buf, sizeof(lfn_buf));
+                    if (lfn_chk == lfn_checksum((const char*)entries[j].name)) {
+                        display_name = lfn_buf;
+                    }
+                    lfn_active = false;
+                }
                 
                 char name[13];
                 int k = 0;
@@ -540,20 +1114,18 @@ extern "C" void fat32_list_directory(const char* path) {
                 }
                 name[k] = 0;
                 
+                if (!display_name) display_name = name;
+
                 if (entries[j].attr & 0x10) {
-                    terminal_printf("  [DIR]  %s\n", name);
+                    terminal_printf("  [DIR]  %s\n", display_name);
                 } else {
-                    terminal_printf("  [FILE] %s  (%u bytes)\n", name, entries[j].size);
+                    terminal_printf("  [FILE] %s  (%u bytes)\n", display_name, entries[j].size);
                 }
             }
         }
         
         /* Next cluster */
-        uint32_t fat_sector = fat_start + (current_cluster * 4) / bps;
-        uint32_t fat_offset = (current_cluster * 4) % bps;
-        disk_read_sector(fat_sector, sector);
-        current_cluster = (*(uint32_t*)(sector + fat_offset)) & 0x0FFFFFFF;
-        
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
         if (current_cluster >= 0x0FFFFFF8) break;
     }
 
@@ -603,6 +1175,10 @@ extern "C" int fat32_read_directory(const char* path, fat_file_info_t* out, int 
     
     while (count < max_entries) {
         uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
+        char lfn_buf[256];
+        bool lfn_active = false;
+        uint8_t lfn_chk = 0;
+        lfn_reset(lfn_buf);
         
         for (int i = 0; i < spc && count < max_entries; i++) {
             disk_read_sector(cluster_lba + i, sector);
@@ -611,7 +1187,27 @@ extern "C" int fat32_read_directory(const char* path, fat_file_info_t* out, int 
             for (int j = 0; j < 512 / 32 && count < max_entries; j++) {
                 if (entries[j].name[0] == 0) goto done_reading;
                 if ((uint8_t)entries[j].name[0] == 0xE5) continue;
-                if (entries[j].attr == 0x0F) continue;
+                if (entries[j].attr == 0x0F) {
+                    struct fat_lfn_entry* lfn = (struct fat_lfn_entry*)&entries[j];
+                    int seq = lfn->seq & 0x1F;
+                    if (lfn->seq & 0x40) {
+                        lfn_reset(lfn_buf);
+                        lfn_active = true;
+                        lfn_chk = lfn->checksum;
+                    }
+                    if (lfn_active) {
+                        lfn_put_part(lfn_buf, sizeof(lfn_buf), seq, lfn);
+                    }
+                    continue;
+                }
+                const char* display_name = 0;
+                if (lfn_active) {
+                    lfn_finalize(lfn_buf, sizeof(lfn_buf));
+                    if (lfn_chk == lfn_checksum((const char*)entries[j].name)) {
+                        display_name = lfn_buf;
+                    }
+                    lfn_active = false;
+                }
                 
                 /* Format Name */
                 char name[13];
@@ -623,15 +1219,17 @@ extern "C" int fat32_read_directory(const char* path, fat_file_info_t* out, int 
                 }
                 name[k] = 0;
 
-                memcpy(out[count].name, name, 13);
+                if (!display_name) display_name = name;
+                strncpy(out[count].name, display_name, sizeof(out[count].name) - 1);
+                out[count].name[sizeof(out[count].name) - 1] = 0;
                 out[count].size = entries[j].size;
                 out[count].is_dir = (entries[j].attr & 0x10) ? 1 : 0;
                 count++;
             }
         }
         
-        /* Next cluster logic omitted for brevity (single cluster dir support for now) */
-        break; 
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+        if (current_cluster >= 0x0FFFFFF8) break;
     }
 done_reading:
     kfree(sector);
@@ -678,6 +1276,10 @@ extern "C" int fat32_delete_file(const char* path) {
     disk_read_sector(entry_sector, sector);
     ((struct fat_dir_entry*)sector)[entry_offset].name[0] = 0xE5;
     disk_write_sector(entry_sector, sector);
+
+    /* Delete preceding LFN entries */
+    int entry_idx = dir_calc_entry_index(parent_cluster, entry_sector, entry_offset, data_start, fat_start, spc, bps);
+    dir_mark_lfn_deleted(parent_cluster, entry_idx, data_start, fat_start, spc, bps);
 
     /* Free cluster chain */
     if (file_cluster != 0) {
@@ -761,9 +1363,13 @@ extern "C" int fat32_create_directory(const char* path) {
     dot[0].attr = 0x10; 
     dot[0].cluster_hi = (dir_cluster >> 16); dot[0].cluster_low = (dir_cluster & 0xFFFF);
     
-    /* .. entry (points to root 0) */
+    /* .. entry (points to parent, root uses 0) */
     memset(dot[1].name, ' ', 11); dot[1].name[0] = '.'; dot[1].name[1] = '.';
     dot[1].attr = 0x10;
+    uint32_t parent_for_dotdot = parent_cluster;
+    if (parent_for_dotdot == root_cluster) parent_for_dotdot = 0;
+    dot[1].cluster_hi = (parent_for_dotdot >> 16);
+    dot[1].cluster_low = (parent_for_dotdot & 0xFFFF);
     
     disk_write_sector(cluster_lba, sector); // Write first sector of new dir
     
@@ -812,6 +1418,89 @@ extern "C" int fat32_directory_exists(const char* path) {
     
     kfree(sector);
     return (res == 0 && is_dir) ? 1 : 0;
+}
+
+extern "C" int fat32_rename(const char* src, const char* dst) {
+    if (!is_fat_initialized) return -1;
+
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return -1;
+
+    disk_read_sector(current_lba, sector);
+    struct fat_bpb* bpb = (struct fat_bpb*)sector;
+    if (bpb->bytes_per_sector == 0) { kfree(sector); return -1; }
+
+    uint32_t fat_start = current_lba + bpb->reserved_sectors;
+    uint32_t data_start = fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
+    uint32_t root_cluster = bpb->root_cluster;
+    uint8_t spc = bpb->sectors_per_cluster;
+    uint16_t bps = bpb->bytes_per_sector;
+    uint32_t sectors_per_fat = bpb->sectors_per_fat_32;
+
+    uint32_t src_parent;
+    const char* src_name;
+    int src_len;
+    if (resolve_parent(src, root_cluster, data_start, fat_start, spc, bps, &src_parent, &src_name, &src_len) != 0) {
+        kfree(sector); return -1;
+    }
+
+    uint32_t dst_parent;
+    const char* dst_name;
+    int dst_len;
+    if (resolve_parent(dst, root_cluster, data_start, fat_start, spc, bps, &dst_parent, &dst_name, &dst_len) != 0) {
+        kfree(sector); return -1;
+    }
+
+    if (dst_len <= 0 || dst_len > 255) { kfree(sector); return -1; }
+
+    uint32_t src_cluster = 0;
+    uint32_t src_size = 0;
+    uint32_t src_sector = 0;
+    uint32_t src_offset = 0;
+    bool is_dir = false;
+    if (find_in_cluster(src_parent, src_name, src_len, data_start, fat_start, spc, bps,
+                        &src_cluster, &src_size, &src_sector, &src_offset, &is_dir) != 0) {
+        kfree(sector); return -1;
+    }
+
+    if (find_in_cluster(dst_parent, dst_name, dst_len, data_start, fat_start, spc, bps,
+                        NULL, NULL, NULL, NULL, NULL) == 0) {
+        kfree(sector); return -2; /* destination exists */
+    }
+
+    char dst_buf[256];
+    copy_component(dst_buf, sizeof(dst_buf), dst_name, dst_len);
+    uint8_t attr = is_dir ? 0x10 : 0x20;
+
+    if (dir_create_entry_with_cluster(dst_parent, dst_buf, dst_len, src_cluster, src_size, attr,
+                                      data_start, fat_start, spc, bps, sectors_per_fat) != 0) {
+        kfree(sector); return -1;
+    }
+
+    /* If directory moved, update .. entry to new parent */
+    if (is_dir && src_cluster != 0) {
+        uint32_t dir_lba = data_start + (src_cluster - 2) * spc;
+        disk_read_sector(dir_lba, sector);
+        struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
+        if (entries[1].name[0] == '.' && entries[1].name[1] == '.') {
+            uint32_t parent_for_dotdot = dst_parent;
+            if (parent_for_dotdot == root_cluster) parent_for_dotdot = 0;
+            entries[1].cluster_hi = (parent_for_dotdot >> 16);
+            entries[1].cluster_low = (parent_for_dotdot & 0xFFFF);
+            disk_write_sector(dir_lba, sector);
+        }
+    }
+
+    /* delete old entry + LFN, but keep clusters */
+    disk_read_sector(src_sector, sector);
+    ((struct fat_dir_entry*)sector)[src_offset].name[0] = 0xE5;
+    disk_write_sector(src_sector, sector);
+
+    int entry_idx = dir_calc_entry_index(src_parent, src_sector, src_offset, data_start, fat_start, spc, bps);
+    dir_mark_lfn_deleted(src_parent, entry_idx, data_start, fat_start, spc, bps);
+
+    kfree(sector);
+    return 0;
 }
 
 extern "C" int fat32_format(uint32_t lba, uint32_t sector_count, const char* label) {

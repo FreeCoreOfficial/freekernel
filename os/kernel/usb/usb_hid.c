@@ -32,6 +32,7 @@ static const char hid_ascii_map[128] = {
 
 void usb_hid_init(uint8_t addr, uint8_t* config_desc, uint16_t config_len) {
     serial_write_string("[USB HID] Initializing device...\r\n");
+    serial_printf("[USB HID] Device init start (addr=%d)\n", addr);
 
     uint8_t* ptr = config_desc;
     uint8_t* end = config_desc + config_len;
@@ -70,6 +71,7 @@ void usb_hid_init(uint8_t addr, uint8_t* config_desc, uint16_t config_len) {
                 hid_devices[i].has_input = 0;
                 hid_devices[i].last_report_ms = 0;
                 serial_write_string("[USB HID] Polling started for new device.\r\n");
+                serial_printf("[USB HID] Device init done (addr=%d, ep=%d)\n", addr, hid_ep);
                 return;
             }
         }
