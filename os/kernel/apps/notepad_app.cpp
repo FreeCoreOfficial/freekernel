@@ -18,6 +18,10 @@ static char filename[128] = "/new.txt";
 static char content[4096] = "";
 static int content_len = 0;
 static bool focus_filename = false;
+static int cursor_idx = 0;
+static int sel_start = -1;
+static int sel_end = -1;
+static bool selecting = false;
 
 static void draw_notepad_ui(surface_t* s);
 
@@ -69,6 +73,8 @@ static void draw_notepad_ui(surface_t* s) {
     /* Draw Content (Simple multiline) */
     int cx = 15;
     int cy = 65;
+    int sel_min = sel_start < sel_end ? sel_start : sel_end;
+    int sel_max = sel_start < sel_end ? sel_end : sel_start;
     for (int i = 0; i < content_len; i++) {
         char c = content[i];
         if (c == '\n') {
@@ -76,6 +82,9 @@ static void draw_notepad_ui(surface_t* s) {
             cy += 16;
             if (cy > h - 20) break; /* Clip */
             continue;
+        }
+        if (sel_start >= 0 && sel_end >= 0 && i >= sel_min && i < sel_max) {
+            fly_draw_rect_fill(s, cx, cy, 8, 16, 0xFF3399FF);
         }
         char str[2] = {c, 0};
         fly_draw_text(s, cx, cy, str, 0xFF000000);
@@ -88,7 +97,22 @@ static void draw_notepad_ui(surface_t* s) {
     
     /* Cursor */
     if (!focus_filename) {
-        fly_draw_rect_fill(s, cx, cy, 2, 14, 0xFF000000);
+        /* Draw cursor based on cursor_idx */
+        int rx = 15;
+        int ry = 65;
+        for (int i = 0; i < cursor_idx && i < content_len; i++) {
+            if (content[i] == '\n') {
+                rx = 15;
+                ry += 16;
+            } else {
+                rx += 8;
+                if (rx > w - 20) {
+                    rx = 15;
+                    ry += 16;
+                }
+            }
+        }
+        fly_draw_rect_fill(s, rx, ry, 2, 14, 0xFF000000);
     }
 }
 
@@ -135,6 +159,10 @@ void notepad_app_create(void) {
     strcpy(filename, "/new.txt");
     content[0] = 0;
     content_len = 0;
+    cursor_idx = 0;
+    sel_start = -1;
+    sel_end = -1;
+    selecting = false;
     focus_filename = false;
 
     draw_notepad_ui(s);
@@ -157,6 +185,33 @@ void notepad_app_open(const char* path) {
     wm_mark_dirty();
 }
 
+static int notepad_index_from_xy(int x, int y, int w, int h) {
+    if (x < 10 || y < 60) return 0;
+    int col = (x - 15) / 8;
+    int row = (y - 65) / 16;
+    if (col < 0) col = 0;
+    if (row < 0) row = 0;
+
+    int r = 0;
+    int c = 0;
+    for (int i = 0; i < content_len; i++) {
+        if (r > row) return i;
+        if (r == row && c >= col) return i;
+
+        if (content[i] == '\n') {
+            r++;
+            c = 0;
+            continue;
+        }
+        c++;
+        if (15 + c * 8 > w - 20) {
+            r++;
+            c = 0;
+        }
+    }
+    return content_len;
+}
+
 bool notepad_app_handle_event(input_event_t* ev) {
     if (!note_win) return false;
 
@@ -175,14 +230,24 @@ bool notepad_app_handle_event(input_event_t* ev) {
         /* Filename Box Click */
         if (lx >= 50 && lx <= 200 && ly >= 30 && ly <= 50) {
             focus_filename = true;
+            selecting = false;
+            sel_start = -1;
+            sel_end = -1;
             draw_notepad_ui(note_win->surface);
             wm_mark_dirty();
             return true;
         }
 
         /* Content Box Click */
-        if (lx >= 10 && lx <= NOTE_W - 10 && ly >= 60 && ly <= NOTE_H - 10) {
+        int w = note_win->surface->width;
+        int h = note_win->surface->height;
+        if (lx >= 10 && lx <= w - 10 && ly >= 60 && ly <= h - 10) {
             focus_filename = false;
+            int idx = notepad_index_from_xy(lx, ly, note_win->surface->width, note_win->surface->height);
+            cursor_idx = idx;
+            selecting = true;
+            sel_start = idx;
+            sel_end = idx;
             draw_notepad_ui(note_win->surface);
             wm_mark_dirty();
             return true;
@@ -201,6 +266,21 @@ bool notepad_app_handle_event(input_event_t* ev) {
             save_file();
             return true;
         }
+    }
+    if (ev->type == INPUT_MOUSE_MOVE && selecting) {
+        int lx = ev->mouse_x - note_win->x;
+        int ly = ev->mouse_y - note_win->y;
+        if (lx >= 10 && ly >= 60) {
+            int idx = notepad_index_from_xy(lx, ly, note_win->surface->width, note_win->surface->height);
+            sel_end = idx;
+            cursor_idx = idx;
+            draw_notepad_ui(note_win->surface);
+            wm_mark_dirty();
+            return true;
+        }
+    }
+    if (ev->type == INPUT_MOUSE_CLICK && !ev->pressed) {
+        selecting = false;
     }
     return false;
 }
@@ -221,16 +301,22 @@ void notepad_app_handle_key(char c) {
     } else {
         /* Content editing */
         if (c == '\b') {
-            if (content_len > 0) {
+            if (cursor_idx > 0 && content_len > 0) {
+                memmove(&content[cursor_idx - 1], &content[cursor_idx], content_len - cursor_idx);
                 content_len--;
+                cursor_idx--;
                 content[content_len] = 0;
             }
         } else if (c == '\n' || (c >= 32 && c <= 126)) {
             if (content_len < 4095) {
-                content[content_len++] = c;
+                memmove(&content[cursor_idx + 1], &content[cursor_idx], content_len - cursor_idx);
+                content[cursor_idx++] = c;
+                content_len++;
                 content[content_len] = 0;
             }
         }
+        sel_start = -1;
+        sel_end = -1;
     }
     draw_notepad_ui(note_win->surface);
     wm_mark_dirty();

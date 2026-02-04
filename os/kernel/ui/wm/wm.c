@@ -18,6 +18,7 @@ static window_t* focused_window = NULL;
 static wm_layout_t* current_layout = &wm_layout_floating;
 static uint32_t next_win_id = 1;
 static bool wm_dirty = true;
+static int wm_reserved_bottom = 0;
 
 /* Array for layout processing */
 static window_t* win_array[MAX_WINDOWS];
@@ -38,6 +39,15 @@ void wm_mark_dirty(void) {
 
 bool wm_is_dirty(void) {
     return wm_dirty;
+}
+
+void wm_set_reserved_bottom(int pixels) {
+    if (pixels < 0) pixels = 0;
+    wm_reserved_bottom = pixels;
+}
+
+int wm_get_reserved_bottom(void) {
+    return wm_reserved_bottom;
 }
 
 bool wm_window_is_decorated(window_t* win) {
@@ -101,7 +111,7 @@ static void wm_maximize_window(window_t* win) {
     win->restore_h = win->h;
 
     int new_w = (int)gpu->width;
-    int new_h = (int)gpu->height;
+    int new_h = (int)gpu->height - wm_reserved_bottom;
     if (new_w < 100) new_w = 100;
     if (new_h < 80) new_h = 80;
 
@@ -229,6 +239,22 @@ void wm_focus_window(window_t* win) {
 
     window_t* old = focused_window;
     focused_window = win;
+
+    /* Move focused window to front (head of list) */
+    if (win && windows_list != win) {
+        window_t* cur = windows_list;
+        window_t* prev = NULL;
+        while (cur && cur != win) {
+            prev = cur;
+            cur = cur->next;
+        }
+        if (cur) {
+            if (prev) prev->next = cur->next;
+            cur->next = windows_list;
+            windows_list = cur;
+            rebuild_win_array();
+        }
+    }
 
     serial("[WM] Focus changed\n");
 

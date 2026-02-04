@@ -84,6 +84,64 @@ static void build_breadcrumb(char* out, size_t cap) {
     }
 }
 
+static void build_path(char* out, size_t cap, const char* name) {
+    if (strcmp(current_path, "/") == 0) {
+        strncpy(out, "/", cap);
+        out[cap - 1] = 0;
+        append_path(out, cap, name);
+    } else {
+        strncpy(out, current_path, cap);
+        out[cap - 1] = 0;
+        if (out[strlen(out) - 1] != '/') append_path(out, cap, "/");
+        append_path(out, cap, name);
+    }
+}
+
+static void create_new_file(void) {
+    fat_automount();
+    char name[32];
+    char path[256];
+    int idx = 0;
+    while (idx < 100) {
+        if (idx == 0) strcpy(name, "new.txt");
+        else {
+            strcpy(name, "new");
+            char buf[8];
+            itoa_dec(buf, idx);
+            strcat(name, buf);
+            strcat(name, ".txt");
+        }
+        build_path(path, sizeof(path), name);
+        if (fat32_get_file_size(path) < 0) {
+            fat32_create_file(path, "", 0);
+            break;
+        }
+        idx++;
+    }
+}
+
+static void create_new_folder(void) {
+    fat_automount();
+    char name[32];
+    char path[256];
+    int idx = 0;
+    while (idx < 100) {
+        if (idx == 0) strcpy(name, "new_folder");
+        else {
+            strcpy(name, "new_folder");
+            char buf[8];
+            itoa_dec(buf, idx);
+            strcat(name, buf);
+        }
+        build_path(path, sizeof(path), name);
+        if (!fat32_directory_exists(path)) {
+            fat32_create_directory(path);
+            break;
+        }
+        idx++;
+    }
+}
+
 static void refresh_files() {
     fat_automount();
     file_count = fat32_read_directory(current_path, files, 32);
@@ -108,6 +166,15 @@ static void draw_fm(surface_t* s) {
     build_breadcrumb(breadcrumb, sizeof(breadcrumb));
     fly_draw_text(s, 28, 44, breadcrumb, 0xFF404040);
     fly_draw_rect_outline(s, 0, 58, s->width, 1, 0xFF000000);
+
+    /* New File / New Folder Buttons */
+    fly_draw_rect_fill(s, s->width - 140, 28, 60, 18, 0xFFC0C0C0);
+    fly_draw_rect_outline(s, s->width - 140, 28, 60, 18, 0xFF000000);
+    fly_draw_text(s, s->width - 135, 30, "New", 0xFF000000);
+
+    fly_draw_rect_fill(s, s->width - 75, 28, 70, 18, 0xFFC0C0C0);
+    fly_draw_rect_outline(s, s->width - 75, 28, 70, 18, 0xFF000000);
+    fly_draw_text(s, s->width - 70, 30, "Folder", 0xFF000000);
 
     /* File List */
     int y = 66;
@@ -169,6 +236,25 @@ bool file_manager_app_handle_event(input_event_t* ev) {
             draw_fm(fm_win->surface);
             wm_mark_dirty();
             return true;
+        }
+
+        /* New File / New Folder */
+        if (ly >= 28 && ly <= 46) {
+            int w = fm_win->surface->width;
+            if (lx >= w - 140 && lx <= w - 80) {
+                create_new_file();
+                refresh_files();
+                draw_fm(fm_win->surface);
+                wm_mark_dirty();
+                return true;
+            }
+            if (lx >= w - 75 && lx <= w - 5) {
+                create_new_folder();
+                refresh_files();
+                draw_fm(fm_win->surface);
+                wm_mark_dirty();
+                return true;
+            }
         }
 
         /* File Click */

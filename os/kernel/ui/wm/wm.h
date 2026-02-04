@@ -28,6 +28,8 @@ void wm_minimize_window(window_t* win);
 void wm_restore_window(window_t* win);
 void wm_toggle_maximize(window_t* win);
 bool wm_resize_window(window_t* win, int w, int h);
+void wm_set_reserved_bottom(int pixels);
+int wm_get_reserved_bottom(void);
 
 void wm_mark_dirty(void);
 bool wm_is_dirty(void);

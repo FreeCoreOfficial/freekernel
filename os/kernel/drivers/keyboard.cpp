@@ -8,6 +8,7 @@
 #include "../video/fb_console.h"
 #include "mouse.h" /* Pentru mouse_init la reload */
 #include "../vt/vt.h"
+#include "../cmds/win.h"
 
 /* PS/2 Ports */
 #define PS2_DATA    0x60
@@ -51,6 +52,7 @@ static bool ctrl_pressed = false;
 static bool shift_pressed = false;
 static bool alt_pressed = false;
 static bool e0_prefix = false;
+static bool caps_lock = false;
 
 /* Helpers pentru sincronizare PS/2 */
 static void kbd_wait_write() {
@@ -123,6 +125,7 @@ extern "C" void keyboard_handler(registers_t* regs)
             if (scancode == 0x2A || scancode == 0x36) shift_pressed = true;
             else if (scancode == 0x1D) ctrl_pressed = true;
             else if (scancode == 0x38) alt_pressed = true;
+            else if (scancode == 0x3A) caps_lock = !caps_lock; /* Caps Lock */
             else {
                 /* VT Switching: Ctrl + Alt + F1..F8 */
                 if (ctrl_pressed && alt_pressed && scancode >= 0x3B && scancode <= 0x42) {
@@ -133,23 +136,33 @@ extern "C" void keyboard_handler(registers_t* regs)
 
                 /* Handle Special Keys with E0 prefix */
                 if (e0_prefix) {
-                    if (scancode == 0x49) fb_cons_scroll(-10);      /* Page Up */
-                    else if (scancode == 0x51) fb_cons_scroll(10);  /* Page Down */
-                    else if (scancode == 0x48) fb_cons_scroll(-1);  /* Arrow Up */
-                    else if (scancode == 0x50) fb_cons_scroll(1);   /* Arrow Down */
+                    if (!win_is_gui_running()) {
+                        if (scancode == 0x49) fb_cons_scroll(-10);      /* Page Up */
+                        else if (scancode == 0x51) fb_cons_scroll(10);  /* Page Down */
+                        else if (scancode == 0x48) fb_cons_scroll(-1);  /* Arrow Up */
+                        else if (scancode == 0x50) fb_cons_scroll(1);   /* Arrow Down */
+                    }
                     
                     e0_prefix = false;
                 } 
                 /* Standard Keys */
                 else {
                     /* Keypad Scroll Fallback */
-                    if (scancode == 0x48) { fb_cons_scroll(-1); }      /* Keypad 8 */
-                    else if (scancode == 0x50) { fb_cons_scroll(1); }  /* Keypad 2 */
+                    if (!win_is_gui_running()) {
+                        if (scancode == 0x48) { fb_cons_scroll(-1); }      /* Keypad 8 */
+                        else if (scancode == 0x50) { fb_cons_scroll(1); }  /* Keypad 2 */
+                    }
                     else {
                         /* ASCII Translation */
                         char c = 0;
                         if (scancode < 128) {
                             c = shift_pressed ? keymap_us_shift[scancode] : keymap_us[scancode];
+                        }
+
+                        /* Caps Lock: toggle case for letters */
+                        if (caps_lock && c) {
+                            if (c >= 'a' && c <= 'z') c -= 32;
+                            else if (c >= 'A' && c <= 'Z') c += 32;
                         }
 
                         /* Apply Control Modifier (Ctrl+A..Z -> 1..26) */

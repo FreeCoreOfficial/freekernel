@@ -929,6 +929,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
     
     /* 3. Create Taskbar */
     create_taskbar();
+    wm_set_reserved_bottom(TASKBAR_H);
     
     /* 4. Main GUI Loop */
     input_event_t ev;
@@ -1283,4 +1284,8 @@ extern "C" int cmd_launch(int argc, char** argv) {
     serial("[WIN] GUI shutdown. Returning to text mode.\n");
     is_gui_running = false;
     return 0;
+}
+
+bool win_is_gui_running(void) {
+    return is_gui_running;
 }

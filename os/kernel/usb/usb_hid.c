@@ -5,6 +5,7 @@
 #include "../mem/kmalloc.h"
 #include "../string.h"
 #include "../input/input.h"
+#include "../time/timer.h"
 
 #define MAX_HID_DEVICES 4
 
@@ -15,6 +16,8 @@ typedef struct {
     void* td_handle;
     uint8_t* buffer;
     uint8_t prev_buffer[8];
+    int has_input;
+    uint32_t last_report_ms;
 } hid_device_t;
 
 static hid_device_t hid_devices[MAX_HID_DEVICES];
@@ -64,8 +67,9 @@ void usb_hid_init(uint8_t addr, uint8_t* config_desc, uint16_t config_len) {
                 hid_devices[i].buffer = (uint8_t*)kmalloc(hid_ep_size);
                 hid_devices[i].td_handle = uhci_setup_interrupt(addr, hid_ep, hid_devices[i].buffer, hid_ep_size);
                 memset(hid_devices[i].prev_buffer, 0, 8);
+                hid_devices[i].has_input = 0;
+                hid_devices[i].last_report_ms = 0;
                 serial_write_string("[USB HID] Polling started for new device.\r\n");
-                input_set_usb_keyboard_active(true);
                 return;
             }
         }
@@ -73,12 +77,19 @@ void usb_hid_init(uint8_t addr, uint8_t* config_desc, uint16_t config_len) {
 }
 
 void usb_hid_poll(void) {
+    uint32_t now_ms = timer_uptime_ms();
+    int any_recent = 0;
     for (int i = 0; i < MAX_HID_DEVICES; i++) {
         if (!hid_devices[i].active) continue;
 
         hid_device_t* dev = &hid_devices[i];
 
         if (uhci_poll_interrupt(dev->td_handle)) {
+            dev->last_report_ms = now_ms;
+            if (!dev->has_input) {
+                dev->has_input = 1;
+                input_set_usb_keyboard_active(true);
+            }
             /* Log raw report */
             // serial_printf("[USB HID] report: %02x %02x %02x %02x %02x %02x %02x %02x\n",
             //        dev->buffer[0], dev->buffer[1], dev->buffer[2], dev->buffer[3],
@@ -138,5 +149,14 @@ void usb_hid_poll(void) {
             }
             memcpy(dev->prev_buffer, dev->buffer, 8);
         }
+
+        if (dev->last_report_ms != 0 && (now_ms - dev->last_report_ms) < 3000) {
+            any_recent = 1;
+        }
+    }
+
+    /* If no HID input for a while, allow PS/2 to take over */
+    if (!any_recent) {
+        input_set_usb_keyboard_active(false);
     }
 }
