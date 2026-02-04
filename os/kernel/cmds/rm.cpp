@@ -1,4 +1,5 @@
 #include "rm.h"
+#include "pathutil.h"
 #include "fat.h"
 #include "../terminal.h"
 
@@ -8,7 +9,8 @@ extern "C" int cmd_rm(int argc, char** argv) {
         return -1;
     }
 
-    const char* path = argv[1];
+    char path[256];
+    cmd_resolve_path(argv[1], path, sizeof(path));
     
     fat_automount();
     

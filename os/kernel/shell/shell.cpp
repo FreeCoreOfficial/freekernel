@@ -12,6 +12,7 @@
 #include "../video/surface.h"
 #include "../ui/flyui/draw.h"
 #include "../ui/flyui/theme.h"
+#include "../colors/cl.h"
 
 /* Configuration */
 #define SHELL_BUF_SIZE 256
@@ -422,6 +423,7 @@ void shell_create_window() {
         
         terminal_set_surface(s);
         terminal_set_rect(0, 25, win_w, 400);
+        terminal_set_text_attr(cl_default());
         
         serial("[SHELL] Window created and terminal attached.\n");
     } else {

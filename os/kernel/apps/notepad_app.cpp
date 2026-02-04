@@ -14,7 +14,7 @@ static window_t* note_win = NULL;
 #define NOTE_W 400
 #define NOTE_H 300
 
-static char filename[64] = "/new.txt";
+static char filename[128] = "/new.txt";
 static char content[4096] = "";
 static int content_len = 0;
 static bool focus_filename = false;
@@ -119,6 +119,22 @@ void notepad_app_create(void) {
 
     draw_notepad_ui(s);
     serial("[NOTE] Started.\n");
+}
+
+void notepad_app_open(const char* path) {
+    if (!path || !*path) return;
+
+    if (!note_win) {
+        notepad_app_create();
+        if (!note_win) return;
+    }
+
+    strncpy(filename, path, sizeof(filename));
+    filename[sizeof(filename) - 1] = 0;
+    focus_filename = false;
+    load_file();
+    draw_notepad_ui(note_win->surface);
+    wm_mark_dirty();
 }
 
 bool notepad_app_handle_event(input_event_t* ev) {

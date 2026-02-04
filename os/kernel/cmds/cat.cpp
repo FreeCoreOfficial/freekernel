@@ -4,6 +4,7 @@
 #include "../string.h"
 #include "../mem/kmalloc.h"
 #include "fat.h"
+#include "pathutil.h"
 
 /* FAT32 Driver API */
 extern "C" int fat32_read_file(const char* path, void* buf, uint32_t max_size);
@@ -13,7 +14,8 @@ extern "C" void cmd_cat(int argc, char** argv) {
         terminal_writestring("usage: cat <file>\n");
         return;
     }
-    const char* path = argv[1];
+    char path[256];
+    cmd_resolve_path(argv[1], path, sizeof(path));
 
     /* Try Disk (FAT32) first */
     fat_automount();

@@ -45,6 +45,19 @@
 #include "get.h"
 #include "curl.h"
 #include "pkg.h"
+#include "pwd.h"
+#include "cp.h"
+#include "mv.h"
+#include "head.h"
+#include "tail.h"
+#include "wc.h"
+#include "hexdump.h"
+#include "grep.h"
+#include "tee.h"
+#include "sha256.h"
+#include "sleep.h"
+#include "which.h"
+#include "size.h"
 // Minimal freestanding helpers (no libc)
 
 /*
@@ -151,6 +164,19 @@ static int wrap_cmd_net(int argc, char **argv)       { return wrap_new_int(cmd_n
 static int wrap_cmd_get(int argc, char **argv)       { return wrap_new_int(cmd_get, argc, argv); }        /* int cmd_get(int,char**) */
 static int wrap_cmd_curl(int argc, char **argv)      { return wrap_new_int(cmd_curl, argc, argv); }       /* int cmd_curl(int,char**) */
 static int wrap_cmd_pkg(int argc, char **argv)       { return wrap_new_int(cmd_pkg, argc, argv); }        /* int cmd_pkg(int,char**) */
+static int wrap_cmd_pwd(int argc, char **argv)       { return wrap_new_int(cmd_pwd, argc, argv); }        /* int cmd_pwd(int,char**) */
+static int wrap_cmd_cp(int argc, char **argv)        { return wrap_new_int(cmd_cp, argc, argv); }         /* int cmd_cp(int,char**) */
+static int wrap_cmd_mv(int argc, char **argv)        { return wrap_new_int(cmd_mv, argc, argv); }         /* int cmd_mv(int,char**) */
+static int wrap_cmd_head(int argc, char **argv)      { return wrap_new_int(cmd_head, argc, argv); }       /* int cmd_head(int,char**) */
+static int wrap_cmd_tail(int argc, char **argv)      { return wrap_new_int(cmd_tail, argc, argv); }       /* int cmd_tail(int,char**) */
+static int wrap_cmd_wc(int argc, char **argv)        { return wrap_new_int(cmd_wc, argc, argv); }         /* int cmd_wc(int,char**) */
+static int wrap_cmd_hexdump(int argc, char **argv)   { return wrap_new_int(cmd_hexdump, argc, argv); }    /* int cmd_hexdump(int,char**) */
+static int wrap_cmd_grep(int argc, char **argv)      { return wrap_new_int(cmd_grep, argc, argv); }       /* int cmd_grep(int,char**) */
+static int wrap_cmd_tee(int argc, char **argv)       { return wrap_new_int(cmd_tee, argc, argv); }        /* int cmd_tee(int,char**) */
+static int wrap_cmd_sha256(int argc, char **argv)    { return wrap_new_int(cmd_sha256, argc, argv); }     /* int cmd_sha256(int,char**) */
+static int wrap_cmd_sleep(int argc, char **argv)     { return wrap_new_int(cmd_sleep, argc, argv); }      /* int cmd_sleep(int,char**) */
+static int wrap_cmd_which(int argc, char **argv)     { return wrap_new_int(cmd_which, argc, argv); }      /* int cmd_which(int,char**) */
+static int wrap_cmd_size(int argc, char **argv)      { return wrap_new_int(cmd_size, argc, argv); }       /* int cmd_size(int,char**) */
 /* Wrapper for execve */
 static int wrap_cmd_exec(int argc, char **argv) {
     if (argc < 2) return -1;
@@ -193,17 +219,30 @@ Command command_table[] = {
     { "pmm",       wrap_cmd_pmm },
     { "pkg",       wrap_cmd_pkg },
     { "play",      wrap_cmd_play },
+    { "pwd",       wrap_cmd_pwd },
    // { "reboot",    wrap_cmd_reboot },
     { "rm",        wrap_cmd_rm },
+    { "size",      wrap_cmd_size },
+    { "sleep",     wrap_cmd_sleep },
+    { "sha256",    wrap_cmd_sha256 },
     { "shutdown",  wrap_cmd_shutdown },
     { "sysfetch",  wrap_cmd_sysfetch },
     { "ticks",     wrap_cmd_ticks },
+    { "tee",       wrap_cmd_tee },
+    { "tail",      wrap_cmd_tail },
     { "touch",     wrap_cmd_touch },
     { "uptime",    wrap_cmd_uptime },
     { "vfs",       wrap_cmd_vfs },
+    { "wc",        wrap_cmd_wc },
+    { "which",     wrap_cmd_which },
     { "write",     wrap_cmd_write },
     { "win",       wrap_cmd_launch },
     { "vt",        wrap_cmd_vt },
+    { "cp",        wrap_cmd_cp },
+    { "mv",        wrap_cmd_mv },
+    { "head",      wrap_cmd_head },
+    { "hexdump",   wrap_cmd_hexdump },
+    { "grep",      wrap_cmd_grep },
 };
 
 int command_count = sizeof(command_table) / sizeof(Command);

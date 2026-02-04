@@ -2,7 +2,6 @@
 #include "../terminal.h"
 #include "../string.h"
 #include "../colors/cl.h"
-#include "../video/fb_console.h"
 
 /* Helper to parse color name */
 static int parse_color_name(const char* name) {
@@ -38,7 +37,7 @@ static void print_color_sample(const char* name, int fg) {
     /* Save current */
     /* Note: We don't have a get_attr yet, so we just set it back to default at end of list */
     
-    fb_cons_set_attr(cl_make(fg, CL_BLACK));
+    terminal_set_text_attr(cl_make(fg, CL_BLACK));
     terminal_writestring(name);
     terminal_writestring(" ");
 }
@@ -57,7 +56,7 @@ extern "C" int cmd_color(int argc, char** argv) {
     }
 
     if (strcmp(sub, "reset") == 0) {
-        fb_cons_set_attr(cl_default());
+        terminal_set_text_attr(cl_default());
         terminal_writestring("Colors reset to default.\n");
         return 0;
     }
@@ -84,7 +83,7 @@ extern "C" int cmd_color(int argc, char** argv) {
         terminal_writestring("\n");
         
         /* Restore default for the prompt */
-        fb_cons_set_attr(cl_default());
+        terminal_set_text_attr(cl_default());
         return 0;
     }
 
@@ -117,7 +116,7 @@ extern "C" int cmd_color(int argc, char** argv) {
             bg = cl_bg(cl_default());
         }
 
-        fb_cons_set_attr(cl_make(fg, bg));
+        terminal_set_text_attr(cl_make(fg, bg));
         terminal_writestring("Color changed.\n");
         return 0;
     }

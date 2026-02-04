@@ -23,9 +23,12 @@ static int str_eq(const char* a, const char* b) {
 }
 
 static void usage() {
-    terminal_printf("usage: elf info <file>\n");
-    terminal_printf("       elf run  <file>\n");
-    terminal_printf("       elf load <file>  # load into kernel space (no exec)\n");
+    terminal_printf("ELF helper:\n");
+    terminal_printf("  elf info <file>              show ELF headers/segments\n");
+    terminal_printf("  elf load <file>              load into kernel space (no exec)\n");
+    terminal_printf("  elf run  <file> [args...]    execute ELF with optional args\n");
+    terminal_printf("  elf help                      show this help\n");
+    terminal_printf("Tip: use 'elf-debug <file>' for detailed segment info.\n");
 }
 
 /* simple helper to read file and parse ELF into info */
@@ -53,6 +56,11 @@ int cmd_elf(int argc, char** argv) {
     if (sub == NULL) {
         usage();
         return -1;
+    }
+
+    if (str_eq(sub, "help")) {
+        usage();
+        return 0;
     }
 
     if (str_eq(sub, "info")) {
@@ -86,7 +94,14 @@ int cmd_elf(int argc, char** argv) {
     if (str_eq(sub, "run")) {
         if (argc < 3) { terminal_printf("[elf] run requires <file>\n"); return -1; }
         const char* path = argv[2];
-        int pid = exec_from_path(path, NULL);
+        char* exec_argv[16];
+        int exec_argc = 0;
+        for (int i = 2; i < argc && exec_argc < 15; ++i) {
+            exec_argv[exec_argc++] = argv[i];
+        }
+        exec_argv[exec_argc] = 0;
+
+        int pid = exec_from_path(path, exec_argv);
         if (pid < 0) {
             terminal_printf("[elf] exec failed (pid=%d)\n", pid);
             return -1;

@@ -8,13 +8,14 @@
 #include "video/surface.h"
 #include "string.h"
 #include "video/font8x16.h"
+#include "colors/cl.h"
 
 extern "C" void serial(const char *fmt, ...);
 
 static uint16_t* vga = (uint16_t*)0xB8000;
 static int row = 0;
 static int col = 0;
-static const uint8_t color = 0x0F;
+static uint8_t term_attr = 0x0F; /* light gray on black */
 static bool use_fb_console = false;
 static terminal_mode_t term_mode = TERMINAL_MODE_VGA;
 static surface_t* term_surface = NULL;
@@ -24,6 +25,8 @@ static int term_w = 0;
 static int term_h = 0;
 static bool term_dirty = true;
 static bool term_rendering_enabled = true;
+static uint32_t term_win_fg = 0xFFAAAAAA;
+static uint32_t term_win_bg = 0xFF000000;
 
 /* Redirection State */
 static char* capture_buf = 0;
@@ -42,7 +45,7 @@ static void scroll() {
             vga[(y - 1) * 80 + x] = vga[y * 80 + x];
 
     for (int x = 0; x < 80; x++)
-        vga[24 * 80 + x] = ' ' | (color << 8);
+        vga[24 * 80 + x] = ' ' | (term_attr << 8);
 
     row = 24;
 }
@@ -72,7 +75,7 @@ static void term_window_scroll() {
     int bottom_y = term_y + (total_rows - 1) * 16;
     for (int i = 0; i < 16; i++) {
         uint32_t* row_ptr = pixels + (bottom_y + i) * pitch + term_x;
-        for (int x = 0; x < term_w; x++) row_ptr[x] = 0xFFFFFFFF; /* White */
+        for (int x = 0; x < term_w; x++) row_ptr[x] = term_win_bg;
     }
     
     row = total_rows - 1;
@@ -92,8 +95,7 @@ static void term_window_draw_char(char c, int x, int y) {
     const uint8_t* glyph = &font8x16[(uint8_t)c * 16];
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 8; j++) {
-            /* Windows 1.0 Console: Black text (0xFF000000) on White background (0xFFFFFFFF) */
-            uint32_t color = (glyph[i] & (1 << (7-j))) ? 0xFF000000 : 0xFFFFFFFF;
+            uint32_t color = (glyph[i] & (1 << (7-j))) ? term_win_fg : term_win_bg;
             term_window_putpixel(x + j, y + i, color);
         }
     }
@@ -124,7 +126,7 @@ extern "C" void terminal_clear() {
         uint32_t* pixels = term_surface->pixels;
         for (int y = 0; y < term_h; y++) {
             uint32_t* row_ptr = pixels + (term_y + y) * pitch + term_x;
-            for (int x = 0; x < term_w; x++) row_ptr[x] = 0xFFFFFFFF;
+            for (int x = 0; x < term_w; x++) row_ptr[x] = term_win_bg;
         }
         row = 0; col = 0;
         term_dirty = true;
@@ -136,7 +138,7 @@ extern "C" void terminal_clear() {
     }
 
     for (int i = 0; i < 80 * 25; i++)
-        vga[i] = ' ' | (color << 8);
+        vga[i] = ' ' | (term_attr << 8);
 
     row = 0;
     col = 0;
@@ -207,7 +209,7 @@ extern "C" void terminal_putchar(char c) {
         return;
     }
 
-    vga[row * 80 + col] = c | (color << 8);
+    vga[row * 80 + col] = c | (term_attr << 8);
     col++;
 
     if (col >= 80) {
@@ -232,6 +234,7 @@ extern "C" void terminal_writestring(const char* s) {
 }
 
 extern "C" void terminal_init() {
+    terminal_set_text_attr(cl_default());
     terminal_clear();
 }
 
@@ -449,6 +452,15 @@ extern "C" void terminal_writehex(uint32_t v)
             started = true;
             terminal_putchar(hex[nib]);
         }
+    }
+}
+
+extern "C" void terminal_set_text_attr(uint8_t attr) {
+    term_attr = attr;
+    term_win_fg = cl_rgb(cl_fg(attr));
+    term_win_bg = cl_rgb(cl_bg(attr));
+    if (use_fb_console) {
+        fb_cons_set_attr(attr);
     }
 }
 

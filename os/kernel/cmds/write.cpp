@@ -8,6 +8,7 @@
 #include "../mem/kmalloc.h"
 #include "../input/input.h"
 #include "fat.h"
+#include "cd.h"
 #include "../ui/wm/wm.h"
 #include "../shell/shell.h"
 
@@ -32,7 +33,21 @@ extern "C" int cmd_write(int argc, char** argv) {
         return -1;
     }
 
-    const char* path = argv[1];
+    char path[256];
+    if (argv[1][0] == '/') {
+        strncpy(path, argv[1], sizeof(path));
+        path[sizeof(path) - 1] = 0;
+    } else {
+        char cwd[256];
+        cd_get_cwd(cwd, sizeof(cwd));
+        strncpy(path, cwd, sizeof(path));
+        path[sizeof(path) - 1] = 0;
+        size_t len = strlen(path);
+        if (len > 0 && path[len - 1] != '/') {
+            strcat(path, "/");
+        }
+        strcat(path, argv[1]);
+    }
 
     /* 1. Automount FAT32 */
     fat_automount();

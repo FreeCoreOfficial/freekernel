@@ -135,6 +135,20 @@ OBJS = \
 	$(BUILD)/cmds/get.o \
 	$(BUILD)/cmds/curl.o \
 	$(BUILD)/cmds/pkg.o \
+	$(BUILD)/cmds/pathutil.o \
+	$(BUILD)/cmds/pwd.o \
+	$(BUILD)/cmds/cp.o \
+	$(BUILD)/cmds/mv.o \
+	$(BUILD)/cmds/head.o \
+	$(BUILD)/cmds/tail.o \
+	$(BUILD)/cmds/wc.o \
+	$(BUILD)/cmds/hexdump.o \
+	$(BUILD)/cmds/grep.o \
+	$(BUILD)/cmds/tee.o \
+	$(BUILD)/cmds/sha256.o \
+	$(BUILD)/cmds/sleep.o \
+	$(BUILD)/cmds/which.o \
+	$(BUILD)/cmds/size.o \
 	$(BUILD)/chryspkg/chryspkg.o \
 	$(BUILD)/hardware/pci.o \
 	$(BUILD)/hardware/acpi.o \
@@ -609,6 +623,48 @@ $(BUILD)/cmds/curl.o: kernel/cmds/curl.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/cmds/pkg.o: kernel/cmds/pkg.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/pathutil.o: kernel/cmds/pathutil.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/pwd.o: kernel/cmds/pwd.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/cp.o: kernel/cmds/cp.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/mv.o: kernel/cmds/mv.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/head.o: kernel/cmds/head.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/tail.o: kernel/cmds/tail.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/wc.o: kernel/cmds/wc.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/hexdump.o: kernel/cmds/hexdump.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/grep.o: kernel/cmds/grep.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/tee.o: kernel/cmds/tee.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/sha256.o: kernel/cmds/sha256.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/sleep.o: kernel/cmds/sleep.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/which.o: kernel/cmds/which.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/cmds/size.o: kernel/cmds/size.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/chryspkg/chryspkg.o: kernel/chryspkg/chryspkg.c | dirs

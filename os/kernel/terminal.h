@@ -41,6 +41,9 @@ void terminal_vprintf(const char* fmt, void* va); /* intern */
 /* print value as hex (no 0x prefix), trimmed leading zeros */
 void terminal_writehex(uint32_t v);
 
+/* Set current text attribute (fg/bg). Applies to window mode too. */
+void terminal_set_text_attr(uint8_t attr);
+
 /* ===== Piping / Redirection Support ===== */
 
 /* Redirect output to a memory buffer instead of screen */
