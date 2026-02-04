@@ -11,6 +11,26 @@ extern "C" void serial(const char *fmt, ...);
 static window_t* clock_win = NULL;
 static int last_sec = -1;
 
+static void draw_clock_face(surface_t* s);
+static void draw_hands(surface_t* s, int h, int m, int sec);
+
+static void clock_close(window_t* win) {
+    (void)win;
+    if (clock_win) {
+        wm_destroy_window(clock_win);
+        clock_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void clock_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    datetime t;
+    time_get_local(&t);
+    draw_clock_face(win->surface);
+    draw_hands(win->surface, t.hour, t.minute, t.second);
+    wm_mark_dirty();
+}
 /* Dimensiuni */
 #define WIN_W 200
 #define WIN_H 224 /* 200 content + 24 title */
@@ -164,12 +184,21 @@ static void draw_hands(surface_t* s, int h, int m, int sec) {
 }
 
 void clock_app_create(void) {
-    if (clock_win) return; /* Already open */
+    if (clock_win) {
+        wm_restore_window(clock_win);
+        wm_focus_window(clock_win);
+        return;
+    }
 
     surface_t* s = surface_create(WIN_W, WIN_H);
     if (!s) return;
 
     clock_win = wm_create_window(s, 150, 150);
+    if (clock_win) {
+        wm_set_title(clock_win, "Clock");
+        wm_set_on_close(clock_win, clock_close);
+        wm_set_on_resize(clock_win, clock_on_resize);
+    }
     last_sec = -1;
     
     /* Initial Draw */
@@ -209,9 +238,7 @@ bool clock_app_handle_event(input_event_t* ev) {
         /* Close Button Rect: x=W-20, y=4, w=16, h=16 */
         if (lx >= WIN_W - 20 && lx <= WIN_W - 4 && ly >= 4 && ly <= 20) {
             serial("[CLOCK] Close button clicked.\n");
-            wm_destroy_window(clock_win);
-            clock_win = NULL;
-            wm_mark_dirty();
+            clock_close(clock_win);
             return true;
         }
         

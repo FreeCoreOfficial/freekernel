@@ -24,6 +24,23 @@ static int today_day = 0;
 static int today_month = 0;
 static int today_year = 0;
 
+static void draw_calendar_ui(surface_t* s);
+
+static void cal_close(window_t* win) {
+    (void)win;
+    if (cal_win) {
+        wm_destroy_window(cal_win);
+        cal_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void cal_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_calendar_ui(win->surface);
+    wm_mark_dirty();
+}
+
 /* Helpers */
 static bool is_leap(int y) {
     return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
@@ -125,12 +142,21 @@ static void draw_calendar_ui(surface_t* s) {
 }
 
 void calendar_app_create(void) {
-    if (cal_win) return;
+    if (cal_win) {
+        wm_restore_window(cal_win);
+        wm_focus_window(cal_win);
+        return;
+    }
 
     surface_t* s = surface_create(CAL_W, CAL_H);
     if (!s) return;
 
     cal_win = wm_create_window(s, 250, 150);
+    if (cal_win) {
+        wm_set_title(cal_win, "Calendar");
+        wm_set_on_close(cal_win, cal_close);
+        wm_set_on_resize(cal_win, cal_on_resize);
+    }
     
     /* Init with current date */
     datetime t;
@@ -155,9 +181,7 @@ bool calendar_app_handle_event(input_event_t* ev) {
 
         /* Close Button */
         if (lx >= CAL_W - 20 && lx <= CAL_W - 4 && ly >= 4 && ly <= 20) {
-            wm_destroy_window(cal_win);
-            cal_win = NULL;
-            wm_mark_dirty();
+            cal_close(cal_win);
             return true;
         }
 

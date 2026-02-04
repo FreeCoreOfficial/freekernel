@@ -26,6 +26,8 @@
 #define COL_TITLE_BG 0xFF000080
 #define COL_TITLE_FG 0xFFFFFFFF
 
+static void render_all(void);
+
 /* RNG */
 static unsigned long int next = 1;
 static int rand(void) {
@@ -48,6 +50,21 @@ static cell_t grid[GRID_W * GRID_H];
 static bool game_over = false;
 static bool game_won = false;
 static int score = 0;
+
+static void mine_close(window_t* win) {
+    (void)win;
+    if (mine_win) {
+        wm_destroy_window(mine_win);
+        mine_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void mine_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    render_all();
+    wm_mark_dirty();
+}
 
 /* --- Drawing Helpers --- */
 
@@ -221,7 +238,11 @@ static void check_win() {
 /* --- Public API --- */
 
 void minesweeper_app_create(void) {
-    if (mine_win) return;
+    if (mine_win) {
+        wm_restore_window(mine_win);
+        wm_focus_window(mine_win);
+        return;
+    }
 
     surface_t* s = surface_create(WIN_W, WIN_H);
     if (!s) return;
@@ -230,6 +251,11 @@ void minesweeper_app_create(void) {
     
     /* Center on screen */
     mine_win = wm_create_window(s, 200, 200);
+    if (mine_win) {
+        wm_set_title(mine_win, "Minesweeper");
+        wm_set_on_close(mine_win, mine_close);
+        wm_set_on_resize(mine_win, mine_on_resize);
+    }
     render_all();
 }
 
@@ -246,8 +272,7 @@ void minesweeper_app_handle_event(input_event_t* ev) {
 
         /* Check Close Button */
         if (ly >= 4 && ly <= 20 && lx >= WIN_W - 20 && lx <= WIN_W - 4) {
-            wm_destroy_window(mine_win);
-            mine_win = NULL;
+            mine_close(mine_win);
             return;
         }
 

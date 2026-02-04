@@ -14,6 +14,24 @@ static fat_file_info_t files[32];
 static int file_count = 0;
 static int selected_idx = -1;
 
+static void draw_fm(surface_t* s);
+
+static void fm_close(window_t* win) {
+    (void)win;
+    if (fm_win) {
+        wm_destroy_window(fm_win);
+        app_unregister(fm_win);
+        fm_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void fm_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_fm(win->surface);
+    wm_mark_dirty();
+}
+
 static void append_path(char* dst, size_t cap, const char* src) {
     size_t len = strlen(dst);
     size_t i = 0;
@@ -114,9 +132,18 @@ static void draw_fm(surface_t* s) {
 }
 
 void file_manager_app_create(void) {
-    if (fm_win) return;
+    if (fm_win) {
+        wm_restore_window(fm_win);
+        wm_focus_window(fm_win);
+        return;
+    }
     surface_t* s = surface_create(300, 400);
     fm_win = wm_create_window(s, 50, 50);
+    if (fm_win) {
+        wm_set_title(fm_win, "File Manager");
+        wm_set_on_close(fm_win, fm_close);
+        wm_set_on_resize(fm_win, fm_on_resize);
+    }
     refresh_files();
     draw_fm(s);
     app_register("File Manager", fm_win);
@@ -130,10 +157,7 @@ bool file_manager_app_handle_event(input_event_t* ev) {
 
         /* Close */
         if (lx >= fm_win->w - 20 && ly < 24) {
-            wm_destroy_window(fm_win);
-            app_unregister(fm_win);
-            fm_win = NULL;
-            wm_mark_dirty();
+            fm_close(fm_win);
             return true;
         }
 

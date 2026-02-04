@@ -3,6 +3,10 @@
 #include "../../mem/kmalloc.h"
 #include <stddef.h>
 #include "../../terminal.h"
+#include "../../video/gpu.h"
+#include "../flyui/draw.h"
+#include "../flyui/theme.h"
+#include "../../string.h"
 
 /* Import serial logging */
 extern void serial(const char *fmt, ...);
@@ -34,6 +38,119 @@ void wm_mark_dirty(void) {
 
 bool wm_is_dirty(void) {
     return wm_dirty;
+}
+
+bool wm_window_is_decorated(window_t* win) {
+    if (!win) return false;
+    return (win->flags & WIN_FLAG_NO_DECOR) == 0;
+}
+
+void wm_set_window_flags(window_t* win, uint32_t flags) {
+    if (!win) return;
+    win->flags = flags;
+}
+
+void wm_set_title(window_t* win, const char* title) {
+    if (!win || !title) return;
+    strncpy(win->title, title, sizeof(win->title) - 1);
+    win->title[sizeof(win->title) - 1] = 0;
+}
+
+void wm_set_on_close(window_t* win, void (*on_close)(window_t*)) {
+    if (!win) return;
+    win->on_close = on_close;
+}
+
+void wm_set_on_resize(window_t* win, void (*on_resize)(window_t*)) {
+    if (!win) return;
+    win->on_resize = on_resize;
+}
+
+void wm_minimize_window(window_t* win) {
+    if (!win || !win->surface) return;
+    if (win->state == WIN_STATE_MINIMIZED) return;
+
+    win->restore_x = win->x;
+    win->restore_y = win->y;
+    win->restore_w = win->w;
+    win->restore_h = win->h;
+    win->state = WIN_STATE_MINIMIZED;
+    win->surface->visible = false;
+    if (focused_window == win) focused_window = NULL;
+    wm_dirty = true;
+}
+
+void wm_restore_window(window_t* win) {
+    if (!win || !win->surface) return;
+    if (win->state == WIN_STATE_MINIMIZED) {
+        win->surface->visible = true;
+        win->state = WIN_STATE_NORMAL;
+        wm_focus_window(win);
+        wm_dirty = true;
+    }
+}
+
+static void wm_maximize_window(window_t* win) {
+    if (!win || !win->surface) return;
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
+
+    win->restore_x = win->x;
+    win->restore_y = win->y;
+    win->restore_w = win->w;
+    win->restore_h = win->h;
+
+    int new_w = (int)gpu->width;
+    int new_h = (int)gpu->height;
+    if (new_w < 100) new_w = 100;
+    if (new_h < 80) new_h = 80;
+
+    win->x = 0;
+    win->y = 0;
+    if (surface_resize(win->surface, (uint32_t)new_w, (uint32_t)new_h, theme_get()->win_bg)) {
+        win->w = new_w;
+        win->h = new_h;
+        if (win->on_resize) win->on_resize(win);
+    }
+    win->state = WIN_STATE_MAXIMIZED;
+    wm_dirty = true;
+}
+
+static void wm_restore_from_max(window_t* win) {
+    if (!win || !win->surface) return;
+    win->x = win->restore_x;
+    win->y = win->restore_y;
+    if (surface_resize(win->surface, (uint32_t)win->restore_w, (uint32_t)win->restore_h, theme_get()->win_bg)) {
+        win->w = win->restore_w;
+        win->h = win->restore_h;
+        if (win->on_resize) win->on_resize(win);
+    }
+    win->state = WIN_STATE_NORMAL;
+    wm_dirty = true;
+}
+
+void wm_toggle_maximize(window_t* win) {
+    if (!win) return;
+    if (win->state == WIN_STATE_MINIMIZED) {
+        wm_restore_window(win);
+    }
+    if (win->state == WIN_STATE_MAXIMIZED) {
+        wm_restore_from_max(win);
+    } else {
+        wm_maximize_window(win);
+    }
+}
+
+bool wm_resize_window(window_t* win, int w, int h) {
+    if (!win || !win->surface) return false;
+    if (w < 120) w = 120;
+    if (h < 80) h = 80;
+    if (!surface_resize(win->surface, (uint32_t)w, (uint32_t)h, theme_get()->win_bg)) return false;
+    win->w = w;
+    win->h = h;
+    if (win->on_resize) win->on_resize(win);
+    wm_dirty = true;
+    return true;
 }
 
 static void rebuild_win_array(void) {
@@ -139,6 +256,8 @@ window_t* wm_find_window_at(int x, int y) {
     for (size_t i = 0; i < win_count; i++) {
         window_t* w = win_array[i];
         if (!w || !w->surface) continue;
+        if (w->state == WIN_STATE_MINIMIZED) continue;
+        if (!w->surface->visible) continue;
         
         if (x >= w->x && x < w->x + (int)w->surface->width &&
             y >= w->y && y < w->y + (int)w->surface->height) {
@@ -146,6 +265,52 @@ window_t* wm_find_window_at(int x, int y) {
         }
     }
     return NULL;
+}
+
+static void wm_draw_decorations(window_t* w, bool focused) {
+    if (!w || !w->surface) return;
+    if (!wm_window_is_decorated(w)) return;
+
+    fly_theme_t* th = theme_get();
+    int ww = (int)w->surface->width;
+    int wh = (int)w->surface->height;
+    int title_h = 24;
+
+    uint32_t title_bg = focused ? th->win_title_active_bg : th->win_title_inactive_bg;
+    uint32_t title_fg = focused ? th->win_title_active_fg : th->win_title_inactive_fg;
+
+    fly_draw_rect_fill(w->surface, 0, 0, ww, title_h, title_bg);
+    fly_draw_rect_fill(w->surface, 0, title_h, ww, 1, th->color_lo_1);
+
+    const char* title = (w->title[0] != 0) ? w->title : "Chrysalis";
+    fly_draw_text(w->surface, 6, 4, title, title_fg);
+
+    int btn = 16;
+    int pad = 4;
+    int bx_close = ww - pad - btn;
+    int bx_max = bx_close - pad - btn;
+    int bx_min = bx_max - pad - btn;
+    int by = 4;
+
+    fly_draw_rect_fill(w->surface, bx_min, by, btn, btn, th->win_bg);
+    fly_draw_rect_outline(w->surface, bx_min, by, btn, btn, th->color_lo_2);
+    fly_draw_text(w->surface, bx_min + 5, by, "_", th->color_text);
+
+    fly_draw_rect_fill(w->surface, bx_max, by, btn, btn, th->win_bg);
+    fly_draw_rect_outline(w->surface, bx_max, by, btn, btn, th->color_lo_2);
+    fly_draw_text(w->surface, bx_max + 4, by, "[]", th->color_text);
+
+    fly_draw_rect_fill(w->surface, bx_close, by, btn, btn, th->win_bg);
+    fly_draw_rect_outline(w->surface, bx_close, by, btn, btn, th->color_lo_2);
+    fly_draw_text(w->surface, bx_close + 4, by, "X", th->color_text);
+
+    /* Resize grip */
+    if ((w->flags & WIN_FLAG_NO_RESIZE) == 0) {
+        for (int i = 0; i < 8; i++) {
+            fly_draw_rect_fill(w->surface, ww - 1 - i, wh - 1, 1, 1, th->color_hi_1);
+            fly_draw_rect_fill(w->surface, ww - 1, wh - 1 - i, 1, 1, th->color_hi_1);
+        }
+    }
 }
 
 void wm_render(void) {
@@ -156,7 +321,15 @@ void wm_render(void) {
         current_layout->apply(win_array, win_count);
     }
 
-    /* 2. Prepare Surface List for Compositor (Bottom to Top) */
+    /* 2. Draw decorations before render */
+    for (size_t i = 0; i < win_count; i++) {
+        window_t* w = win_array[i];
+        if (!w || !w->surface) continue;
+        if (w->state == WIN_STATE_MINIMIZED || !w->surface->visible) continue;
+        wm_draw_decorations(w, w == focused_window);
+    }
+
+    /* 3. Prepare Surface List for Compositor (Bottom to Top) */
     surface_t* render_list[MAX_WINDOWS];
     int render_count = 0;
 
@@ -170,13 +343,13 @@ void wm_render(void) {
         }
     }
 
-    /* 3. Hooks */
+    /* 4. Hooks */
     wm_hooks_t* hooks = wm_get_hooks();
     if (hooks && hooks->on_frame) {
         hooks->on_frame();
     }
 
-    /* 4. Render */
+    /* 5. Render */
     serial("[WM] Rendering\n");
     compositor_render_surfaces(render_list, render_count);
     

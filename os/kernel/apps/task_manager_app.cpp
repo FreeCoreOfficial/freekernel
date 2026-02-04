@@ -7,6 +7,25 @@
 
 static window_t* task_win = NULL;
 
+static void draw_stats(surface_t* s);
+
+static void task_close(window_t* win) {
+    (void)win;
+    if (task_win) {
+        wm_destroy_window(task_win);
+        app_unregister(task_win);
+        task_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void task_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    surface_clear(win->surface, theme_get()->win_bg);
+    draw_stats(win->surface);
+    wm_mark_dirty();
+}
+
 static void fly_draw_line(surface_t* surf, int x0, int y0, int x1, int y1, uint32_t color) {
     int dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
     int sx = (x0 < x1) ? 1 : -1;
@@ -43,24 +62,19 @@ static void draw_classic_button(surface_t* s, int x, int y, int w, int h, const 
 static void draw_stats(surface_t* s) {
     fly_theme_t* th = theme_get();
     int w = s->width;
-    
-    // Header
-    fly_draw_rect_fill(s, 0, 0, w, 24, th->win_title_active_bg);
-    fly_draw_text(s, 5, 4, "Task Manager", th->win_title_active_fg);
+    int h = s->height;
 
-    // Close Button (Folosind codul tău de linie)
-    int bx = w - 20;
-    draw_classic_button(s, bx, 4, 16, 16, "X");
-
-    // Separator sub titlu
-    fly_draw_rect_fill(s, 0, 24, w, 1, th->color_lo_1);
+    surface_clear(s, th->win_bg);
 
     // List Apps
-    fly_draw_text(s, 10, 30, "Running Tasks:", th->color_text);
+    fly_draw_text(s, 10, 10, "Running Tasks:", th->color_text);
     
     app_info_t* app = app_get_list();
-    int y = 50;
+    int y = 30;
     while (app) {
+        if (app->selected) {
+            fly_draw_rect_fill(s, 8, y - 2, w - 16, 16, th->color_hi_1);
+        }
         // Checkbox outline
         fly_draw_rect_outline(s, 10, y, 12, 12, th->color_text);
         if (app->selected) {
@@ -75,11 +89,15 @@ static void draw_stats(surface_t* s) {
     }
     
     // "End Task" Button
-    draw_classic_button(s, 150, s->height - 40, 80, 25, "End Task");
+    draw_classic_button(s, w - 90, h - 40, 80, 25, "End Task");
 }
 
 void task_manager_app_create(void) {
-    if (task_win) return;
+    if (task_win) {
+        wm_restore_window(task_win);
+        wm_focus_window(task_win);
+        return;
+    }
     
     surface_t* s = surface_create(250, 300);
     fly_theme_t* th = theme_get();
@@ -88,7 +106,12 @@ void task_manager_app_create(void) {
     draw_stats(s);
 
     task_win = wm_create_window(s, 200, 200);
-    app_register("Task Manager", task_win);
+    if (task_win) {
+        wm_set_title(task_win, "Task Manager");
+        wm_set_on_close(task_win, task_close);
+        wm_set_on_resize(task_win, task_on_resize);
+        app_register("Task Manager", task_win);
+    }
 }
 
 bool task_manager_app_handle_event(input_event_t* ev) {
@@ -97,19 +120,26 @@ bool task_manager_app_handle_event(input_event_t* ev) {
     if (ev->type == INPUT_MOUSE_CLICK && ev->pressed) {
         int lx = ev->mouse_x - task_win->x;
         int ly = ev->mouse_y - task_win->y;
-        int surf_w = task_win->surface->width;
-
-        // Close logic
-        if (lx >= surf_w - 20 && ly < 24) {
-            wm_destroy_window(task_win);
-            app_unregister(task_win);
-            task_win = NULL;
+        // Select row
+        if (ly >= 28 && ly <= (int)task_win->surface->height - 60) {
+            int idx = (ly - 30) / 20;
+            int i = 0;
+            app_info_t* app = app_get_list();
+            while (app) {
+                if (i == idx) {
+                    app->selected = !app->selected;
+                    break;
+                }
+                i++;
+                app = app->next;
+            }
+            draw_stats(task_win->surface);
             wm_mark_dirty();
             return true;
         }
 
-        // Kill logic (simplificată)
-        if (lx >= 150 && lx <= 230 && ly >= 260) {
+        // Kill logic
+        if (lx >= (int)task_win->surface->width - 90 && ly >= (int)task_win->surface->height - 40) {
              app_info_t* app = app_get_list();
              while(app) {
                  if(app->selected && app->window != task_win) {
@@ -120,8 +150,6 @@ bool task_manager_app_handle_event(input_event_t* ev) {
                  }
                  app = app->next;
              }
-             // Redraw stats
-             surface_clear(task_win->surface, theme_get()->win_bg);
              draw_stats(task_win->surface);
              wm_mark_dirty();
              return true;

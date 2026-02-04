@@ -19,6 +19,15 @@ void wm_set_layout(wm_layout_t* layout);
 
 /* Hit test: Find window at global coordinates */
 window_t* wm_find_window_at(int x, int y);
+bool wm_window_is_decorated(window_t* win);
+void wm_set_window_flags(window_t* win, uint32_t flags);
+void wm_set_title(window_t* win, const char* title);
+void wm_set_on_close(window_t* win, void (*on_close)(window_t*));
+void wm_set_on_resize(window_t* win, void (*on_resize)(window_t*));
+void wm_minimize_window(window_t* win);
+void wm_restore_window(window_t* win);
+void wm_toggle_maximize(window_t* win);
+bool wm_resize_window(window_t* win, int w, int h);
 
 void wm_mark_dirty(void);
 bool wm_is_dirty(void);

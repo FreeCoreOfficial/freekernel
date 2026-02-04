@@ -7,6 +7,22 @@
 static window_t* demo_win = NULL;
 static int angle = 0;
 
+static void demo_close(window_t* win) {
+    (void)win;
+    if (demo_win) {
+        wm_destroy_window(demo_win);
+        app_unregister(demo_win);
+        demo_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void demo_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    surface_clear(win->surface, 0xFF000000);
+    wm_mark_dirty();
+}
+
 /* Simple fixed point math or integer math for rotation */
 /* Vertices of a cube centered at 0,0,0 */
 typedef struct { int x, y, z; } vec3_t;
@@ -54,7 +70,11 @@ static void rotate_y(int angle, int* x, int* z) {
 */
 
 void demo3d_app_create(void) {
-    if (demo_win) return;
+    if (demo_win) {
+        wm_restore_window(demo_win);
+        wm_focus_window(demo_win);
+        return;
+    }
     fly_theme_t* th = theme_get();
     surface_t* s = surface_create(300, 300);
     surface_clear(s, 0xFF000000);
@@ -71,7 +91,12 @@ void demo3d_app_create(void) {
     fly_draw_rect_fill(s, 0, 24, 300, 1, th->color_lo_1);
 
     demo_win = wm_create_window(s, 200, 100);
-    app_register("3D Demo", demo_win);
+    if (demo_win) {
+        wm_set_title(demo_win, "3D Demo");
+        wm_set_on_close(demo_win, demo_close);
+        wm_set_on_resize(demo_win, demo_on_resize);
+        app_register("3D Demo", demo_win);
+    }
 }
 
 /* Simple line drawing (Bresenham) - duplicated from clock_app for now or moved to draw.h */

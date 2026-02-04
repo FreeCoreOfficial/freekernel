@@ -27,6 +27,12 @@
 
 extern "C" void serial(const char *fmt, ...);
 
+/* Window control metrics */
+#define WM_TITLEBAR_H 24
+#define WM_BTN_SIZE 16
+#define WM_BTN_PAD 4
+#define WM_RESIZE_GRIP 12
+
 /* Program Manager State */
 static window_t* taskbar_win = NULL;
 static flyui_context_t* taskbar_ctx = NULL;
@@ -38,6 +44,8 @@ static window_t* start_menu_win = NULL;
 static flyui_context_t* start_menu_ctx = NULL;
 static bool is_gui_running = false;
 static int taskbar_last_min = -1;
+
+#define TASKBAR_H 36
 
 /* Icon Button Logic */
 typedef struct {
@@ -474,6 +482,10 @@ static void create_exit_popup() {
     int sx = (gpu->width - w) / 2;
     int sy = (gpu->height - h) / 2;
     popup_win = wm_create_window(s, sx, sy);
+    if (popup_win) {
+        wm_set_window_flags(popup_win, WIN_FLAG_NO_DECOR | WIN_FLAG_NO_RESIZE);
+        wm_set_title(popup_win, "Popup");
+    }
 }
 
 /* Network Popup Handlers */
@@ -489,6 +501,52 @@ static bool net_popup_close_event(fly_widget_t* w, fly_event_t* e) {
         return true;
     }
     return false;
+}
+
+static void append_safe(char* dst, size_t cap, const char* src) {
+    size_t len = strlen(dst);
+    size_t i = 0;
+    while (src[i] && (len + 1) < cap) {
+        dst[len++] = src[i++];
+    }
+    dst[len] = 0;
+}
+
+static void ip_to_str(uint32_t ip, char* out, size_t cap) {
+    if (!out || cap == 0) return;
+    char buf[16];
+    char tmp[16];
+    out[0] = 0;
+
+    itoa_dec(buf, (int32_t)(ip & 0xFF));
+    strncpy(out, buf, cap);
+    out[cap - 1] = 0;
+    append_safe(out, cap, ".");
+
+    itoa_dec(tmp, (int32_t)((ip >> 8) & 0xFF));
+    append_safe(out, cap, tmp);
+    append_safe(out, cap, ".");
+
+    itoa_dec(tmp, (int32_t)((ip >> 16) & 0xFF));
+    append_safe(out, cap, tmp);
+    append_safe(out, cap, ".");
+
+    itoa_dec(tmp, (int32_t)((ip >> 24) & 0xFF));
+    append_safe(out, cap, tmp);
+}
+
+static void mac_to_str(const uint8_t mac[6], char* out, size_t cap) {
+    static const char* hex = "0123456789abcdef";
+    if (!out || cap < 18) return;
+    int p = 0;
+    for (int i = 0; i < 6; ++i) {
+        uint8_t b = mac[i];
+        if (p + 2 >= (int)cap) break;
+        out[p++] = hex[(b >> 4) & 0xF];
+        out[p++] = hex[b & 0xF];
+        if (i < 5 && p + 1 < (int)cap) out[p++] = ':';
+    }
+    out[p] = 0;
 }
 
 static void create_net_popup() {
@@ -533,29 +591,44 @@ static void create_net_popup() {
         y += 20;
 
         uint32_t ip = dev->ip;
-        sprintf(buf, "IP: %d.%d.%d.%d", ip&0xFF, (ip>>8)&0xFF, (ip>>16)&0xFF, (ip>>24)&0xFF);
-        fly_widget_t* lbl_ip = fly_label_create(buf);
+        ip_to_str(ip, buf, sizeof(buf));
+        char line_ip[72];
+        strncpy(line_ip, "IP: ", sizeof(line_ip));
+        line_ip[sizeof(line_ip) - 1] = 0;
+        append_safe(line_ip, sizeof(line_ip), buf);
+        fly_widget_t* lbl_ip = fly_label_create(line_ip);
         lbl_ip->x = 10; lbl_ip->y = y;
         fly_widget_add(root, lbl_ip);
         y += 20;
 
         uint32_t gw = dev->gateway;
-        sprintf(buf, "GW: %d.%d.%d.%d", gw&0xFF, (gw>>8)&0xFF, (gw>>16)&0xFF, (gw>>24)&0xFF);
-        fly_widget_t* lbl_gw = fly_label_create(buf);
+        ip_to_str(gw, buf, sizeof(buf));
+        char line_gw[72];
+        strncpy(line_gw, "GW: ", sizeof(line_gw));
+        line_gw[sizeof(line_gw) - 1] = 0;
+        append_safe(line_gw, sizeof(line_gw), buf);
+        fly_widget_t* lbl_gw = fly_label_create(line_gw);
         lbl_gw->x = 10; lbl_gw->y = y;
         fly_widget_add(root, lbl_gw);
         y += 20;
 
         uint32_t dns = dev->dns_server;
-        sprintf(buf, "DNS: %d.%d.%d.%d", dns&0xFF, (dns>>8)&0xFF, (dns>>16)&0xFF, (dns>>24)&0xFF);
-        fly_widget_t* lbl_dns = fly_label_create(buf);
+        ip_to_str(dns, buf, sizeof(buf));
+        char line_dns[72];
+        strncpy(line_dns, "DNS: ", sizeof(line_dns));
+        line_dns[sizeof(line_dns) - 1] = 0;
+        append_safe(line_dns, sizeof(line_dns), buf);
+        fly_widget_t* lbl_dns = fly_label_create(line_dns);
         lbl_dns->x = 10; lbl_dns->y = y;
         fly_widget_add(root, lbl_dns);
         y += 20;
 
-        sprintf(buf, "MAC: %02x:%02x:%02x:%02x:%02x:%02x", 
-            dev->mac[0], dev->mac[1], dev->mac[2], dev->mac[3], dev->mac[4], dev->mac[5]);
-        fly_widget_t* lbl_mac = fly_label_create(buf);
+        mac_to_str(dev->mac, buf, sizeof(buf));
+        char line_mac[80];
+        strncpy(line_mac, "MAC: ", sizeof(line_mac));
+        line_mac[sizeof(line_mac) - 1] = 0;
+        append_safe(line_mac, sizeof(line_mac), buf);
+        fly_widget_t* lbl_mac = fly_label_create(line_mac);
         lbl_mac->x = 10; lbl_mac->y = y;
         fly_widget_add(root, lbl_mac);
     } else {
@@ -569,8 +642,12 @@ static void create_net_popup() {
     gpu_device_t* gpu = gpu_get_primary();
     /* Position near bottom right, above taskbar */
     int sx = gpu->width - w - 10;
-    int sy = gpu->height - 40 - h - 5; 
+    int sy = gpu->height - TASKBAR_H - h - 5; 
     net_win = wm_create_window(s, sx, sy);
+    if (net_win) {
+        wm_set_window_flags(net_win, WIN_FLAG_NO_DECOR | WIN_FLAG_NO_RESIZE);
+        wm_set_title(net_win, "Network");
+    }
 }
 
 static bool net_btn_event(fly_widget_t* w, fly_event_t* e) {
@@ -614,8 +691,8 @@ static void create_start_menu() {
     }
 
     fly_theme_t* th = theme_get();
-    int w = 150;
-    int h = 300;
+    int w = 170;
+    int h = 320;
     surface_t* s = surface_create(w, h);
     if (!s) return;
     surface_clear(s, th->win_bg);
@@ -664,7 +741,11 @@ static void create_start_menu() {
 
     gpu_device_t* gpu = gpu_get_primary();
     /* Position above start button */
-    start_menu_win = wm_create_window(s, 0, gpu->height - 32 - h);
+    start_menu_win = wm_create_window(s, 0, gpu->height - TASKBAR_H - h);
+    if (start_menu_win) {
+        wm_set_window_flags(start_menu_win, WIN_FLAG_NO_DECOR | WIN_FLAG_NO_RESIZE);
+        wm_set_title(start_menu_win, "Start");
+    }
 }
 
 static bool start_btn_event(fly_widget_t* w, fly_event_t* e) {
@@ -712,7 +793,7 @@ static void create_taskbar() {
 
     fly_theme_t* th = theme_get();
     int w = gpu->width;
-    int h = 32; /* Taskbar height */
+    int h = TASKBAR_H;
     
     /* 1. Create Surface */
     surface_t* s = surface_create(w, h);
@@ -720,9 +801,10 @@ static void create_taskbar() {
     
     /* Gray background */
     surface_clear(s, th->win_bg);
-    
     /* Top highlight line */
     fly_draw_line(s, 0, 0, w, 0, th->color_hi_1);
+    /* Bottom shadow line */
+    fly_draw_line(s, 0, h - 1, w, h - 1, th->color_lo_2);
 
     /* 2. Init FlyUI */
     taskbar_ctx = flyui_init(s);
@@ -732,15 +814,15 @@ static void create_taskbar() {
     root->bg_color = th->win_bg;
     flyui_set_root(taskbar_ctx, root);
 
-    int x = 0;
-    int y = 0;
-    int bw = 32; /* Icon button width */
-    int bh = 32; /* Icon button height */
+    int x = 6;
+    int y = 2;
+    int bw = 28; /* Icon button width */
+    int bh = 28; /* Icon button height */
     
     /* Start Button */
-    fly_widget_t* btn_start = create_taskbar_btn(x, y, 40, bh, ICON_START, start_btn_event);
+    fly_widget_t* btn_start = create_taskbar_btn(x, y, 48, bh, ICON_START, start_btn_event);
     fly_widget_add(root, btn_start);
-    x += 40 + 4;
+    x += 48 + 6;
 
     /* Run */
     fly_widget_add(root, create_taskbar_btn(x, y, bw, bh, ICON_RUN, run_btn_event)); x += bw;
@@ -785,11 +867,11 @@ static void create_taskbar() {
     fly_widget_add(root, create_taskbar_btn(x, y, bw, bh, ICON_XO, xo_btn_event)); x += bw;
     
     /* Net (Right Aligned) */
-    fly_widget_add(root, create_taskbar_btn(w - 150, y, bw, bh, ICON_NET, net_btn_event));
+    fly_widget_add(root, create_taskbar_btn(w - 170, y, bw, bh, ICON_NET, net_btn_event));
 
     /* Clock Widget (Right Aligned) */
-    fly_widget_t* sys_clock = fly_panel_create(100, h);
-    sys_clock->x = w - 105; /* 5px margin from right */
+    fly_widget_t* sys_clock = fly_panel_create(110, h);
+    sys_clock->x = w - 115; /* 5px margin from right */
     sys_clock->y = 0;
     sys_clock->bg_color = th->win_bg;
     sys_clock->on_draw = taskbar_clock_draw;
@@ -801,6 +883,10 @@ static void create_taskbar() {
     /* 5. Create WM Window */
     /* Position at bottom of screen */
     taskbar_win = wm_create_window(s, 0, gpu->height - h);
+    if (taskbar_win) {
+        wm_set_window_flags(taskbar_win, WIN_FLAG_NO_DECOR | WIN_FLAG_NO_RESIZE);
+        wm_set_title(taskbar_win, "Taskbar");
+    }
 }
 
 extern "C" int cmd_launch_exit(int argc, char** argv) {
@@ -855,6 +941,11 @@ extern "C" int cmd_launch(int argc, char** argv) {
     window_t* drag_win = NULL;
     int drag_off_x = 0;
     int drag_off_y = 0;
+    window_t* resize_win = NULL;
+    int resize_start_w = 0;
+    int resize_start_h = 0;
+    int resize_start_mx = 0;
+    int resize_start_my = 0;
 
     while (is_gui_running) {
         /* Update Apps */
@@ -901,8 +992,17 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     wm_mark_dirty();
                 }
 
+                /* Handle Resizing */
+                if (resize_win && ev.type == INPUT_MOUSE_MOVE) {
+                    int dx = ev.mouse_x - resize_start_mx;
+                    int dy = ev.mouse_y - resize_start_my;
+                    int new_w = resize_start_w + dx;
+                    int new_h = resize_start_h + dy;
+                    wm_resize_window(resize_win, new_w, new_h);
+                }
+
                 /* 1. Find Window Under Mouse (Top-most) if not dragging */
-                window_t* target = drag_win ? drag_win : wm_find_window_at(ev.mouse_x, ev.mouse_y);
+                window_t* target = (drag_win || resize_win) ? (drag_win ? drag_win : resize_win) : wm_find_window_at(ev.mouse_x, ev.mouse_y);
 
                 /* 2. Handle Focus & Drag Start on Click */
                 if (ev.type == INPUT_MOUSE_CLICK) {
@@ -920,10 +1020,52 @@ extern "C" int cmd_launch(int argc, char** argv) {
                             if (target) {
                                 wm_focus_window(target);
                                 wm_mark_dirty();
-                                
-                                /* Check for Title Bar Hit (0-24px relative to window) */
+
+                                int rel_x = ev.mouse_x - target->x;
                                 int rel_y = ev.mouse_y - target->y;
-                                if (rel_y >= 0 && rel_y < 24 && target != taskbar_win) { /* Fix: Don't drag taskbar */
+
+                                if (target != taskbar_win && wm_window_is_decorated(target)) {
+                                    int bw = WM_BTN_SIZE;
+                                    int pad = WM_BTN_PAD;
+                                    int bx_close = target->w - pad - bw;
+                                    int bx_max = bx_close - pad - bw;
+                                    int bx_min = bx_max - pad - bw;
+                                    int by = 4;
+
+                                    if (rel_y >= 0 && rel_y < WM_TITLEBAR_H) {
+                                        if (rel_x >= bx_close && rel_x < bx_close + bw && rel_y >= by && rel_y < by + bw) {
+                                            if (target->on_close) target->on_close(target);
+                                            else wm_destroy_window(target);
+                                            wm_mark_dirty();
+                                            continue;
+                                        }
+                                        if (rel_x >= bx_max && rel_x < bx_max + bw && rel_y >= by && rel_y < by + bw) {
+                                            wm_toggle_maximize(target);
+                                            wm_mark_dirty();
+                                            continue;
+                                        }
+                                        if (rel_x >= bx_min && rel_x < bx_min + bw && rel_y >= by && rel_y < by + bw) {
+                                            wm_minimize_window(target);
+                                            wm_mark_dirty();
+                                            continue;
+                                        }
+                                    }
+
+                                    /* Resize grip (bottom-right) */
+                                    if ((target->flags & WIN_FLAG_NO_RESIZE) == 0) {
+                                        if (rel_x >= target->w - WM_RESIZE_GRIP && rel_y >= target->h - WM_RESIZE_GRIP) {
+                                            resize_win = target;
+                                            resize_start_w = target->w;
+                                            resize_start_h = target->h;
+                                            resize_start_mx = ev.mouse_x;
+                                            resize_start_my = ev.mouse_y;
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                /* Check for Title Bar Hit (0-24px relative to window) */
+                                if (rel_y >= 0 && rel_y < WM_TITLEBAR_H && target != taskbar_win) { /* Fix: Don't drag taskbar */
                                     drag_win = target;
                                     drag_off_x = ev.mouse_x - target->x;
                                     drag_off_y = ev.mouse_y - target->y;
@@ -933,6 +1075,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     } else {
                         /* Mouse Up: Stop Dragging */
                         drag_win = NULL;
+                        resize_win = NULL;
                     }
                 }
 

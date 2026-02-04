@@ -19,18 +19,29 @@ static char content[4096] = "";
 static int content_len = 0;
 static bool focus_filename = false;
 
-static void draw_notepad_ui(surface_t* s) {
-    /* Background */
-    fly_draw_rect_fill(s, 0, 0, NOTE_W, NOTE_H, 0xFFE0E0E0);
-    
-    /* Title Bar */
-    fly_draw_rect_fill(s, 0, 0, NOTE_W, 24, 0xFF008000);
-    fly_draw_text(s, 5, 4, "Notepad", 0xFFFFFFFF);
-    
-    /* Close Button */
-    fly_draw_rect_fill(s, NOTE_W - 20, 4, 16, 16, 0xFFC0C0C0);
-    fly_draw_text(s, NOTE_W - 16, 4, "X", 0xFF000000);
+static void draw_notepad_ui(surface_t* s);
 
+static void note_close(window_t* win) {
+    (void)win;
+    if (note_win) {
+        wm_destroy_window(note_win);
+        note_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void note_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_notepad_ui(win->surface);
+    wm_mark_dirty();
+}
+
+static void draw_notepad_ui(surface_t* s) {
+    int w = (int)s->width;
+    int h = (int)s->height;
+    /* Background */
+    fly_draw_rect_fill(s, 0, 0, w, h, 0xFFE0E0E0);
+    
     /* Toolbar */
     fly_draw_text(s, 10, 35, "File:", 0xFF000000);
     
@@ -52,8 +63,8 @@ static void draw_notepad_ui(surface_t* s) {
 
     /* Content Area */
     uint32_t ct_bg = (!focus_filename) ? 0xFFFFFFFF : 0xFFF0F0F0;
-    fly_draw_rect_fill(s, 10, 60, NOTE_W - 20, NOTE_H - 70, ct_bg);
-    fly_draw_rect_outline(s, 10, 60, NOTE_W - 20, NOTE_H - 70, 0xFF000000);
+    fly_draw_rect_fill(s, 10, 60, w - 20, h - 70, ct_bg);
+    fly_draw_rect_outline(s, 10, 60, w - 20, h - 70, 0xFF000000);
 
     /* Draw Content (Simple multiline) */
     int cx = 15;
@@ -63,13 +74,13 @@ static void draw_notepad_ui(surface_t* s) {
         if (c == '\n') {
             cx = 15;
             cy += 16;
-            if (cy > NOTE_H - 20) break; /* Clip */
+            if (cy > h - 20) break; /* Clip */
             continue;
         }
         char str[2] = {c, 0};
         fly_draw_text(s, cx, cy, str, 0xFF000000);
         cx += 8;
-        if (cx > NOTE_W - 20) {
+        if (cx > w - 20) {
             cx = 15;
             cy += 16;
         }
@@ -104,12 +115,21 @@ static void load_file() {
 }
 
 void notepad_app_create(void) {
-    if (note_win) return;
+    if (note_win) {
+        wm_restore_window(note_win);
+        wm_focus_window(note_win);
+        return;
+    }
 
     surface_t* s = surface_create(NOTE_W, NOTE_H);
     if (!s) return;
 
     note_win = wm_create_window(s, 100, 100);
+    if (note_win) {
+        wm_set_title(note_win, "Notepad");
+        wm_set_on_close(note_win, note_close);
+        wm_set_on_resize(note_win, note_on_resize);
+    }
     
     /* Reset */
     strcpy(filename, "/new.txt");

@@ -8,6 +8,23 @@
 static window_t* run_win = NULL;
 static char cmd_buf[64] = "";
 
+static void draw_run(surface_t* s);
+
+static void run_close(window_t* win) {
+    (void)win;
+    if (run_win) {
+        wm_destroy_window(run_win);
+        run_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void run_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_run(win->surface);
+    wm_mark_dirty();
+}
+
 static void draw_run(surface_t* s) {
     fly_draw_rect_fill(s, 0, 0, 300, 120, 0xFFE0E0E0);
     fly_draw_rect_fill(s, 0, 0, 300, 24, 0xFF000080);
@@ -46,9 +63,18 @@ static void execute_run() {
 }
 
 void run_dialog_app_create(void) {
-    if (run_win) return;
+    if (run_win) {
+        wm_restore_window(run_win);
+        wm_focus_window(run_win);
+        return;
+    }
     surface_t* s = surface_create(300, 120);
     run_win = wm_create_window(s, 100, 300);
+    if (run_win) {
+        wm_set_title(run_win, "Run");
+        wm_set_on_close(run_win, run_close);
+        wm_set_on_resize(run_win, run_on_resize);
+    }
     cmd_buf[0] = 0;
     draw_run(s);
 }
@@ -61,9 +87,7 @@ bool run_dialog_app_handle_event(input_event_t* ev) {
         
         /* Close */
         if (lx >= 280 && ly < 24) {
-            wm_destroy_window(run_win);
-            run_win = NULL;
-            wm_mark_dirty();
+            run_close(run_win);
             return true;
         }
         /* Run Button */

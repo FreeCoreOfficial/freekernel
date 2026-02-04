@@ -12,6 +12,24 @@ static int turn = 0; // 0 = X, 1 = O
 static int winner = -1; // -1 = Playing, 0 = X, 1 = O, 2 = Draw
 static int moves = 0;
 
+static void draw_board(surface_t* s);
+
+static void ttt_close(window_t* win) {
+    (void)win;
+    if (ttt_win) {
+        wm_destroy_window(ttt_win);
+        app_unregister(ttt_win);
+        ttt_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void ttt_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_board(win->surface);
+    wm_mark_dirty();
+}
+
 static void fly_draw_line(surface_t* surf, int x0, int y0, int x1, int y1, uint32_t color) {
     int dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
     int sx = (x0 < x1) ? 1 : -1;
@@ -104,7 +122,11 @@ static void draw_board(surface_t* s) {
 }
 
 void tic_tac_toe_app_create(void) {
-    if (ttt_win) return;
+    if (ttt_win) {
+        wm_restore_window(ttt_win);
+        wm_focus_window(ttt_win);
+        return;
+    }
 
     fly_theme_t* th = theme_get();
     int w = 200;
@@ -129,7 +151,12 @@ void tic_tac_toe_app_create(void) {
     draw_board(s);
 
     ttt_win = wm_create_window(s, 100, 100);
-    app_register("X and 0", ttt_win);
+    if (ttt_win) {
+        wm_set_title(ttt_win, "X and 0");
+        wm_set_on_close(ttt_win, ttt_close);
+        wm_set_on_resize(ttt_win, ttt_on_resize);
+        app_register("X and 0", ttt_win);
+    }
 }
 
 bool tic_tac_toe_app_handle_event(input_event_t* ev) {
@@ -141,10 +168,7 @@ bool tic_tac_toe_app_handle_event(input_event_t* ev) {
 
         // Close Button
         if (lx >= ttt_win->w - 20 && ly < 24) {
-            wm_destroy_window(ttt_win);
-            app_unregister(ttt_win);
-            ttt_win = NULL;
-            wm_mark_dirty();
+            ttt_close(ttt_win);
             return true;
         }
 

@@ -23,6 +23,23 @@ static int32_t stored_val = 0;
 static char pending_op = 0;
 static bool new_entry = true;
 
+static void draw_calc_ui(surface_t* s);
+
+static void calc_close(window_t* win) {
+    (void)win;
+    if (calc_win) {
+        wm_destroy_window(calc_win);
+        calc_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void calc_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_calc_ui(win->surface);
+    wm_mark_dirty();
+}
+
 static void draw_button(surface_t* s, int x, int y, const char* label, uint32_t color) {
     fly_draw_rect_fill(s, x, y, BTN_SIZE, BTN_SIZE, color);
     fly_draw_rect_outline(s, x, y, BTN_SIZE, BTN_SIZE, 0xFF000000);
@@ -34,16 +51,10 @@ static void draw_button(surface_t* s, int x, int y, const char* label, uint32_t 
 }
 
 static void draw_calc_ui(surface_t* s) {
+    int w = (int)s->width;
+    int h = (int)s->height;
     /* Background */
-    fly_draw_rect_fill(s, 0, 0, CALC_W, CALC_H, 0xFFE0E0E0);
-    
-    /* Title Bar */
-    fly_draw_rect_fill(s, 0, 0, CALC_W, 24, 0xFF000080);
-    fly_draw_text(s, 5, 4, "Calculator", 0xFFFFFFFF);
-    
-    /* Close Button */
-    fly_draw_rect_fill(s, CALC_W - 20, 4, 16, 16, 0xFFC0C0C0);
-    fly_draw_text(s, CALC_W - 16, 4, "X", 0xFF000000);
+    fly_draw_rect_fill(s, 0, 0, w, h, 0xFFE0E0E0);
 
     /* Display */
     fly_draw_rect_fill(s, GAP, 30, CALC_W - 2*GAP, DISP_H, 0xFFFFFFFF);
@@ -118,12 +129,21 @@ static void calc_logic(const char* input) {
 }
 
 void calculator_app_create(void) {
-    if (calc_win) return;
+    if (calc_win) {
+        wm_restore_window(calc_win);
+        wm_focus_window(calc_win);
+        return;
+    }
 
     surface_t* s = surface_create(CALC_W, CALC_H);
     if (!s) return;
 
     calc_win = wm_create_window(s, 200, 200);
+    if (calc_win) {
+        wm_set_title(calc_win, "Calculator");
+        wm_set_on_close(calc_win, calc_close);
+        wm_set_on_resize(calc_win, calc_on_resize);
+    }
     
     /* Reset state */
     strcpy(display_buf, "0");
@@ -142,14 +162,6 @@ bool calculator_app_handle_event(input_event_t* ev) {
     if (ev->type == INPUT_MOUSE_CLICK && ev->pressed) {
         int lx = ev->mouse_x - calc_win->x;
         int ly = ev->mouse_y - calc_win->y;
-
-        /* Close Button */
-        if (lx >= CALC_W - 20 && lx <= CALC_W - 4 && ly >= 4 && ly <= 20) {
-            wm_destroy_window(calc_win);
-            calc_win = NULL;
-            wm_mark_dirty();
-            return true;
-        }
 
         /* Buttons */
         const char* labels[] = {

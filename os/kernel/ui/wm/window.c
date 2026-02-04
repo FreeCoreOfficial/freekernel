@@ -14,6 +14,14 @@ window_t* window_create(surface_t* surface, int x, int y) {
     win->z = 0;
     win->flags = 0;
     win->userdata = 0;
+    win->state = WIN_STATE_NORMAL;
+    win->restore_x = x;
+    win->restore_y = y;
+    win->restore_w = win->w;
+    win->restore_h = win->h;
+    win->on_close = 0;
+    win->on_resize = 0;
+    win->title[0] = 0;
     win->next = 0;
     
     return win;

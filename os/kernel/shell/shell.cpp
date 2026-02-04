@@ -365,6 +365,21 @@ static void shell_autocomplete() {
 
 static window_t* shell_win = NULL;
 
+static void shell_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    int win_w = win->w;
+    int win_h = win->h;
+    terminal_set_surface(win->surface);
+    terminal_set_rect(0, 25, win_w, win_h - 25);
+    terminal_clear();
+    wm_mark_dirty();
+}
+
+static void shell_on_close(window_t* win) {
+    (void)win;
+    shell_destroy_window();
+}
+
 static void fly_draw_line(surface_t* surf, int x0, int y0, int x1, int y1, uint32_t color) {
     int dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
     int sx = (x0 < x1) ? 1 : -1;
@@ -420,6 +435,11 @@ void shell_create_window() {
         fly_draw_rect_fill(s, 0, 24, win_w, 1, th->color_lo_1);
 
         shell_win = wm_create_window(s, 50, 50);
+        if (shell_win) {
+            wm_set_title(shell_win, "Konsole");
+            wm_set_on_close(shell_win, shell_on_close);
+            wm_set_on_resize(shell_win, shell_on_resize);
+        }
         
         terminal_set_surface(s);
         terminal_set_rect(0, 25, win_w, 400);
