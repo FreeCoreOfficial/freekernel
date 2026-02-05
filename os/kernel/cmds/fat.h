@@ -38,6 +38,12 @@ int fat32_create_file(const char* path, const void* data, uint32_t size);
 /* Creează un fișier cu verificare readback */
 int fat32_create_file_verified(const char* path, const void* data, uint32_t size, int verify);
 
+/* Create an empty file with allocated clusters (no data written) */
+int fat32_create_file_alloc(const char* path, uint32_t size);
+
+/* Write data into an existing file at an offset */
+int fat32_write_file_offset(const char* path, const void* data, uint32_t size, uint32_t offset, int verify);
+
 /* Delete a file from the root directory */
 int fat32_delete_file(const char* path);
 

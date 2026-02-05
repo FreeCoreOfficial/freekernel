@@ -445,6 +445,36 @@ static uint32_t fat_alloc_cluster(uint32_t fat_start, uint32_t sectors_per_fat, 
     return 0;
 }
 
+static uint32_t fat_alloc_cluster_from(uint32_t fat_start, uint32_t sectors_per_fat, uint8_t* sector, uint32_t* hint_cluster) {
+    uint32_t start = (hint_cluster && *hint_cluster >= 2) ? *hint_cluster : 2;
+    uint32_t total_entries = sectors_per_fat * 128;
+    if (start >= total_entries) start = 2;
+
+    for (int pass = 0; pass < 2; pass++) {
+        uint32_t first = (pass == 0) ? start : 2;
+        uint32_t last = (pass == 0) ? total_entries : start;
+        for (uint32_t cluster = first; cluster < last; cluster++) {
+            uint32_t s = cluster / 128;
+            uint32_t k = cluster % 128;
+            if (disk_read_sector(fat_start + s, sector) != 0) {
+                serial("[FAT] fat_alloc_cluster_from: read failed LBA %d\n", (int)(fat_start + s));
+                continue;
+            }
+            uint32_t* table = (uint32_t*)sector;
+            if ((table[k] & 0x0FFFFFFF) == 0) {
+                table[k] = 0x0FFFFFFF;
+                if (disk_write_sector(fat_start + s, sector) != 0) {
+                    serial("[FAT] fat_alloc_cluster_from: write failed LBA %d\n", (int)(fat_start + s));
+                    return 0;
+                }
+                if (hint_cluster) *hint_cluster = cluster + 1;
+                return cluster;
+            }
+        }
+    }
+    return 0;
+}
+
 static int fat_set_next_cluster_checked(uint32_t cluster, uint32_t value, uint32_t fat_start, uint16_t bps, uint8_t* sector, int verify) {
     uint32_t fat_sector = fat_start + (cluster * 4) / bps;
     uint32_t fat_offset = (cluster * 4) % bps;
@@ -942,7 +972,7 @@ extern "C" int fat32_read_file_offset(const char* path, void* buf, uint32_t size
     return bytes_read;
 }
 
-static int fat32_create_file_impl(const char* path, const void* data, uint32_t size, int verify) {
+static int fat32_create_file_impl(const char* path, const void* data, uint32_t size, int verify, int skip_write) {
     if (!is_fat_initialized) return -1;
 
     uint8_t* sector = (uint8_t*)kmalloc(512);
@@ -1058,15 +1088,19 @@ static int fat32_create_file_impl(const char* path, const void* data, uint32_t s
     uint32_t need_clusters = (size + cluster_bytes - 1) / cluster_bytes;
     if (need_clusters == 0) need_clusters = 1;
 
-    file_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
+    uint32_t alloc_hint = 2;
+    file_cluster = fat_alloc_cluster_from(fat_start, sectors_per_fat, sector, &alloc_hint);
     if (file_cluster == 0) {
         serial("[FAT] create_file: no free clusters\n");
         kfree(sector); return -2;
     }
 
     uint32_t current_cluster = file_cluster;
+    if (need_clusters > 256) {
+        serial("[FAT] create_file: allocating %d clusters\n", (int)need_clusters);
+    }
     for (uint32_t i = 1; i < need_clusters; i++) {
-        uint32_t next_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
+        uint32_t next_cluster = fat_alloc_cluster_from(fat_start, sectors_per_fat, sector, &alloc_hint);
             if (next_cluster == 0) {
                 serial("[FAT] create_file: no free clusters for chain\n");
                 /* free allocated chain */
@@ -1081,6 +1115,9 @@ static int fat32_create_file_impl(const char* path, const void* data, uint32_t s
         }
         fat_set_next_cluster(current_cluster, next_cluster, fat_start, bpb->bytes_per_sector, sector);
         current_cluster = next_cluster;
+        if ((i % 512) == 0) {
+            serial("[FAT] create_file: allocated %d/%d clusters\n", (int)i, (int)need_clusters);
+        }
     }
     fat_set_next_cluster(current_cluster, 0x0FFFFFFF, fat_start, bpb->bytes_per_sector, sector);
 
@@ -1113,10 +1150,12 @@ static int fat32_create_file_impl(const char* path, const void* data, uint32_t s
     uint32_t clusters_written = 0;
     uint32_t total_sectors = (size + 511) / 512;
     uint32_t sectors_done = 0;
-    serial("[FAT] create_file: writing %d bytes (%d sectors)\n", (int)size, (int)total_sectors);
+    if (!skip_write) {
+        serial("[FAT] create_file: writing %d bytes (%d sectors)\n", (int)size, (int)total_sectors);
+    }
     uint8_t* verify_buf = 0;
-    if (verify) verify_buf = (uint8_t*)kmalloc(512);
-    while (data_cluster < 0x0FFFFFF8 && written < size) {
+    if (verify && !skip_write) verify_buf = (uint8_t*)kmalloc(512);
+    while (!skip_write && data_cluster < 0x0FFFFFF8 && written < size) {
         if (data_cluster < 2) {
             serial("[FAT] create_file: invalid cluster %d\n", (int)data_cluster);
             if (verify_buf) kfree(verify_buf);
@@ -1173,14 +1212,16 @@ static int fat32_create_file_impl(const char* path, const void* data, uint32_t s
             return -8;
         }
     }
-    if (written < size) {
+    if (!skip_write && written < size) {
         serial("[FAT] create_file: incomplete write %d/%d bytes\n", (int)written, (int)size);
         if (verify_buf) kfree(verify_buf);
         kfree(sector);
         return -10;
     }
-    serial("[FAT] create_file: write done (%d bytes)\n", (int)written);
-    if (verify_buf) kfree(verify_buf);
+    if (!skip_write) {
+        serial("[FAT] create_file: write done (%d bytes)\n", (int)written);
+        if (verify_buf) kfree(verify_buf);
+    }
 
     /* 5. Update Directory Entry (and LFN if needed) */
     if (!found_existing && need_lfn) {
@@ -1231,11 +1272,100 @@ static int fat32_create_file_impl(const char* path, const void* data, uint32_t s
 }
 
 extern "C" int fat32_create_file(const char* path, const void* data, uint32_t size) {
-    return fat32_create_file_impl(path, data, size, 0);
+    return fat32_create_file_impl(path, data, size, 0, 0);
 }
 
 extern "C" int fat32_create_file_verified(const char* path, const void* data, uint32_t size, int verify) {
-    return fat32_create_file_impl(path, data, size, verify ? 1 : 0);
+    return fat32_create_file_impl(path, data, size, verify ? 1 : 0, 0);
+}
+
+extern "C" int fat32_create_file_alloc(const char* path, uint32_t size) {
+    return fat32_create_file_impl(path, NULL, size, 0, 1);
+}
+
+extern "C" int fat32_write_file_offset(const char* path, const void* data, uint32_t size, uint32_t offset, int verify) {
+    if (!is_fat_initialized) return -1;
+    if (!path || !data || size == 0) return -1;
+
+    uint8_t* sector = (uint8_t*)kmalloc(512);
+    if (!sector) return -2;
+
+    if (disk_read_sector(current_lba, sector) != 0) { kfree(sector); return -3; }
+    struct fat_bpb* bpb = (struct fat_bpb*)sector;
+    if (bpb->bytes_per_sector == 0) { kfree(sector); return -4; }
+
+    uint32_t fat_start = current_lba + bpb->reserved_sectors;
+    uint32_t data_start = fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
+    uint32_t root_cluster = bpb->root_cluster;
+    uint8_t spc = bpb->sectors_per_cluster;
+    uint16_t bps = bpb->bytes_per_sector;
+
+    uint32_t parent_cluster;
+    const char* fname;
+    int fname_len;
+    if (resolve_parent(path, root_cluster, data_start, fat_start, spc, bps, &parent_cluster, &fname, &fname_len) != 0) {
+        kfree(sector); return -5;
+    }
+
+    uint32_t file_cluster = 0;
+    uint32_t entry_sector = 0;
+    uint32_t entry_offset = 0;
+    bool is_dir = false;
+    if (find_in_cluster(parent_cluster, fname, fname_len, data_start, fat_start, spc, bps,
+                        &file_cluster, NULL, &entry_sector, &entry_offset, &is_dir) != 0) {
+        kfree(sector); return -6;
+    }
+    if (is_dir || file_cluster == 0) { kfree(sector); return -7; }
+
+    uint32_t cluster_bytes = spc * bps;
+    uint32_t skip_clusters = offset / cluster_bytes;
+    uint32_t offset_in_cluster = offset % cluster_bytes;
+
+    uint32_t current_cluster = file_cluster;
+    for (uint32_t i = 0; i < skip_clusters; i++) {
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+        if (current_cluster >= 0x0FFFFFF8) { kfree(sector); return -8; }
+    }
+
+    const uint8_t* p = (const uint8_t*)data;
+    uint32_t remaining = size;
+    while (remaining > 0 && current_cluster < 0x0FFFFFF8) {
+        uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
+        uint32_t sector_idx = offset_in_cluster / 512;
+        uint32_t sector_off = offset_in_cluster % 512;
+        for (; sector_idx < spc && remaining > 0; sector_idx++) {
+            uint8_t buf[512];
+            memset(buf, 0, 512);
+            uint32_t chunk = 512;
+            if (sector_off != 0 || remaining < 512) {
+                if (disk_read_sector(cluster_lba + sector_idx, buf) != 0) {
+                    kfree(sector);
+                    return -9;
+                }
+            }
+            uint32_t copy = 512 - sector_off;
+            if (copy > remaining) copy = remaining;
+            memcpy(buf + sector_off, p, copy);
+            int retries = verify ? 3 : 1;
+            int ok = 0;
+            for (int r = 0; r < retries; r++) {
+                if (disk_write_sector(cluster_lba + sector_idx, buf) == 0) {
+                    if (!verify) { ok = 1; break; }
+                    uint8_t vbuf[512];
+                    if (disk_read_sector(cluster_lba + sector_idx, vbuf) == 0 &&
+                        memcmp(buf, vbuf, 512) == 0) { ok = 1; break; }
+                }
+            }
+            if (!ok) { kfree(sector); return -10; }
+            p += copy;
+            remaining -= copy;
+            offset_in_cluster = 0;
+            sector_off = 0;
+        }
+        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+    }
+    kfree(sector);
+    return (remaining == 0) ? 0 : -11;
 }
 
 extern "C" void fat32_list_directory(const char* path) {
@@ -1567,8 +1697,21 @@ static int write_sector_verified(uint32_t lba, const uint8_t* buf, int verify) {
 }
 
 static int fat32_create_directory_impl(const char* path, int verify) {
-    if (!path || path[0] == 0 || (path[0] == '/' && path[1] == 0)) {
-        serial("[FAT] mkdir: invalid path\n");
+    if (!path) {
+        serial("[FAT] mkdir: invalid path (null)\n");
+        return -101;
+    }
+    uintptr_t pval = (uintptr_t)path;
+    if (pval < 0x1000) {
+        serial("[FAT] mkdir: invalid path pointer 0x%x\n", (unsigned)pval);
+        return -101;
+    }
+    if (path[0] == 0) {
+        serial("[FAT] mkdir: empty path @0x%x\n", (unsigned)pval);
+        return -101;
+    }
+    if (path[0] == '/' && path[1] == 0) {
+        serial("[FAT] mkdir: root path not allowed @0x%x\n", (unsigned)pval);
         return -101;
     }
 
