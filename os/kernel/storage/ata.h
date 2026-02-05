@@ -33,6 +33,7 @@ int ata_pio_read28(uint32_t lba, uint8_t* buffer);
 
 /* Wrapper convenabil pentru citire sector */
 int ata_read_sector(uint32_t lba, uint8_t* buffer);
+int ata_read_sector_retry(uint32_t lba, uint8_t* buffer, int retries);
 
 /* Scriere PIO low-level (LBA28) - 1 sector (512 bytes)
  * return: 0 pe succes, negativ pe eroare
@@ -47,6 +48,12 @@ int ata_write_sector(uint32_t lba, const uint8_t* buffer);
  * enabled = 0 → blochează din nou
  */
 void ata_set_allow_mbr_write(int enabled);
+
+/* Skip cache flush after write (debug/installer) */
+void ata_set_skip_cache_flush(int enabled);
+
+/* Write with retry + soft reset (returns 0 on success) */
+int ata_write_sector_retry(uint32_t lba, const uint8_t* buffer, int retries);
 
 #ifdef __cplusplus
 }

@@ -43,6 +43,7 @@ extern "C" {
 
 /* global MBR write protection flag (default disabled) */
 static int g_allow_mbr_write = 0;
+static int g_skip_cache_flush = 0;
 
 /* small io wait (400ns) - 4 reads of alt status */
 static inline void ata_io_wait(void)
@@ -70,8 +71,11 @@ static inline void ata_select_master(void)
 static uint8_t ata_wait_bsy_clear(void)
 {
     uint8_t status = ata_read_status();
-    while (status & ATA_SR_BSY)
+    for (int i = 0; i < 100000; i++) {
+        if (!(status & ATA_SR_BSY))
+            return status;
         status = ata_read_status();
+    }
     return status;
 }
 
@@ -100,10 +104,36 @@ void ata_set_allow_mbr_write(int enabled)
     g_allow_mbr_write = enabled ? 1 : 0;
 }
 
+void ata_set_skip_cache_flush(int enabled)
+{
+    g_skip_cache_flush = enabled ? 1 : 0;
+}
+
+static void ata_soft_reset(void)
+{
+    /* SRST bit in device control */
+    outb(ATA_PRIMARY_CTRL + ATA_CTRL_DEVICECTL, 0x04);
+    ata_io_wait();
+    outb(ATA_PRIMARY_CTRL + ATA_CTRL_DEVICECTL, 0x00);
+    ata_io_wait();
+}
+
 /* Convenience wrapper */
 int ata_read_sector(uint32_t lba, uint8_t* buffer)
 {
     return ata_pio_read28(lba, buffer);
+}
+
+int ata_read_sector_retry(uint32_t lba, uint8_t* buffer, int retries)
+{
+    if (retries < 1) retries = 1;
+    for (int i = 0; i < retries; i++) {
+        int r = ata_read_sector(lba, buffer);
+        if (r == 0) return 0;
+        terminal_writestring("[ATA] read retry\n");
+        ata_soft_reset();
+    }
+    return -1;
 }
 
 /* IDENTIFY DEVICE implementation */
@@ -131,19 +161,26 @@ int ata_identify(uint16_t* buffer)
         return -1; /* no device */
 
     /* wait BSY clear */
-    while (status & ATA_SR_BSY)
+    for (int i = 0; i < 100000; i++) {
+        if (!(status & ATA_SR_BSY)) break;
         status = ata_read_status();
+    }
+    if (status & ATA_SR_BSY)
+        return -5;
 
     /* check for error */
     if (status & ATA_SR_ERR)
         return -2;
 
     /* wait DRQ set */
-    while (!(status & ATA_SR_DRQ)) {
+    for (int i = 0; i < 100000; i++) {
+        if (status & ATA_SR_DRQ) break;
         status = ata_read_status();
         if (status & ATA_SR_ERR)
             return -3;
     }
+    if (!(status & ATA_SR_DRQ))
+        return -6;
 
     /* read 256 words (512 bytes) */
     for (int i = 0; i < 256; ++i) {
@@ -220,11 +257,14 @@ int ata_pio_read28(uint32_t lba, uint8_t* buffer)
         return -3;
 
     /* wait DRQ */
-    while (!(status & ATA_SR_DRQ)) {
+    for (int i = 0; i < 100000; i++) {
+        if (status & ATA_SR_DRQ) break;
         status = ata_read_status();
         if (status & ATA_SR_ERR)
             return -4;
     }
+    if (!(status & ATA_SR_DRQ))
+        return -5;
 
     /* read 256 words (512 bytes) */
     for (int i = 0; i < 256; ++i) {
@@ -269,13 +309,22 @@ int ata_write_sector(uint32_t lba, const uint8_t* buffer)
     outb(ATA_PRIMARY_IO + ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
 
     uint8_t status = ata_wait_bsy_clear();
-    if (status & ATA_SR_ERR)
+    if (status & ATA_SR_ERR) {
+        terminal_writestring("[ATA] write: ERR after BSY clear\n");
         return -3;
+    }
 
-    while (!(status & ATA_SR_DRQ)) {
+    for (int i = 0; i < 100000; i++) {
+        if (status & ATA_SR_DRQ) break;
         status = ata_read_status();
-        if (status & ATA_SR_ERR)
+        if (status & ATA_SR_ERR) {
+            terminal_writestring("[ATA] write: ERR waiting DRQ\n");
             return -4;
+        }
+    }
+    if (!(status & ATA_SR_DRQ)) {
+        terminal_writestring("[ATA] write: DRQ timeout\n");
+        return -5;
     }
 
     /* write 256 words */
@@ -288,10 +337,24 @@ int ata_write_sector(uint32_t lba, const uint8_t* buffer)
     }
 
     /* flush cache */
-    outb(ATA_PRIMARY_IO + ATA_REG_COMMAND, ATA_CMD_CACHE_FLUSH);
-    ata_wait_bsy_clear();
+    if (!g_skip_cache_flush) {
+        outb(ATA_PRIMARY_IO + ATA_REG_COMMAND, ATA_CMD_CACHE_FLUSH);
+        ata_wait_bsy_clear();
+    }
 
     return 0;
+}
+
+int ata_write_sector_retry(uint32_t lba, const uint8_t* buffer, int retries)
+{
+    if (retries < 1) retries = 1;
+    for (int i = 0; i < retries; i++) {
+        int r = ata_write_sector(lba, buffer);
+        if (r == 0) return 0;
+        terminal_writestring("[ATA] write retry\n");
+        ata_soft_reset();
+    }
+    return -1;
 }
 
 /* init + test (reads sector 0 and dumps first 128 bytes) */

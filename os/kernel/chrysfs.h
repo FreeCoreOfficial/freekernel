@@ -1,5 +1,5 @@
 #pragma once
-#include "../../storage/block.h"
+#include "storage/block.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,6 +1,6 @@
 #include "chrysfs.h"
-#include "../../string.h"
-#include "../../mem/kmalloc.h"
+#include "../string.h"
+#include "mem/kmalloc.h"
 
 extern void serial(const char *fmt, ...);
 

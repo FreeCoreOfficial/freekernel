@@ -10,6 +10,9 @@ int cmd_fat(int argc, char **argv);
 /* Încearcă să monteze automat prima partiție FAT32 găsită */
 void fat_automount(void);
 
+/* Force-set current FAT mount (used by installer) */
+void fat32_set_mounted(uint32_t lba, char letter);
+
 /* Listează conținutul unui director (path="/" pentru root) */
 void fat32_list_directory(const char* path);
 
@@ -32,11 +35,36 @@ int fat32_read_file_offset(const char* path, void* buf, uint32_t size, uint32_t 
 /* Creează un fișier (sau suprascrie) */
 int fat32_create_file(const char* path, const void* data, uint32_t size);
 
+/* Creează un fișier cu verificare readback */
+int fat32_create_file_verified(const char* path, const void* data, uint32_t size, int verify);
+
 /* Delete a file from the root directory */
 int fat32_delete_file(const char* path);
 
 /* Create a directory in the root directory */
 int fat32_create_directory(const char* path);
+
+/* Create a directory with optional readback verification */
+int fat32_create_directory_verified(const char* path, int verify);
+/* fat32_create_directory* error codes:
+ * -101 invalid path
+ * -102 OOM sector buffer
+ * -103 BPB read failed
+ * -104 invalid BPB
+ * -105 resolve_parent failed
+ * -106 invalid name length
+ * -107 alloc cluster failed
+ * -108 set EOC failed
+ * -12  dot sector write failed
+ * -13  clear sector write failed
+ * -21  LFN write failed
+ * -22  short entry write failed
+ * -23  no free entry run
+ * -24  extend directory failed
+ * -25  short alias failed
+ * -26  LFN sector read failed
+ * -27  short entry sector read failed
+ */
 
 /* Check if a directory exists */
 int fat32_directory_exists(const char* path);

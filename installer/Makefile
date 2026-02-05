@@ -21,17 +21,15 @@ OBJS = \
 	$(BUILD)/boot.o \
 	$(BUILD)/kernel_installer.o \
 	$(BUILD)/installer.o \
+	$(BUILD)/disk_shim.o \
+	$(BUILD)/kmalloc_simple.o \
+	$(BUILD)/partitions_stub.o \
 	$(BUILD)/stubs.o \
-	../os/build/stdlib_wrappers.o \
-	../os/build/disk.o \
 	../os/build/ata.o \
 	../os/build/fat_fs.o \
 	../os/build/cmd_fat.o \
-	../os/build/pmm.o \
 	../os/build/serial.o \
 	../os/build/ramfs.o \
-	../os/build/mem/kmalloc_init.o \
-	../os/build/mem/kmalloc.o \
 	../os/build/string.o
 
 # Force looking for headers in OS include
@@ -62,6 +60,20 @@ $(BUILD)/installer.o: installer.cpp
 	@echo "[BUILD] installer.cpp (real installation)"
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+# Disk shim
+$(BUILD)/disk_shim.o: disk_shim.cpp
+	@echo "[BUILD] disk_shim.cpp"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Simple kmalloc for installer (no PMM)
+$(BUILD)/kmalloc_simple.o: kmalloc_simple.cpp
+	@echo "[BUILD] kmalloc_simple.cpp"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Partitions stub
+$(BUILD)/partitions_stub.o: partitions_stub.cpp
+	@echo "[BUILD] partitions_stub.cpp"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Stubs for missing kernel symbols
 $(BUILD)/stubs.o: stubs.cpp
@@ -80,6 +92,15 @@ installer.iso: $(BUILD)/installer.elf
 	@# Copy Assets from Main OS Build
 	@if [ -f ../os/iso/boot/kernel.bin ]; then cp ../os/iso/boot/kernel.bin $(ISO)/boot/chrysalis/; else echo "WARNING: kernel.bin not found!"; fi
 	@if [ -f ../os/iso/icons.mod ]; then cp ../os/iso/icons.mod $(ISO)/system/; else echo "WARNING: icons.mod not found!"; fi
+	@# Build GRUB core image + include boot.img + embed config
+	@if [ -f /usr/lib/grub/i386-pc/boot.img ]; then cp /usr/lib/grub/i386-pc/boot.img $(ISO)/boot/grub/; else echo "WARNING: boot.img not found!"; fi
+	@echo 'search --file --set=root /boot/grub/grub.cfg' > $(ISO)/boot/grub/grub_embed.cfg
+	@echo 'set prefix=($$root)/boot/grub' >> $(ISO)/boot/grub/grub_embed.cfg
+	@echo 'configfile ($$root)/boot/grub/grub.cfg' >> $(ISO)/boot/grub/grub_embed.cfg
+	@echo 'search --file --set=root /grub.cfg' >> $(ISO)/boot/grub/grub_embed.cfg
+	@echo 'set prefix=($$root)/boot/grub' >> $(ISO)/boot/grub/grub_embed.cfg
+	@echo 'configfile /grub.cfg' >> $(ISO)/boot/grub/grub_embed.cfg
+	@grub-mkimage -O i386-pc -p /boot/grub -o $(ISO)/boot/grub/core.img -c $(ISO)/boot/grub/grub_embed.cfg biosdisk part_msdos fat normal multiboot2 configfile search search_fs_uuid search_label
 	@
 	@echo "[ISO] Generating GRUB config..."
 	@echo 'set timeout=5' > $(ISO)/boot/grub/grub.cfg
@@ -89,6 +110,8 @@ installer.iso: $(BUILD)/installer.elf
 	@echo '  multiboot2 /boot/installer.elf' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  module2 /boot/chrysalis/kernel.bin kernel.bin' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  module2 /system/icons.mod icons.mod' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /boot/grub/boot.img boot.img' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /boot/grub/core.img core.img' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  boot' >> $(ISO)/boot/grub/grub.cfg
 	@echo '}' >> $(ISO)/boot/grub/grub.cfg
 	@
@@ -101,4 +124,3 @@ clean:
 	@rm -rf $(BUILD) $(ISO) installer.iso
 
 .PHONY: all clean
-

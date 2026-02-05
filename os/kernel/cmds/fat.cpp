@@ -13,6 +13,12 @@ static bool is_fat_initialized = false;
 static uint32_t current_lba = 0;
 static char current_letter = 0;
 
+extern "C" void fat32_set_mounted(uint32_t lba, char letter) {
+    is_fat_initialized = true;
+    current_lba = lba;
+    current_letter = letter;
+}
+
 /* --- FAT32 Structures & Helpers (Local Implementation) --- */
 
 struct fat_bpb {
@@ -396,30 +402,77 @@ static bool short_name_exists_in_dir(uint32_t dir_cluster, uint32_t data_start, 
 static uint32_t fat_get_next_cluster(uint32_t cluster, uint32_t fat_start, uint16_t bps, uint8_t* sector) {
     uint32_t fat_sector = fat_start + (cluster * 4) / bps;
     uint32_t fat_offset = (cluster * 4) % bps;
-    disk_read_sector(fat_sector, sector);
+    if (disk_read_sector(fat_sector, sector) != 0) {
+        serial("[FAT] fat_get_next_cluster: read failed LBA %d\n", (int)fat_sector);
+        return 0x0FFFFFFF;
+    }
     return (*(uint32_t*)(sector + fat_offset)) & 0x0FFFFFFF;
 }
 
 static void fat_set_next_cluster(uint32_t cluster, uint32_t value, uint32_t fat_start, uint16_t bps, uint8_t* sector) {
     uint32_t fat_sector = fat_start + (cluster * 4) / bps;
     uint32_t fat_offset = (cluster * 4) % bps;
-    disk_read_sector(fat_sector, sector);
+    if (disk_read_sector(fat_sector, sector) != 0) {
+        serial("[FAT] fat_set_next_cluster: read failed LBA %d\n", (int)fat_sector);
+        return;
+    }
     *(uint32_t*)(sector + fat_offset) = value;
-    disk_write_sector(fat_sector, sector);
+    if (disk_write_sector(fat_sector, sector) != 0) {
+        serial("[FAT] fat_set_next_cluster: write failed LBA %d\n", (int)fat_sector);
+    }
 }
 
 static uint32_t fat_alloc_cluster(uint32_t fat_start, uint32_t sectors_per_fat, uint8_t* sector) {
     for (uint32_t s = 0; s < sectors_per_fat; s++) {
-        disk_read_sector(fat_start + s, sector);
+        if (disk_read_sector(fat_start + s, sector) != 0) {
+            serial("[FAT] fat_alloc_cluster: read failed LBA %d\n", (int)(fat_start + s));
+            continue;
+        }
         uint32_t* table = (uint32_t*)sector;
         for (int k = 0; k < 128; k++) {
             if ((table[k] & 0x0FFFFFFF) == 0) {
                 uint32_t cluster = s * 128 + k;
                 if (cluster < 2) continue;
                 table[k] = 0x0FFFFFFF;
-                disk_write_sector(fat_start + s, sector);
+                if (disk_write_sector(fat_start + s, sector) != 0) {
+                    serial("[FAT] fat_alloc_cluster: write failed LBA %d\n", (int)(fat_start + s));
+                    return 0;
+                }
                 return cluster;
             }
+        }
+    }
+    return 0;
+}
+
+static int fat_set_next_cluster_checked(uint32_t cluster, uint32_t value, uint32_t fat_start, uint16_t bps, uint8_t* sector, int verify) {
+    uint32_t fat_sector = fat_start + (cluster * 4) / bps;
+    uint32_t fat_offset = (cluster * 4) % bps;
+    if (disk_read_sector(fat_sector, sector) != 0) {
+        serial("[FAT] fat_set_next_cluster_checked: read failed LBA %d\n", (int)fat_sector);
+        return -1;
+    }
+    *(uint32_t*)(sector + fat_offset) = value;
+    if (disk_write_sector(fat_sector, sector) != 0) {
+        serial("[FAT] fat_set_next_cluster_checked: write failed LBA %d\n", (int)fat_sector);
+        return -1;
+    }
+    if (verify) {
+        uint8_t* verify_buf = (uint8_t*)kmalloc(512);
+        if (!verify_buf) {
+            serial("[FAT] fat_set_next_cluster_checked: no verify buffer, skipping\n");
+            return 0;
+        }
+        if (disk_read_sector(fat_sector, verify_buf) != 0) {
+            serial("[FAT] fat_set_next_cluster_checked: verify read failed LBA %d\n", (int)fat_sector);
+            kfree(verify_buf);
+            return -1;
+        }
+        uint32_t v = (*(uint32_t*)(verify_buf + fat_offset)) & 0x0FFFFFFF;
+        kfree(verify_buf);
+        if (v != (value & 0x0FFFFFFF)) {
+            serial("[FAT] fat_set_next_cluster_checked: verify mismatch LBA %d\n", (int)fat_sector);
+            return -1;
         }
     }
     return 0;
@@ -538,12 +591,24 @@ static void dir_mark_lfn_deleted(uint32_t parent_cluster, int entry_idx,
     kfree(sector);
 }
 
+static int write_sector_verified(uint32_t lba, const uint8_t* buf, int verify);
+
 static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* name_buf, int name_len,
                                          uint32_t cluster, uint32_t size, uint8_t attr,
                                          uint32_t data_start, uint32_t fat_start, uint8_t spc, uint16_t bps,
-                                         uint32_t sectors_per_fat) {
+                                         uint32_t sectors_per_fat, int verify) {
     uint8_t* sector = (uint8_t*)kmalloc(512);
-    if (!sector) return -1;
+    if (!sector) {
+        serial("[FAT] mkdir: no memory for sector buffer\n");
+        return -20;
+    }
+    uint8_t* verify_buf = 0;
+    if (verify) {
+        verify_buf = (uint8_t*)kmalloc(512);
+        if (!verify_buf) {
+            serial("[FAT] mkdir: no memory for verify buffer\n");
+        }
+    }
 
     int lfn_entries = 0;
     bool need_lfn = needs_lfn(name_buf, name_len);
@@ -558,7 +623,12 @@ static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* na
                            need_entries, &entry_sector_lba, &entry_offset, &free_run_start)) {
         /* Extend directory by one cluster and retry */
         uint8_t* fatbuf = (uint8_t*)kmalloc(512);
-        if (!fatbuf) { kfree(sector); return -1; }
+        if (!fatbuf) {
+            serial("[FAT] mkdir: no memory for fatbuf\n");
+            if (verify_buf) kfree(verify_buf);
+            kfree(sector);
+            return -20;
+        }
         uint32_t current = parent_cluster;
         int cluster_index = 0;
         while (true) {
@@ -568,14 +638,20 @@ static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* na
             cluster_index++;
         }
         uint32_t new_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, fatbuf);
-        if (new_cluster == 0) { kfree(fatbuf); kfree(sector); return -1; }
+        if (new_cluster == 0) { kfree(fatbuf); if (verify_buf) kfree(verify_buf); kfree(sector); return -24; }
         fat_set_next_cluster(current, new_cluster, fat_start, bps, fatbuf);
         fat_set_next_cluster(new_cluster, 0x0FFFFFFF, fat_start, bps, fatbuf);
 
         memset(sector, 0, 512);
         uint32_t new_lba = data_start + (new_cluster - 2) * spc;
         for (int i = 0; i < spc; i++) {
-            disk_write_sector(new_lba + i, sector);
+            if (write_sector_verified(new_lba + i, sector, verify) != 0) {
+                serial("[FAT] mkdir: extend dir write failed LBA %d\n", (int)(new_lba + i));
+                kfree(fatbuf);
+                if (verify_buf) kfree(verify_buf);
+                kfree(sector);
+                return -24;
+            }
         }
         kfree(fatbuf);
 
@@ -585,8 +661,13 @@ static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* na
         uint32_t short_idx = free_run_start + need_entries - 1;
         if (!dir_locate_entry(parent_cluster, short_idx, data_start, fat_start, spc, bps,
                               &entry_sector_lba, &entry_offset)) {
-            kfree(sector); return -1;
+            if (verify_buf) kfree(verify_buf);
+            kfree(sector); return -23;
         }
+    } else if (free_run_start < 0) {
+        if (verify_buf) kfree(verify_buf);
+        kfree(sector);
+        return -23;
     }
 
     char short_name[11];
@@ -599,7 +680,12 @@ static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* na
             if (!short_name_exists_in_dir(parent_cluster, data_start, fat_start, spc, bps, short_name)) break;
             suffix++;
         }
-        if (suffix > 9999) { kfree(sector); return -1; }
+        if (suffix > 9999) {
+            serial("[FAT] mkdir: cannot create unique short alias\n");
+            if (verify_buf) kfree(verify_buf);
+            kfree(sector);
+            return -25;
+        }
     }
 
     if (need_lfn) {
@@ -615,16 +701,33 @@ static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* na
             uint32_t lfn_offset;
             if (!dir_locate_entry(parent_cluster, (uint32_t)entry_idx, data_start, fat_start, spc, bps,
                                   &lfn_sector, &lfn_offset)) {
-                kfree(sector); return -1;
+                serial("[FAT] mkdir: dir_locate_entry failed for LFN\n");
+                if (verify_buf) kfree(verify_buf);
+                kfree(sector); return -21;
             }
-            disk_read_sector(lfn_sector, sector);
+            if (disk_read_sector(lfn_sector, sector) != 0) {
+                serial("[FAT] mkdir: LFN sector read failed LBA %d\n", (int)lfn_sector);
+                if (verify_buf) kfree(verify_buf);
+                kfree(sector);
+                return -26;
+            }
             struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
             memcpy(&entries[lfn_offset], &lfn, sizeof(lfn));
-            disk_write_sector(lfn_sector, sector);
+            if (write_sector_verified(lfn_sector, sector, verify) != 0) {
+                serial("[FAT] mkdir: LFN write failed LBA %d\n", (int)lfn_sector);
+                if (verify_buf) kfree(verify_buf);
+                kfree(sector);
+                return -21;
+            }
         }
     }
 
-    disk_read_sector(entry_sector_lba, sector);
+    if (disk_read_sector(entry_sector_lba, sector) != 0) {
+        serial("[FAT] mkdir: short entry sector read failed LBA %d\n", (int)entry_sector_lba);
+        if (verify_buf) kfree(verify_buf);
+        kfree(sector);
+        return -27;
+    }
     struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
     struct fat_dir_entry* entry = &entries[entry_offset];
     memcpy(entry->name, short_name, 11);
@@ -632,8 +735,14 @@ static int dir_create_entry_with_cluster(uint32_t parent_cluster, const char* na
     entry->cluster_hi = (cluster >> 16);
     entry->cluster_low = (cluster & 0xFFFF);
     entry->size = size;
-    disk_write_sector(entry_sector_lba, sector);
+    if (write_sector_verified(entry_sector_lba, sector, verify) != 0) {
+        serial("[FAT] mkdir: short entry write failed LBA %d\n", (int)entry_sector_lba);
+        if (verify_buf) kfree(verify_buf);
+        kfree(sector);
+        return -22;
+    }
 
+    if (verify_buf) kfree(verify_buf);
     kfree(sector);
     return 0;
 }
@@ -833,7 +942,7 @@ extern "C" int fat32_read_file_offset(const char* path, void* buf, uint32_t size
     return bytes_read;
 }
 
-extern "C" int fat32_create_file(const char* path, const void* data, uint32_t size) {
+static int fat32_create_file_impl(const char* path, const void* data, uint32_t size, int verify) {
     if (!is_fat_initialized) return -1;
 
     uint8_t* sector = (uint8_t*)kmalloc(512);
@@ -860,10 +969,14 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
     const char* fname;
     int fname_len;
     if (resolve_parent(path, root_cluster, data_start, fat_start, spc, bpb->bytes_per_sector, &parent_cluster, &fname, &fname_len) != 0) {
+        serial("[FAT] create_file: resolve_parent failed for %s\n", path);
         kfree(sector); return -1;
     }
 
-    if (fname_len <= 0 || fname_len > 255) { kfree(sector); return -1; }
+    if (fname_len <= 0 || fname_len > 255) {
+        serial("[FAT] create_file: invalid name length %d for %s\n", fname_len, path);
+        kfree(sector); return -1;
+    }
     char name_buf[256];
     copy_component(name_buf, sizeof(name_buf), fname, fname_len);
 
@@ -902,7 +1015,10 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
                 cluster_index++;
             }
             new_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, fatbuf);
-            if (new_cluster == 0) { kfree(fatbuf); kfree(sector); return -1; }
+            if (new_cluster == 0) {
+                serial("[FAT] create_file: no space to extend directory\n");
+                kfree(fatbuf); kfree(sector); return -1;
+            }
             fat_set_next_cluster(current, new_cluster, fat_start, bpb->bytes_per_sector, fatbuf);
             fat_set_next_cluster(new_cluster, 0x0FFFFFFF, fat_start, bpb->bytes_per_sector, fatbuf);
 
@@ -920,17 +1036,53 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
             uint32_t short_idx = free_run_start + need_entries - 1;
             if (!dir_locate_entry(parent_cluster, short_idx, data_start, fat_start, spc, bpb->bytes_per_sector,
                                   &entry_sector_lba, &entry_offset)) {
+                serial("[FAT] create_file: dir_locate_entry failed\n");
                 kfree(sector); return -1;
             }
         }
     }
 
-    /* 3. Allocate Cluster (Simple: Find first free in FAT) */
-    /* Note: If file exists, we reuse its cluster. If new, we alloc. */
-    if (file_cluster == 0) {
-        file_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
-        if (file_cluster == 0) { kfree(sector); return -2; }
+    /* 3. Allocate Cluster Chain */
+    /* If file exists, free its cluster chain first. */
+    if (found_existing && file_cluster != 0) {
+        uint32_t current = file_cluster;
+        while (current < 0x0FFFFFF8 && current != 0) {
+            uint32_t next = fat_get_next_cluster(current, fat_start, bpb->bytes_per_sector, sector);
+            fat_set_next_cluster(current, 0, fat_start, bpb->bytes_per_sector, sector);
+            current = next;
+        }
+        file_cluster = 0;
     }
+
+    uint32_t cluster_bytes = spc * bpb->bytes_per_sector;
+    uint32_t need_clusters = (size + cluster_bytes - 1) / cluster_bytes;
+    if (need_clusters == 0) need_clusters = 1;
+
+    file_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
+    if (file_cluster == 0) {
+        serial("[FAT] create_file: no free clusters\n");
+        kfree(sector); return -2;
+    }
+
+    uint32_t current_cluster = file_cluster;
+    for (uint32_t i = 1; i < need_clusters; i++) {
+        uint32_t next_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
+            if (next_cluster == 0) {
+                serial("[FAT] create_file: no free clusters for chain\n");
+                /* free allocated chain */
+            uint32_t cur = file_cluster;
+            while (cur < 0x0FFFFFF8 && cur != 0) {
+                uint32_t nxt = fat_get_next_cluster(cur, fat_start, bpb->bytes_per_sector, sector);
+                fat_set_next_cluster(cur, 0, fat_start, bpb->bytes_per_sector, sector);
+                cur = nxt;
+            }
+            kfree(sector);
+            return -2;
+        }
+        fat_set_next_cluster(current_cluster, next_cluster, fat_start, bpb->bytes_per_sector, sector);
+        current_cluster = next_cluster;
+    }
+    fat_set_next_cluster(current_cluster, 0x0FFFFFFF, fat_start, bpb->bytes_per_sector, sector);
 
     /* Prepare short name */
     if (found_existing) {
@@ -947,23 +1099,88 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
                 if (!short_name_exists_in_dir(parent_cluster, data_start, fat_start, spc, bpb->bytes_per_sector, short_name)) break;
                 suffix++;
             }
-            if (suffix > 9999) { kfree(sector); return -1; }
+            if (suffix > 9999) {
+                serial("[FAT] create_file: cannot create unique short alias\n");
+                kfree(sector); return -1;
+            }
         }
     }
 
-    /* 4. Write Data */
-    uint32_t cluster_lba = data_start + (file_cluster - 2) * spc;
+    /* 4. Write Data (full chain) */
     const uint8_t* data_ptr = (const uint8_t*)data;
     uint32_t written = 0;
-
-    /* Write only first cluster (limit for simplicity) */
-    for (int i = 0; i < spc && written < size; i++) {
-        memset(sector, 0, 512);
-        uint32_t chunk = (size - written > 512) ? 512 : (size - written);
-        memcpy(sector, data_ptr + written, chunk);
-        disk_write_sector(cluster_lba + i, sector);
-        written += chunk;
+    uint32_t data_cluster = file_cluster;
+    uint32_t clusters_written = 0;
+    uint32_t total_sectors = (size + 511) / 512;
+    uint32_t sectors_done = 0;
+    serial("[FAT] create_file: writing %d bytes (%d sectors)\n", (int)size, (int)total_sectors);
+    uint8_t* verify_buf = 0;
+    if (verify) verify_buf = (uint8_t*)kmalloc(512);
+    while (data_cluster < 0x0FFFFFF8 && written < size) {
+        if (data_cluster < 2) {
+            serial("[FAT] create_file: invalid cluster %d\n", (int)data_cluster);
+            if (verify_buf) kfree(verify_buf);
+            kfree(sector);
+            return -9;
+        }
+        uint32_t cluster_lba = data_start + (data_cluster - 2) * spc;
+        if (sectors_done == 0) {
+            serial("[FAT] create_file: first cluster LBA %d\n", (int)cluster_lba);
+        }
+        for (int i = 0; i < spc; i++) {
+            memset(sector, 0, 512);
+            uint32_t chunk = (size - written > 512) ? 512 : (size - written);
+            if (chunk > 0) memcpy(sector, data_ptr + written, chunk);
+            if (sectors_done == 0) {
+                serial("[FAT] create_file: write LBA %d\n", (int)(cluster_lba + i));
+            }
+            int retries = verify ? 3 : 1;
+            int ok = 0;
+            for (int r = 0; r < retries; r++) {
+                if (disk_write_sector(cluster_lba + i, sector) != 0) {
+                    serial("[FAT] create_file: write failed at LBA %d\n", (int)(cluster_lba + i));
+                } else if (!verify) {
+                    ok = 1;
+                    break;
+                } else {
+                    if (disk_read_sector(cluster_lba + i, verify_buf) == 0 &&
+                        memcmp(sector, verify_buf, 512) == 0) {
+                        ok = 1;
+                        break;
+                    }
+                    serial("[FAT] create_file: verify failed at LBA %d\n", (int)(cluster_lba + i));
+                }
+            }
+            if (!ok) {
+                if (verify_buf) kfree(verify_buf);
+                kfree(sector);
+                return -7;
+            }
+            written += chunk;
+            sectors_done++;
+            if ((sectors_done % 64) == 0) {
+                serial("[FAT] create_file: wrote %d/%d sectors\n", (int)sectors_done, (int)total_sectors);
+            }
+            if (written >= size) break;
+        }
+        if (written >= size) break;
+        data_cluster = fat_get_next_cluster(data_cluster, fat_start, bpb->bytes_per_sector, sector);
+        clusters_written++;
+        if (clusters_written > need_clusters + 2) {
+            serial("[FAT] create_file: cluster chain too long\n");
+            if (verify_buf) kfree(verify_buf);
+            kfree(sector);
+            return -8;
+        }
     }
+    if (written < size) {
+        serial("[FAT] create_file: incomplete write %d/%d bytes\n", (int)written, (int)size);
+        if (verify_buf) kfree(verify_buf);
+        kfree(sector);
+        return -10;
+    }
+    serial("[FAT] create_file: write done (%d bytes)\n", (int)written);
+    if (verify_buf) kfree(verify_buf);
 
     /* 5. Update Directory Entry (and LFN if needed) */
     if (!found_existing && need_lfn) {
@@ -979,12 +1196,17 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
             uint32_t lfn_offset;
             if (!dir_locate_entry(parent_cluster, entry_idx, data_start, fat_start, spc, bpb->bytes_per_sector,
                                   &lfn_sector, &lfn_offset)) {
+                serial("[FAT] create_file: dir_locate_entry failed for LFN\n");
                 kfree(sector); return -1;
             }
             disk_read_sector(lfn_sector, sector);
             struct fat_dir_entry* entries = (struct fat_dir_entry*)sector;
             memcpy(&entries[lfn_offset], &lfn, sizeof(lfn));
-            disk_write_sector(lfn_sector, sector);
+            if (disk_write_sector(lfn_sector, sector) != 0) {
+                serial("[FAT] create_file: LFN write failed at LBA %d\n", (int)lfn_sector);
+                kfree(sector);
+                return -11;
+            }
         }
     }
 
@@ -997,11 +1219,23 @@ extern "C" int fat32_create_file(const char* path, const void* data, uint32_t si
         entry->cluster_hi = (file_cluster >> 16);
         entry->cluster_low = (file_cluster & 0xFFFF);
         entry->size = size;
-        disk_write_sector(entry_sector_lba, sector);
+        if (disk_write_sector(entry_sector_lba, sector) != 0) {
+            serial("[FAT] create_file: dir entry write failed at LBA %d\n", (int)entry_sector_lba);
+            kfree(sector);
+            return -11;
+        }
     }
 
     kfree(sector);
     return 0;
+}
+
+extern "C" int fat32_create_file(const char* path, const void* data, uint32_t size) {
+    return fat32_create_file_impl(path, data, size, 0);
+}
+
+extern "C" int fat32_create_file_verified(const char* path, const void* data, uint32_t size, int verify) {
+    return fat32_create_file_impl(path, data, size, verify ? 1 : 0);
 }
 
 extern "C" void fat32_list_directory(const char* path) {
@@ -1303,84 +1537,157 @@ extern "C" int fat32_delete_file(const char* path) {
     return 0;
 }
 
-extern "C" int fat32_create_directory(const char* path) {
-    /* Re-use create_file logic to allocate entry and cluster, then init directory structure */
-    /* For simplicity, we create a dummy file first to get a cluster, then convert it to DIR */
-    
-    /* 1. Create entry as file first (allocates cluster) */
-    char dummy[1] = {0};
-    if (fat32_create_file(path, dummy, 0) != 0) return -1;
+static int write_sector_verified(uint32_t lba, const uint8_t* buf, int verify) {
+    int local_verify = verify;
+    uint8_t* verify_buf = 0;
+    if (local_verify) {
+        verify_buf = (uint8_t*)kmalloc(512);
+        if (!verify_buf) {
+            serial("[FAT] verify buffer alloc failed; fallback non-verify\n");
+            local_verify = 0;
+        }
+    }
+    int retries = local_verify ? 3 : 1;
+    for (int r = 0; r < retries; r++) {
+        if (disk_write_sector(lba, buf) != 0) {
+            serial("[FAT] mkdir: write failed LBA %d\n", (int)lba);
+        } else if (!local_verify) {
+            if (verify_buf) kfree(verify_buf);
+            return 0;
+        } else {
+            if (disk_read_sector(lba, verify_buf) == 0 && memcmp(buf, verify_buf, 512) == 0) {
+                if (verify_buf) kfree(verify_buf);
+                return 0;
+            }
+            serial("[FAT] mkdir: verify failed LBA %d\n", (int)lba);
+        }
+    }
+    if (verify_buf) kfree(verify_buf);
+    return -1;
+}
+
+static int fat32_create_directory_impl(const char* path, int verify) {
+    if (!path || path[0] == 0 || (path[0] == '/' && path[1] == 0)) {
+        serial("[FAT] mkdir: invalid path\n");
+        return -101;
+    }
 
     uint8_t* sector = (uint8_t*)kmalloc(512);
-    if (!sector) return -1;
+    if (!sector) {
+        serial("[FAT] mkdir: no memory for sector buffer\n");
+        return -102;
+    }
 
-    disk_read_sector(current_lba, sector);
-    struct fat_bpb* bpb = (struct fat_bpb*)sector;
-
-    if (bpb->bytes_per_sector == 0) {
-        terminal_writestring("Error: Invalid FAT32 BPB (bytes_per_sector=0).\n");
+    if (disk_read_sector(current_lba, sector) != 0) {
+        serial("[FAT] mkdir: BPB read failed LBA %d\n", (int)current_lba);
         kfree(sector);
-        return -1;
+        return -103;
+    }
+    struct fat_bpb* bpb = (struct fat_bpb*)sector;
+    if (bpb->bytes_per_sector == 0) {
+        serial("[FAT] mkdir: invalid BPB (bytes_per_sector=0)\n");
+        kfree(sector);
+        return -104;
     }
 
     uint32_t fat_start = current_lba + bpb->reserved_sectors;
     uint32_t data_start = fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
     uint32_t root_cluster = bpb->root_cluster;
     uint8_t spc = bpb->sectors_per_cluster;
+    uint16_t bps = bpb->bytes_per_sector;
+    uint32_t sectors_per_fat = bpb->sectors_per_fat_32;
 
-    /* 2. Find the entry we just created */
-    uint32_t parent_cluster;
-    const char* fname;
-    int fname_len;
-    resolve_parent(path, root_cluster, data_start, fat_start, spc, bpb->bytes_per_sector, &parent_cluster, &fname, &fname_len);
-
-    uint32_t dir_cluster = 0;
-    uint32_t entry_sector, entry_offset;
-    bool is_dir;
-    
-    if (find_in_cluster(parent_cluster, fname, fname_len, data_start, fat_start, spc, bpb->bytes_per_sector, &dir_cluster, NULL, &entry_sector, &entry_offset, &is_dir) != 0) {
-        kfree(sector); return -1;
+    uint32_t parent_cluster = 0;
+    const char* fname = 0;
+    int fname_len = 0;
+    if (resolve_parent(path, root_cluster, data_start, fat_start, spc, bps,
+                       &parent_cluster, &fname, &fname_len) != 0) {
+        /* fallback for "/name" */
+        if (path[0] == '/' && path[1] != 0 && strchr(path + 1, '/') == 0) {
+            serial("[FAT] mkdir: resolve_parent failed, using root fallback for %s\n", path);
+            parent_cluster = root_cluster;
+            fname = path + 1;
+            fname_len = (int)strlen(fname);
+        } else {
+            serial("[FAT] mkdir: resolve_parent failed for %s\n", path);
+            kfree(sector);
+            return -105;
+        }
+    }
+    if (fname_len <= 0 || fname_len > 255) {
+        serial("[FAT] mkdir: invalid name length %d for %s\n", fname_len, path);
+        kfree(sector);
+        return -106;
     }
 
-    /* Update attribute to DIRECTORY */
-    disk_read_sector(entry_sector, sector);
-    struct fat_dir_entry* entry = &((struct fat_dir_entry*)sector)[entry_offset];
-    entry->attr = 0x10;
-    entry->size = 0;
-    disk_write_sector(entry_sector, sector);
+    /* allocate cluster */
+    uint32_t dir_cluster = fat_alloc_cluster(fat_start, sectors_per_fat, sector);
+    if (dir_cluster == 0) {
+        serial("[FAT] mkdir: alloc cluster failed for %s\n", path);
+        kfree(sector);
+        return -107;
+    }
+    if (fat_set_next_cluster_checked(dir_cluster, 0x0FFFFFFF, fat_start, bps, sector, verify) != 0) {
+        serial("[FAT] mkdir: set EOC failed for cluster %u\n", (unsigned)dir_cluster);
+        kfree(sector);
+        return -108;
+    }
 
-    if (dir_cluster == 0) { kfree(sector); return -1; }
+    /* create directory entry in parent */
+    char name_buf[256];
+    copy_component(name_buf, sizeof(name_buf), fname, fname_len);
+    int dc = dir_create_entry_with_cluster(parent_cluster, name_buf, fname_len, dir_cluster, 0, 0x10,
+                                           data_start, fat_start, spc, bps, sectors_per_fat, verify);
+    if (dc != 0) {
+        serial("[FAT] mkdir: entry creation failed (code=%d)\n", dc);
+        if (fat_set_next_cluster_checked(dir_cluster, 0, fat_start, bps, sector, verify) != 0) {
+            serial("[FAT] mkdir: failed to free cluster %u\n", (unsigned)dir_cluster);
+        }
+        kfree(sector);
+        return dc;
+    }
 
-    /* 3. Initialize the new directory cluster with . and .. */
+    /* initialize directory cluster */
     uint32_t cluster_lba = data_start + (dir_cluster - 2) * spc;
-    
-    /* Prepare the first sector with . and .. */
     memset(sector, 0, 512);
     struct fat_dir_entry* dot = (struct fat_dir_entry*)sector;
-    
-    /* . entry */
-    memset(dot[0].name, ' ', 11); dot[0].name[0] = '.'; 
-    dot[0].attr = 0x10; 
-    dot[0].cluster_hi = (dir_cluster >> 16); dot[0].cluster_low = (dir_cluster & 0xFFFF);
-    
-    /* .. entry (points to parent, root uses 0) */
+    memset(dot[0].name, ' ', 11); dot[0].name[0] = '.';
+    dot[0].attr = 0x10;
+    dot[0].cluster_hi = (dir_cluster >> 16);
+    dot[0].cluster_low = (dir_cluster & 0xFFFF);
+
     memset(dot[1].name, ' ', 11); dot[1].name[0] = '.'; dot[1].name[1] = '.';
     dot[1].attr = 0x10;
     uint32_t parent_for_dotdot = parent_cluster;
     if (parent_for_dotdot == root_cluster) parent_for_dotdot = 0;
     dot[1].cluster_hi = (parent_for_dotdot >> 16);
     dot[1].cluster_low = (parent_for_dotdot & 0xFFFF);
-    
-    disk_write_sector(cluster_lba, sector); // Write first sector of new dir
-    
-    /* Zero out the rest of the sectors in the cluster to avoid garbage entries */
+
+    if (write_sector_verified(cluster_lba, sector, verify) != 0) {
+        serial("[FAT] mkdir: dot sector write failed LBA %d\n", (int)cluster_lba);
+        kfree(sector);
+        return -12;
+    }
+
     memset(sector, 0, 512);
     for (int i = 1; i < spc; i++) {
-        disk_write_sector(cluster_lba + i, sector);
+        if (write_sector_verified(cluster_lba + i, sector, verify) != 0) {
+            serial("[FAT] mkdir: clear sector write failed LBA %d\n", (int)(cluster_lba + i));
+            kfree(sector);
+            return -13;
+        }
     }
 
     kfree(sector);
     return 0;
+}
+
+extern "C" int fat32_create_directory(const char* path) {
+    return fat32_create_directory_impl(path, 0);
+}
+
+extern "C" int fat32_create_directory_verified(const char* path, int verify) {
+    return fat32_create_directory_impl(path, verify ? 1 : 0);
 }
 
 extern "C" int fat32_directory_exists(const char* path) {
@@ -1473,7 +1780,7 @@ extern "C" int fat32_rename(const char* src, const char* dst) {
     uint8_t attr = is_dir ? 0x10 : 0x20;
 
     if (dir_create_entry_with_cluster(dst_parent, dst_buf, dst_len, src_cluster, src_size, attr,
-                                      data_start, fat_start, spc, bps, sectors_per_fat) != 0) {
+                                      data_start, fat_start, spc, bps, sectors_per_fat, 0) != 0) {
         kfree(sector); return -1;
     }
 
