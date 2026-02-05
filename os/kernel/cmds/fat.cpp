@@ -1333,7 +1333,10 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
         current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
         if (current_cluster >= 0x0FFFFFF8) {
             uint32_t newc = fat_alloc_cluster_from(fat_start, bpb->sectors_per_fat_32, sector, &alloc_hint);
-            if (newc == 0) { kfree(sector); return -8; }
+            if (newc == 0) {
+                serial("[FAT] write_file_offset: alloc failed (skip) off=%d\n", (int)offset);
+                kfree(sector); return -8;
+            }
             fat_set_next_cluster(prev_cluster, newc, fat_start, bps, sector);
             current_cluster = newc;
         }
@@ -1341,6 +1344,8 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
 
     const uint8_t* p = (const uint8_t*)data;
     uint32_t remaining = size;
+    uint32_t total_sectors = (size + 511) / 512;
+    uint32_t sectors_done = 0;
     while (remaining > 0 && current_cluster < 0x0FFFFFF8) {
         uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
         uint32_t sector_idx = offset_in_cluster / 512;
@@ -1371,6 +1376,11 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
             if (!ok) { kfree(sector); return -10; }
             p += copy;
             remaining -= copy;
+            sectors_done++;
+            if (total_sectors > 2048 && (sectors_done % 256) == 0) {
+                serial("[FAT] write_file_offset: wrote %d/%d sectors\n",
+                       (int)sectors_done, (int)total_sectors);
+            }
             offset_in_cluster = 0;
             sector_off = 0;
         }
@@ -1378,7 +1388,10 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
             uint32_t next = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
             if (next >= 0x0FFFFFF8) {
                 uint32_t newc = fat_alloc_cluster_from(fat_start, bpb->sectors_per_fat_32, sector, &alloc_hint);
-                if (newc == 0) { kfree(sector); return -8; }
+                if (newc == 0) {
+                    serial("[FAT] write_file_offset: alloc failed (extend) off=%d\n", (int)(offset + (size - remaining)));
+                    kfree(sector); return -8;
+                }
                 fat_set_next_cluster(current_cluster, newc, fat_start, bps, sector);
                 next = newc;
             }
@@ -2091,6 +2104,15 @@ extern "C" int fat32_format(uint32_t lba, uint32_t sector_count, const char* lab
     
     if (disk_write_sector(fat1_lba, sector) != 0) serial("[FAT] Warning: Failed to write FAT1\n");
     disk_write_sector(fat2_lba, sector);
+
+    /* Clear remaining FAT sectors so free clusters are actually zeroed */
+    memset(sector, 0, 512);
+    for (uint32_t s = 1; s < fat_sectors; s++) {
+        disk_write_sector(fat1_lba + s, sector);
+    }
+    for (uint32_t s = 1; s < fat_sectors; s++) {
+        disk_write_sector(fat2_lba + s, sector);
+    }
     
     /* 4. Initialize Root Directory (Cluster 2) */
     /* Data Start = Res + Fats * FatSec */

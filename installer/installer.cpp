@@ -405,19 +405,10 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
       serial("[INSTALLER] ERROR: Failed to allocate icons.mod (err=%d)\n", r);
       return;
     }
-    const uint8_t *ip = (const uint8_t *)icons_data;
-    uint32_t chunk = 128 * 1024;
-    uint32_t offset = 0;
-    while (offset < icons_size) {
-      uint32_t n = icons_size - offset;
-      if (n > chunk) n = chunk;
-      int wr = fat32_write_file_offset("/system/icons.mod", ip + offset, n, offset, 0);
-      if (wr != 0) {
-        serial("[INSTALLER] ERROR: icons.mod chunk write failed (off=%d err=%d)\n", (int)offset, wr);
-        return;
-      }
-      offset += n;
-      serial("[INSTALLER] icons.mod progress %d/%d\n", (int)offset, (int)icons_size);
+    int wr = fat32_write_file_offset("/system/icons.mod", icons_data, icons_size, 0, 0);
+    if (wr != 0) {
+      serial("[INSTALLER] ERROR: icons.mod write failed (err=%d)\n", wr);
+      return;
     }
     serial("[INSTALLER] Icons Installed OK.\n");
   } else {
