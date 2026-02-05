@@ -400,7 +400,7 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
   /* 7. Install Icons */
   if (icons_data && icons_size > 0) {
     serial("[INSTALLER] Installing Icons (%d bytes)...\n", icons_size);
-    int r = fat32_create_file_alloc("/system/icons.mod", icons_size);
+    int r = fat32_create_file_alloc("/system/icons.mod", 0);
     if (r != 0) {
       serial("[INSTALLER] ERROR: Failed to allocate icons.mod (err=%d)\n", r);
       return;

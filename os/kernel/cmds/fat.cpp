@@ -1317,14 +1317,26 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
     }
     if (is_dir || file_cluster == 0) { kfree(sector); return -7; }
 
+    if (disk_read_sector(entry_sector, sector) != 0) { kfree(sector); return -7; }
+    struct fat_dir_entry* entry = (struct fat_dir_entry*)sector;
+    uint32_t existing_size = entry[entry_offset].size;
+
     uint32_t cluster_bytes = spc * bps;
     uint32_t skip_clusters = offset / cluster_bytes;
     uint32_t offset_in_cluster = offset % cluster_bytes;
 
+    uint32_t alloc_hint = 2;
     uint32_t current_cluster = file_cluster;
+    uint32_t prev_cluster = 0;
     for (uint32_t i = 0; i < skip_clusters; i++) {
+        prev_cluster = current_cluster;
         current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
-        if (current_cluster >= 0x0FFFFFF8) { kfree(sector); return -8; }
+        if (current_cluster >= 0x0FFFFFF8) {
+            uint32_t newc = fat_alloc_cluster_from(fat_start, bpb->sectors_per_fat_32, sector, &alloc_hint);
+            if (newc == 0) { kfree(sector); return -8; }
+            fat_set_next_cluster(prev_cluster, newc, fat_start, bps, sector);
+            current_cluster = newc;
+        }
     }
 
     const uint8_t* p = (const uint8_t*)data;
@@ -1362,10 +1374,34 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
             offset_in_cluster = 0;
             sector_off = 0;
         }
-        current_cluster = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+        if (remaining > 0) {
+            uint32_t next = fat_get_next_cluster(current_cluster, fat_start, bps, sector);
+            if (next >= 0x0FFFFFF8) {
+                uint32_t newc = fat_alloc_cluster_from(fat_start, bpb->sectors_per_fat_32, sector, &alloc_hint);
+                if (newc == 0) { kfree(sector); return -8; }
+                fat_set_next_cluster(current_cluster, newc, fat_start, bps, sector);
+                next = newc;
+            }
+            current_cluster = next;
+        }
+    }
+    if (remaining != 0) { kfree(sector); return -11; }
+
+    uint32_t new_size = offset + size;
+    if (new_size > existing_size) {
+        if (disk_read_sector(entry_sector, sector) != 0) {
+            kfree(sector);
+            return -12;
+        }
+        struct fat_dir_entry* ent = (struct fat_dir_entry*)sector;
+        ent[entry_offset].size = new_size;
+        if (disk_write_sector(entry_sector, sector) != 0) {
+            kfree(sector);
+            return -12;
+        }
     }
     kfree(sector);
-    return (remaining == 0) ? 0 : -11;
+    return 0;
 }
 
 extern "C" void fat32_list_directory(const char* path) {
@@ -1971,7 +2007,7 @@ extern "C" int fat32_format(uint32_t lba, uint32_t sector_count, const char* lab
     memcpy(bpb->oem, "MSWIN4.1", 8);
     
     bpb->bytes_per_sector = 512;
-    bpb->sectors_per_cluster = 8; // 4KB clusters
+    bpb->sectors_per_cluster = 64; // 32KB clusters (faster install for large files)
     bpb->reserved_sectors = 32;
     bpb->fats_count = 2;
     bpb->root_entries_count = 0; // FAT32
