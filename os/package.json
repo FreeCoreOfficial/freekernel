@@ -7,6 +7,7 @@
   "//_info": "Utility scripts used during Chrysalis OS development",
   "//": "====================================================",
   "scripts": {
+    "find-dot-mods": "find ~/Desktop/ChrysalisOS -name \"*.mod\"",
     "create-i": "cd .. ; make -C installer clean ; make -C installer",
     "auto-i": "make clean ; make ; cd .. ; make -C installer clean ; make -C installer ; cd os ; npm run installer:log",
     "boot1": "clear && qemu-system-i386 -m 256 -smp 2 -boot order=c -nographic -monitor none -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -netdev user,id=net0 -device e1000,netdev=net0",
