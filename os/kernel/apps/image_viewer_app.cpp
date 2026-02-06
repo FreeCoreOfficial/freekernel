@@ -6,7 +6,7 @@
 #include "../string.h"
 
 static window_t* img_win = NULL;
-static char img_path[128] = "";
+static char img_path[256] = "";
 
 static void img_close(window_t* win) {
     (void)win;

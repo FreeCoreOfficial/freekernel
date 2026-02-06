@@ -7,6 +7,7 @@
 #include "../mem/kmalloc.h"
 #include "app_manager.h"
 #include "notepad_app.h"
+#include "image_viewer_app.h"
 
 static window_t* fm_win = NULL;
 static char current_path[256] = "/";
@@ -39,6 +40,23 @@ static void append_path(char* dst, size_t cap, const char* src) {
         dst[len++] = src[i++];
     }
     dst[len] = 0;
+}
+
+static char lower_ascii(char c) {
+    if (c >= 'A' && c <= 'Z') return (char)(c + 32);
+    return c;
+}
+
+static bool has_ext_ci(const char* name, const char* ext) {
+    if (!name || !ext) return false;
+    size_t nlen = strlen(name);
+    size_t elen = strlen(ext);
+    if (nlen < elen) return false;
+    const char* p = name + (nlen - elen);
+    for (size_t i = 0; i < elen; i++) {
+        if (lower_ascii(p[i]) != lower_ascii(ext[i])) return false;
+    }
+    return true;
 }
 
 static void fm_go_up(void) {
@@ -299,7 +317,11 @@ bool file_manager_app_handle_event(input_event_t* ev) {
                             }
                             append_path(fullpath, sizeof(fullpath), files[idx].name);
                         }
-                        notepad_app_open(fullpath);
+                        if (has_ext_ci(files[idx].name, ".bmp")) {
+                            image_viewer_app_create(fullpath);
+                        } else {
+                            notepad_app_open(fullpath);
+                        }
                     }
                 } else {
                     selected_idx = idx;
