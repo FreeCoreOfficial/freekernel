@@ -229,11 +229,37 @@ extern "C" {
 }
 
 /* Global multiboot module info to preserve until kmalloc is ready */
-struct {
+typedef struct {
     void* data;
     uint32_t size;
     const char* name;
-} g_multiboot_module = {NULL, 0, NULL};
+} mb_file_t;
+
+static mb_file_t g_multiboot_modules[32];
+static char g_multiboot_names[32][32];
+static int g_multiboot_module_count = 0;
+
+static void mb_copy_name(const char* src, char* dst, size_t dst_sz) {
+    if (!dst || dst_sz == 0) return;
+    dst[0] = 0;
+    if (!src) return;
+    while (*src && (unsigned char)*src <= ' ') src++;
+    const char* end = src;
+    while (*end) end++;
+    while (end > src && (unsigned char)end[-1] <= ' ') end--;
+    const char* token = src;
+    for (const char* p = src; p < end; ++p) {
+        if (*p == ' ') token = p + 1;
+    }
+    const char* base = token;
+    for (const char* p = token; p < end; ++p) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    size_t n = (size_t)(end - base);
+    if (n >= dst_sz) n = dst_sz - 1;
+    memcpy(dst, base, n);
+    dst[n] = 0;
+}
 
 /* Buddy allocator wrapper that hooks the buddy allocator to the heap region
    defined by the linker script (linker.ld) */
@@ -332,13 +358,20 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
                  }
                  total_ram_mb = total_bytes / (1024 * 1024);
             } else if (tag->type == MULTIBOOT2_TAG_TYPE_MODULE) {
-                 /* Store Multiboot Module info (will copy to persistent location after kmalloc init) */
                  struct multiboot2_tag_module *mod = (struct multiboot2_tag_module*)tag;
                  uint32_t size = mod->mod_end - mod->mod_start;
-                 g_multiboot_module.data = (void*)mod->mod_start;
-                 g_multiboot_module.size = size;
-                 g_multiboot_module.name = "icons.mod";
-                 serial("[KERNEL] Multiboot Module detected: icons.mod at 0x%x (%u bytes)\n", mod->mod_start, size);
+                 if (g_multiboot_module_count < (int)(sizeof(g_multiboot_modules)/sizeof(g_multiboot_modules[0]))) {
+                     char* namebuf = g_multiboot_names[g_multiboot_module_count];
+                     mb_copy_name(mod->string, namebuf, sizeof(g_multiboot_names[0]));
+                     g_multiboot_modules[g_multiboot_module_count].data = (void*)mod->mod_start;
+                     g_multiboot_modules[g_multiboot_module_count].size = size;
+                     g_multiboot_modules[g_multiboot_module_count].name = namebuf;
+                     serial("[KERNEL] Multiboot Module detected: %s at 0x%x (%u bytes)\n",
+                            namebuf, mod->mod_start, size);
+                     g_multiboot_module_count++;
+                 } else {
+                     serial("[KERNEL] Multiboot Module skipped (too many)\n");
+                 }
             }
             tag = (struct multiboot2_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
         }
@@ -426,11 +459,17 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     buddy_init_from_heap();
     kmalloc_init();
 
-    /* Register multiboot module directly in RAMFS (don't copy - just point to it) */
-    /* The bootloader reserves this memory, so it won't be reallocated */
-    if (g_multiboot_module.data && g_multiboot_module.size > 0) {
-        ramfs_create_file("icons.mod", g_multiboot_module.data, g_multiboot_module.size);
-        serial("[KERNEL] Multiboot Module registered in RAMFS (bootloader memory, not copied)\n");
+    /* Register multiboot modules directly in RAMFS (don't copy - just point to them) */
+    if (g_multiboot_module_count > 0) {
+        for (int i = 0; i < g_multiboot_module_count; i++) {
+            if (!g_multiboot_modules[i].data || g_multiboot_modules[i].size == 0) continue;
+            if (!g_multiboot_modules[i].name || g_multiboot_modules[i].name[0] == 0) continue;
+            ramfs_create_file(g_multiboot_modules[i].name,
+                              g_multiboot_modules[i].data,
+                              g_multiboot_modules[i].size);
+            serial("[KERNEL] Multiboot Module registered in RAMFS: %s (%u bytes)\n",
+                   g_multiboot_modules[i].name, g_multiboot_modules[i].size);
+        }
     }
 
     // Sanity check PMM (if you have functions for total frames, check them here)

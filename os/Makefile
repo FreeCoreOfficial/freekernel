@@ -945,10 +945,10 @@ $(ISO)/boot/$(KERNEL): $(OBJS) | dirs
 # -------------------------
 
 icons:
-	@echo "[ICONS] Generating icons.mod..."
+	@echo "[ICONS] Generating icons BMPs..."
 	cd ../tools/icons && python3 mkicons.py
-	@mkdir -p $(ISO)
-	mv ../tools/icons/icons.mod $(ISO)/icons.mod
+	@mkdir -p $(ISO)/icons
+	cp ../tools/icons/out/*.bmp $(ISO)/icons/
 
 iso: all iso/boot/grub/grub.cfg icons
 	@mkdir -p $(ISO)/boot/grub
@@ -963,7 +963,7 @@ consolerun: iso
 	qemu-system-x86_64 -cdrom chrysalis.iso -nographic
 
 clean:
-	rm -rf $(BUILD) *.iso $(ISO)/boot/$(KERNEL) $(ISO)/icons.mod ../tools/icons/icons.mod
+	rm -rf $(BUILD) *.iso $(ISO)/boot/$(KERNEL) $(ISO)/icons ../tools/icons/out
 
 # -------------------------
 # ASSETS

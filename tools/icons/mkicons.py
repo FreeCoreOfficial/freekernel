@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 from PIL import Image
-import struct
-import sys
-
-ICONS_MAGIC = 0x4E4F4349  # 'ICON'
-VERSION = 1
+import os
 
 icons = [
     (0,  "start.png"),
@@ -25,34 +21,17 @@ icons = [
     (15, "run.png"),
 ]
 
-entries = []
-pixel_blobs = []
-offset = 0
+OUT_DIR = "out"
+TARGET_SIZE = 128  # 128x128 to keep assets small and installable
 
-for icon_id, path in icons:
+os.makedirs(OUT_DIR, exist_ok=True)
+
+for _, path in icons:
     img = Image.open(path).convert("RGBA")
-    w, h = img.size
-    pixels = img.tobytes()  # RGBA8888
+    img = img.resize((TARGET_SIZE, TARGET_SIZE), Image.LANCZOS)
+    base = os.path.splitext(os.path.basename(path))[0]
+    out_path = os.path.join(OUT_DIR, base + ".bmp")
+    img.save(out_path, format="BMP")
+    print("wrote", out_path)
 
-    entries.append((icon_id, w, h, offset))
-    pixel_blobs.append(pixels)
-    offset += len(pixels)
-
-with open("icons.mod", "wb") as f:
-    # header
-    f.write(struct.pack("<IHH", ICONS_MAGIC, VERSION, len(entries)))
-
-    # entries
-    entry_offset = 0
-    data_offset = 8 + len(entries) * 10  # header + entries
-    cur = data_offset
-
-    for (icon_id, w, h, off), blob in zip(entries, pixel_blobs):
-        f.write(struct.pack("<HHHI", icon_id, w, h, cur))
-        cur += len(blob)
-
-    # pixel data
-    for blob in pixel_blobs:
-        f.write(blob)
-
-print("icons.mod generated")
+print("icons bmp generated")

@@ -1346,17 +1346,51 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
     uint32_t remaining = size;
     uint32_t total_sectors = (size + 511) / 512;
     uint32_t sectors_done = 0;
+    uint8_t* buf = (uint8_t*)kmalloc(512);
+    uint8_t* vbuf = verify ? (uint8_t*)kmalloc(512) : NULL;
+    if (!buf) {
+        serial("[FAT] write_file_offset: OOM buf\n");
+        kfree(sector);
+        if (vbuf) kfree(vbuf);
+        return -20;
+    }
     while (remaining > 0 && current_cluster < 0x0FFFFFF8) {
         uint32_t cluster_lba = data_start + (current_cluster - 2) * spc;
         uint32_t sector_idx = offset_in_cluster / 512;
         uint32_t sector_off = offset_in_cluster % 512;
         for (; sector_idx < spc && remaining > 0; sector_idx++) {
-            uint8_t buf[512];
+            /* Fast path: contiguous full sectors, no verify */
+            if (!verify && sector_off == 0) {
+                uint32_t run = spc - sector_idx;
+                uint32_t full = remaining / 512;
+                if (full == 0) {
+                    /* fall through to partial sector handling */
+                } else {
+                    if (run > full) run = full;
+                    if (disk_write_sectors(cluster_lba + sector_idx, run, p) != 0) {
+                        kfree(sector);
+                        kfree(buf);
+                        if (vbuf) kfree(vbuf);
+                        return -10;
+                    }
+                    p += run * 512;
+                    remaining -= run * 512;
+                    sectors_done += run;
+                    if (total_sectors > 2048 && (sectors_done % 256) == 0) {
+                        serial("[FAT] write_file_offset: wrote %d/%d sectors\n",
+                               (int)sectors_done, (int)total_sectors);
+                    }
+                    sector_idx += (run - 1);
+                    continue;
+                }
+            }
             memset(buf, 0, 512);
             uint32_t chunk = 512;
             if (sector_off != 0 || remaining < 512) {
                 if (disk_read_sector(cluster_lba + sector_idx, buf) != 0) {
                     kfree(sector);
+                    kfree(buf);
+                    if (vbuf) kfree(vbuf);
                     return -9;
                 }
             }
@@ -1368,12 +1402,11 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
             for (int r = 0; r < retries; r++) {
                 if (disk_write_sector(cluster_lba + sector_idx, buf) == 0) {
                     if (!verify) { ok = 1; break; }
-                    uint8_t vbuf[512];
-                    if (disk_read_sector(cluster_lba + sector_idx, vbuf) == 0 &&
+                    if (vbuf && disk_read_sector(cluster_lba + sector_idx, vbuf) == 0 &&
                         memcmp(buf, vbuf, 512) == 0) { ok = 1; break; }
                 }
             }
-            if (!ok) { kfree(sector); return -10; }
+            if (!ok) { kfree(sector); kfree(buf); if (vbuf) kfree(vbuf); return -10; }
             p += copy;
             remaining -= copy;
             sectors_done++;
@@ -1390,7 +1423,10 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
                 uint32_t newc = fat_alloc_cluster_from(fat_start, bpb->sectors_per_fat_32, sector, &alloc_hint);
                 if (newc == 0) {
                     serial("[FAT] write_file_offset: alloc failed (extend) off=%d\n", (int)(offset + (size - remaining)));
-                    kfree(sector); return -8;
+                    kfree(sector);
+                    kfree(buf);
+                    if (vbuf) kfree(vbuf);
+                    return -8;
                 }
                 fat_set_next_cluster(current_cluster, newc, fat_start, bps, sector);
                 next = newc;
@@ -1398,21 +1434,27 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
             current_cluster = next;
         }
     }
-    if (remaining != 0) { kfree(sector); return -11; }
+    if (remaining != 0) { kfree(sector); kfree(buf); if (vbuf) kfree(vbuf); return -11; }
 
     uint32_t new_size = offset + size;
     if (new_size > existing_size) {
         if (disk_read_sector(entry_sector, sector) != 0) {
             kfree(sector);
+            kfree(buf);
+            if (vbuf) kfree(vbuf);
             return -12;
         }
         struct fat_dir_entry* ent = (struct fat_dir_entry*)sector;
         ent[entry_offset].size = new_size;
         if (disk_write_sector(entry_sector, sector) != 0) {
             kfree(sector);
+            kfree(buf);
+            if (vbuf) kfree(vbuf);
             return -12;
         }
     }
+    kfree(buf);
+    if (vbuf) kfree(vbuf);
     kfree(sector);
     return 0;
 }
@@ -2020,7 +2062,8 @@ extern "C" int fat32_format(uint32_t lba, uint32_t sector_count, const char* lab
     memcpy(bpb->oem, "MSWIN4.1", 8);
     
     bpb->bytes_per_sector = 512;
-    bpb->sectors_per_cluster = 64; // 32KB clusters (faster install for large files)
+    /* Use larger clusters to reduce FAT chain size for large files */
+    bpb->sectors_per_cluster = 128; // 64KB clusters
     bpb->reserved_sectors = 32;
     bpb->fats_count = 2;
     bpb->root_entries_count = 0; // FAT32
@@ -2035,7 +2078,7 @@ extern "C" int fat32_format(uint32_t lba, uint32_t sector_count, const char* lab
     /* Calculate FAT size */
     /* Formula: FatSectors = (Total - Res) / (128 * SPC + 2) */
     uint32_t data_sectors = sector_count - bpb->reserved_sectors;
-    uint32_t divisor = (128 * bpb->sectors_per_cluster) + 2; // 1026
+    uint32_t divisor = (128 * bpb->sectors_per_cluster) + 2;
     uint32_t fat_sectors = (data_sectors + divisor - 1) / divisor;
     
     bpb->sectors_per_fat_32 = fat_sectors;

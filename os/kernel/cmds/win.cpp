@@ -922,7 +922,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
     if (icons_init("/icons.mod")) {
         serial("[WIN] Icons loaded successfully.\n");
     } else {
-        serial("[WIN] Warning: icons.mod not found or invalid.\n");
+        serial("[WIN] Warning: icons not found or invalid.\n");
     }
 
     app_manager_init();

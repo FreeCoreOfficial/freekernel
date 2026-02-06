@@ -13,9 +13,41 @@
 #include "../os/kernel/storage/ata.h"
 #include "../os/kernel/string.h"
 
+/* Local BPB struct for installer debug dump */
+struct fat_bpb {
+  uint8_t jmp[3];
+  char oem[8];
+  uint16_t bytes_per_sector;
+  uint8_t sectors_per_cluster;
+  uint16_t reserved_sectors;
+  uint8_t fats_count;
+  uint16_t root_entries_count;
+  uint16_t total_sectors_16;
+  uint8_t media_descriptor;
+  uint16_t sectors_per_fat_16;
+  uint16_t sectors_per_track;
+  uint16_t heads_count;
+  uint32_t hidden_sectors;
+  uint32_t total_sectors_32;
+  uint32_t sectors_per_fat_32;
+  uint16_t ext_flags;
+  uint16_t fs_version;
+  uint32_t root_cluster;
+  uint16_t fs_info;
+  uint16_t backup_boot_sector;
+  uint8_t reserved[12];
+  uint8_t drive_number;
+  uint8_t reserved1;
+  uint8_t boot_signature;
+  uint32_t volume_id;
+  char volume_label[11];
+  char fs_type[8];
+} __attribute__((packed));
+
 /* Helper Prototypes */
 extern "C" {
 void kmalloc_init(void);
+void kmalloc_reset(void);
 int fat32_format(uint32_t lba, uint32_t sector_count, const char *label);
 int fat32_create_directory(const char *path);
 int fat32_create_directory_verified(const char *path, int verify);
@@ -44,6 +76,27 @@ int disk_write_sector(uint32_t lba, const uint8_t *buffer);
 int disk_read_sector(uint32_t lba, uint8_t *buffer);
 void ata_set_allow_mbr_write(int allow);
 }
+
+/* Icon filenames (BMP) */
+#define ICON_COUNT 16
+static const char* g_icon_files[ICON_COUNT] = {
+    "start.bmp",
+    "term.bmp",
+    "files.bmp",
+    "img.bmp",
+    "note.bmp",
+    "paint.bmp",
+    "calc.bmp",
+    "clock.bmp",
+    "calc.bmp",
+    "task.bmp",
+    "info.bmp",
+    "3D.bmp",
+    "mine.bmp",
+    "net.bmp",
+    "x0.bmp",
+    "run.bmp",
+};
 
 static void normalize_module_name_len(const char* cmdline, size_t cmdline_len, char* out, size_t out_sz) {
   if (!out || out_sz == 0) return;
@@ -221,6 +274,23 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
     fat32_set_mounted(start_lba, 'a');
   }
 
+  /* Dump BPB layout for debug */
+  uint8_t *bpb_dbg = (uint8_t *)kmalloc(512);
+  if (bpb_dbg && disk_read_sector(start_lba, bpb_dbg) == 0) {
+    struct fat_bpb *bpb = (struct fat_bpb *)bpb_dbg;
+    uint32_t fat_start = start_lba + bpb->reserved_sectors;
+    uint32_t data_start =
+        fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
+    serial("[INSTALLER] BPB: total_sectors=%u reserved=%u fats=%u spf=%u spc=%u\n",
+           bpb->total_sectors_32, bpb->reserved_sectors, bpb->fats_count,
+           bpb->sectors_per_fat_32, bpb->sectors_per_cluster);
+    serial("[INSTALLER] BPB: fat_start=%u data_start=%u\n",
+           fat_start, data_start);
+    kfree(bpb_dbg);
+  } else if (bpb_dbg) {
+    kfree(bpb_dbg);
+  }
+
   /* 3. Create Directory Structure */
   serial("[INSTALLER] Creating directories...\n");
   char boot_path[6] = {'/', 'b', 'o', 'o', 't', 0};
@@ -228,6 +298,8 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
                          'r', 'y', 's', 'a', 'l', 'i', 's', 0};
   char grub_path[11] = {'/', 'b', 'o', 'o', 't', '/', 'g', 'r', 'u', 'b', 0};
   char system_path[8] = {'/', 's', 'y', 's', 't', 'e', 'm', 0};
+  char icons_dir[14] = {'/', 's', 'y', 's', 't', 'e', 'm', '/', 'i', 'c', 'o',
+                        'n', 's', 0};
 
   int mr = fat32_create_directory_verified(boot_path, 1);
   if (mr != 0) {
@@ -248,18 +320,22 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
   if (mr != 0) {
     serial("[INSTALLER] WARN: mkdir /system failed (err=%d), continuing\n", mr);
   }
+  mr = fat32_create_directory_verified(icons_dir, 1);
+  if (mr != 0) {
+    serial("[INSTALLER] WARN: mkdir /system/icons failed (err=%d), continuing\n", mr);
+  }
 
   /* Directory listings disabled to reduce stack usage and avoid instability */
 
   /* 4. Locate Source Files (Multiboot Modules) */
   void *kernel_data = NULL;
   size_t kernel_size = 0;
-  void *icons_data = NULL;
-  size_t icons_size = 0;
   void *boot_img = NULL;
   size_t boot_img_size = 0;
   void *core_img = NULL;
   size_t core_img_size = 0;
+  void *icon_data[ICON_COUNT] = {0};
+  size_t icon_sizes[ICON_COUNT] = {0};
 
   /* Scan multidoob tags (parsed manually here as we need raw addresses) */
   struct multiboot2_tag *tag = (struct multiboot2_tag *)(addr + 8);
@@ -285,20 +361,15 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
         serial("[INSTALLER] Module name parsed: '%s'\n", mod_name);
 
         int m_kernel = strcmp(mod_name, "kernel.bin");
-        int m_icons = strcmp(mod_name, "icons.mod");
         int m_boot = strcmp(mod_name, "boot.img");
         int m_core = strcmp(mod_name, "core.img");
-        serial("[INSTALLER] mod_name cmp: kernel=%d icons=%d boot=%d core=%d\n",
-               m_kernel, m_icons, m_boot, m_core);
+        serial("[INSTALLER] mod_name cmp: kernel=%d boot=%d core=%d\n",
+               m_kernel, m_boot, m_core);
 
         if (m_kernel == 0) {
           kernel_data = (void *)mod->mod_start;
           kernel_size = mod->mod_end - mod->mod_start;
           serial("[INSTALLER] Assigned to kernel.bin\n");
-        } else if (m_icons == 0) {
-          icons_data = (void *)mod->mod_start;
-          icons_size = mod->mod_end - mod->mod_start;
-          serial("[INSTALLER] Assigned to icons.mod\n");
         } else if (m_boot == 0) {
           boot_img = (void *)mod->mod_start;
           boot_img_size = mod->mod_end - mod->mod_start;
@@ -308,9 +379,20 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
           core_img_size = mod->mod_end - mod->mod_start;
           serial("[INSTALLER] Assigned to core.img\n");
         } else {
+          /* Try BMP icons */
+          for (int i = 0; i < ICON_COUNT; i++) {
+            if (strcmp(mod_name, g_icon_files[i]) == 0) {
+              icon_data[i] = (void *)mod->mod_start;
+              icon_sizes[i] = mod->mod_end - mod->mod_start;
+              serial("[INSTALLER] Assigned to %s\n", g_icon_files[i]);
+              goto mod_done;
+            }
+          }
           serial("[INSTALLER] Module '%s' did not match any expected file.\n",
                  cmdline);
         }
+mod_done:
+        ;
       }
     }
     tag = (struct multiboot2_tag *)((uint8_t *)tag + ((tag->size + 7) & ~7));
@@ -397,23 +479,36 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
     return;
   }
 
-  /* 7. Install Icons */
-  if (icons_data && icons_size > 0) {
-    serial("[INSTALLER] Installing Icons (%d bytes)...\n", icons_size);
-    int r = fat32_create_file_alloc("/system/icons.mod", 0);
+  /* 7. Install Icons (BMP files) */
+  serial("[INSTALLER] Installing Icons (BMP)...\n");
+  int icons_written = 0;
+  for (int i = 0; i < ICON_COUNT; i++) {
+    if (!icon_data[i] || icon_sizes[i] == 0) continue;
+    char path[48];
+    /* "/system/icons/<name>" */
+    path[0] = '/'; path[1] = 's'; path[2] = 'y'; path[3] = 's';
+    path[4] = 't'; path[5] = 'e'; path[6] = 'm'; path[7] = '/';
+    path[8] = 'i'; path[9] = 'c'; path[10] = 'o'; path[11] = 'n';
+    path[12] = 's'; path[13] = '/';
+    const char* nm = g_icon_files[i];
+    int j = 0;
+    while (nm[j] && (14 + j) < (int)sizeof(path) - 1) {
+      path[14 + j] = nm[j];
+      j++;
+    }
+    path[14 + j] = 0;
+
+    serial("[INSTALLER] icon %s (%d bytes) -> %s\n",
+           nm, (int)icon_sizes[i], path);
+    int r = fat32_create_file_verified(path, icon_data[i], (uint32_t)icon_sizes[i], 0);
     if (r != 0) {
-      serial("[INSTALLER] ERROR: Failed to allocate icons.mod (err=%d)\n", r);
+      serial("[INSTALLER] ERROR: icon write failed (%s err=%d)\n", nm, r);
       return;
     }
-    int wr = fat32_write_file_offset("/system/icons.mod", icons_data, icons_size, 0, 0);
-    if (wr != 0) {
-      serial("[INSTALLER] ERROR: icons.mod write failed (err=%d)\n", wr);
-      return;
-    }
-    serial("[INSTALLER] Icons Installed OK.\n");
-  } else {
-    serial("[INSTALLER] WARNING: Icons module not found!\n");
+    icons_written++;
+    kmalloc_reset();
   }
+  serial("[INSTALLER] Icons Installed OK (%d files).\n", icons_written);
 
   /* /boot/grub listing disabled to reduce stack usage */
 

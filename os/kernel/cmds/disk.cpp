@@ -74,6 +74,18 @@ int disk_write_sector(uint32_t lba, const uint8_t* buf) {
     return -1;
 }
 
+int disk_read_sectors(uint32_t lba, uint32_t count, uint8_t* buf) {
+    block_device_t* bd = get_main_disk();
+    if (bd) return bd->read(bd, lba, count, buf);
+    return -1;
+}
+
+int disk_write_sectors(uint32_t lba, uint32_t count, const uint8_t* buf) {
+    block_device_t* bd = get_main_disk();
+    if (bd) return bd->write(bd, lba, count, buf);
+    return -1;
+}
+
 uint32_t disk_get_capacity(void) {
     block_device_t* bd = get_main_disk();
     if (bd) return (uint32_t)bd->sector_count;

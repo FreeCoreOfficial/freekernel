@@ -91,7 +91,8 @@ installer.iso: $(BUILD)/installer.elf
 	@cp $(BUILD)/installer.elf $(ISO)/boot/
 	@# Copy Assets from Main OS Build
 	@if [ -f ../os/iso/boot/kernel.bin ]; then cp ../os/iso/boot/kernel.bin $(ISO)/boot/chrysalis/; else echo "WARNING: kernel.bin not found!"; fi
-	@if [ -f ../os/iso/icons.mod ]; then cp ../os/iso/icons.mod $(ISO)/system/; else echo "WARNING: icons.mod not found!"; fi
+	@mkdir -p $(ISO)/icons
+	@if [ -d ../os/iso/icons ]; then cp ../os/iso/icons/*.bmp $(ISO)/icons/; else echo "WARNING: icons bmp not found!"; fi
 	@# Build GRUB core image + include boot.img + embed config
 	@if [ -f /usr/lib/grub/i386-pc/boot.img ]; then cp /usr/lib/grub/i386-pc/boot.img $(ISO)/boot/grub/; else echo "WARNING: boot.img not found!"; fi
 	@echo 'search --file --set=root /boot/grub/grub.cfg' > $(ISO)/boot/grub/grub_embed.cfg
@@ -109,7 +110,21 @@ installer.iso: $(BUILD)/installer.elf
 	@echo 'menuentry "Chrysalis OS - Installer" {' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  multiboot2 /boot/installer.elf' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  module2 /boot/chrysalis/kernel.bin kernel.bin' >> $(ISO)/boot/grub/grub.cfg
-	@echo '  module2 /system/icons.mod icons.mod' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/start.bmp start.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/term.bmp term.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/files.bmp files.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/img.bmp img.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/note.bmp note.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/paint.bmp paint.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/calc.bmp calc.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/clock.bmp clock.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/task.bmp task.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/info.bmp info.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/3D.bmp 3D.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/mine.bmp mine.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/net.bmp net.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/x0.bmp x0.bmp' >> $(ISO)/boot/grub/grub.cfg
+	@echo '  module2 /icons/run.bmp run.bmp' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  module2 /boot/grub/boot.img boot.img' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  module2 /boot/grub/core.img core.img' >> $(ISO)/boot/grub/grub.cfg
 	@echo '  boot' >> $(ISO)/boot/grub/grub.cfg
