@@ -1,14 +1,19 @@
 #include "run_dialog_app.h"
 #include "apps.h"
+#include "minesweeper_app.h"
 #include "../ui/wm/wm.h"
 #include "../ui/flyui/draw.h"
 #include "../string.h"
 #include "../shell/shell.h"
 
 static window_t* run_win = NULL;
+static window_t* secret_win = NULL;
 static char cmd_buf[64] = "";
 
 static void draw_run(surface_t* s);
+static void draw_secret(surface_t* s);
+static void show_secret_popup(const char* title, const char* line1, const char* line2);
+static const char* normalize_run_command(const char* in, char* out, size_t cap);
 
 static void run_close(window_t* win) {
     (void)win;
@@ -22,6 +27,21 @@ static void run_close(window_t* win) {
 static void run_on_resize(window_t* win) {
     if (!win || !win->surface) return;
     draw_run(win->surface);
+    wm_mark_dirty();
+}
+
+static void secret_close(window_t* win) {
+    (void)win;
+    if (secret_win) {
+        wm_destroy_window(secret_win);
+        secret_win = NULL;
+        wm_mark_dirty();
+    }
+}
+
+static void secret_on_resize(window_t* win) {
+    if (!win || !win->surface) return;
+    draw_secret(win->surface);
     wm_mark_dirty();
 }
 
@@ -45,17 +65,125 @@ static void draw_run(surface_t* s) {
     fly_draw_text(s, 225, 90, "Run", 0xFF000000);
 }
 
+static char secret_title[48];
+static char secret_line1[80];
+static char secret_line2[80];
+
+static void draw_secret(surface_t* s) {
+    fly_draw_rect_fill(s, 0, 0, 320, 120, 0xFFF2EFEA);
+    fly_draw_rect_fill(s, 0, 0, 320, 24, 0xFF1F6F78);
+    fly_draw_text(s, 8, 4, secret_title, 0xFFFDF8F0);
+    fly_draw_rect_fill(s, 296, 4, 16, 16, 0xFFE7E3DB);
+    fly_draw_rect_outline(s, 296, 4, 16, 16, 0xFF3A3F45);
+    fly_draw_text(s, 300, 4, "X", 0xFF1E2429);
+
+    fly_draw_text(s, 12, 42, secret_line1, 0xFF1E2429);
+    if (secret_line2[0]) {
+        fly_draw_text(s, 12, 62, secret_line2, 0xFF1E2429);
+    }
+}
+
+static void show_secret_popup(const char* title, const char* line1, const char* line2) {
+    if (secret_win) {
+        wm_restore_window(secret_win);
+        wm_focus_window(secret_win);
+    } else {
+        surface_t* s = surface_create(320, 120);
+        secret_win = wm_create_window(s, 160, 220);
+        if (secret_win) {
+            wm_set_title(secret_win, "Secret");
+            wm_set_on_close(secret_win, secret_close);
+            wm_set_on_resize(secret_win, secret_on_resize);
+        }
+    }
+
+    strncpy(secret_title, title, sizeof(secret_title));
+    secret_title[sizeof(secret_title) - 1] = 0;
+    strncpy(secret_line1, line1, sizeof(secret_line1));
+    secret_line1[sizeof(secret_line1) - 1] = 0;
+    if (line2) {
+        strncpy(secret_line2, line2, sizeof(secret_line2));
+        secret_line2[sizeof(secret_line2) - 1] = 0;
+    } else {
+        secret_line2[0] = 0;
+    }
+
+    if (secret_win && secret_win->surface) {
+        draw_secret(secret_win->surface);
+        wm_mark_dirty();
+    }
+}
+
+static const char* normalize_run_command(const char* in, char* out, size_t cap) {
+    if (!out || cap == 0) return "";
+    out[0] = 0;
+    if (!in) return out;
+
+    /* Skip leading spaces */
+    while (*in == ' ' || *in == '\t') in++;
+
+    /* Handle -execute prefix (Run dialog only) */
+    if (strncmp(in, "-execute", 8) == 0) {
+        in += 8;
+        while (*in == ' ' || *in == '\t') in++;
+        if (*in == '(') {
+            in++;
+            while (*in == ' ' || *in == '\t') in++;
+        }
+        if (*in == '"' || *in == '\'') {
+            char quote = *in++;
+            size_t i = 0;
+            while (*in && *in != quote && i + 1 < cap) {
+                out[i++] = *in++;
+            }
+            out[i] = 0;
+            return out;
+        }
+        /* Copy until ')' or end */
+        size_t i = 0;
+        while (*in && *in != ')' && i + 1 < cap) {
+            out[i++] = *in++;
+        }
+        out[i] = 0;
+        return out;
+    }
+
+    /* Default: trim and copy */
+    size_t i = 0;
+    while (*in && i + 1 < cap) {
+        out[i++] = *in++;
+    }
+    out[i] = 0;
+    return out;
+}
+
 static void execute_run() {
-    if (strcmp(cmd_buf, "calc") == 0) calculator_app_create();
-    else if (strcmp(cmd_buf, "notepad") == 0) notepad_app_create();
-    else if (strcmp(cmd_buf, "clock") == 0) clock_app_create();
-    else if (strcmp(cmd_buf, "calendar") == 0) calendar_app_create();
-    else if (strcmp(cmd_buf, "files") == 0) file_manager_app_create();
-    else if (strcmp(cmd_buf, "info") == 0) sysinfo_app_create();
-    else if (strcmp(cmd_buf, "paint") == 0) paint_app_create();
-    else if (strcmp(cmd_buf, "demo") == 0) demo3d_app_create();
-    else if (strcmp(cmd_buf, "terminal") == 0) shell_create_window();
-    else if (strncmp(cmd_buf, "view ", 5) == 0) image_viewer_app_create(cmd_buf + 5);
+    char norm[64];
+    const char* cmd = normalize_run_command(cmd_buf, norm, sizeof(norm));
+
+    if (strcmp(cmd, "calc") == 0) calculator_app_create();
+    else if (strcmp(cmd, "notepad") == 0) notepad_app_create();
+    else if (strcmp(cmd, "clock") == 0) clock_app_create();
+    else if (strcmp(cmd, "calendar") == 0) calendar_app_create();
+    else if (strcmp(cmd, "files") == 0) file_manager_app_create();
+    else if (strcmp(cmd, "info") == 0) sysinfo_app_create();
+    else if (strcmp(cmd, "paint") == 0) paint_app_create();
+    else if (strcmp(cmd, "demo") == 0) demo3d_app_create();
+    else if (strcmp(cmd, "terminal") == 0) shell_create_window();
+    else if (strncmp(cmd, "view ", 5) == 0) image_viewer_app_create(cmd + 5);
+    else if (strcmp(cmd, "rickroll") == 0) {
+        show_secret_popup("Never Gonna Give You Up",
+                          "Never gonna give you up,",
+                          "never gonna let you down.");
+    }
+    else if (strcmp(cmd, "yaai") == 0) {
+        show_secret_popup("You are an idiot",
+                          ":-) You are an idiot! :-)",
+                          "Ha ha ha ha ha!");
+    }
+    else if (strcmp(cmd, "minesweeper_god=1") == 0) {
+        minesweeper_god_app_create();
+    }
     
     wm_destroy_window(run_win);
     run_win = NULL;
@@ -99,6 +227,19 @@ bool run_dialog_app_handle_event(input_event_t* ev) {
     return false;
 }
 
+bool run_dialog_secret_handle_event(input_event_t* ev) {
+    if (!secret_win) return false;
+    if (ev->type == INPUT_MOUSE_CLICK && ev->pressed) {
+        int lx = ev->mouse_x - secret_win->x;
+        int ly = ev->mouse_y - secret_win->y;
+        if (lx >= 296 && ly < 24) {
+            secret_close(secret_win);
+            return true;
+        }
+    }
+    return false;
+}
+
 void run_dialog_app_handle_key(char c) {
     if (!run_win) return;
     int len = strlen(cmd_buf);
@@ -118,3 +259,4 @@ void run_dialog_app_handle_key(char c) {
 }
 
 window_t* run_dialog_app_get_window(void) { return run_win; }
+window_t* run_dialog_secret_get_window(void) { return secret_win; }

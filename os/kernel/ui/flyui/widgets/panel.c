@@ -8,7 +8,7 @@ static void panel_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
     
     /* Draw border using theme color (Low/Dark for outline) */
     fly_theme_t* th = theme_get();
-    fly_draw_rect_outline(surf, x, y, w->w, w->h, th->color_lo_2);
+    fly_draw_rect_outline(surf, x, y, w->w, w->h, th->color_lo_1);
 }
 
 fly_widget_t* fly_panel_create(int w, int h) {

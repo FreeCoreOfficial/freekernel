@@ -32,15 +32,21 @@ static void img_on_resize(window_t* win) {
 }
 
 void image_viewer_app_create(const char* path) {
+    bool path_changed = false;
     if (path) {
-        strncpy(img_path, path, sizeof(img_path));
-        img_path[sizeof(img_path) - 1] = 0;
+        if (strcmp(path, img_path) != 0) {
+            strncpy(img_path, path, sizeof(img_path));
+            img_path[sizeof(img_path) - 1] = 0;
+            path_changed = true;
+        }
     }
 
     if (img_win) {
         wm_restore_window(img_win);
         wm_focus_window(img_win);
-        draw_image(img_win->surface, img_path);
+        if (path_changed) {
+            draw_image(img_win->surface, img_path);
+        }
         return;
     }
 

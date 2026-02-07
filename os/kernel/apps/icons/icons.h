@@ -36,6 +36,9 @@ typedef struct {
 /* Initialize the icon subsystem by loading the module file */
 bool icons_init(const char* path);
 
+/* Incremental BMP icon loader to reduce startup latency. */
+bool icons_tick(int max_to_load);
+
 /* Retrieve an icon by its ID. Returns NULL if not found. */
 const icon_image_t* icon_get(uint16_t id);
 

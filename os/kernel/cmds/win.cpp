@@ -18,6 +18,7 @@
 #include "../apps/demo3d_app.h"
 #include "../apps/minesweeper_app.h"
 #include "../apps/task_manager_app.h"
+#include "../time/timer.h"
 #include "../apps/tic_tac_toe_app.h"
 #include "../ethernet/net.h"
 #include "../ethernet/net_device.h"
@@ -954,11 +955,24 @@ extern "C" int cmd_launch(int argc, char** argv) {
     int resize_start_mx = 0;
     int resize_start_my = 0;
 
+    uint64_t last_icon_ms = 0;
     while (is_gui_running) {
         /* Update Apps */
         clock_app_update();
         demo3d_app_update();
         task_manager_app_update();
+
+        /* Lazy icon loading to keep UI responsive */
+        uint64_t now_ms = timer_uptime_ms();
+        if (now_ms != 0 && (now_ms - last_icon_ms) >= 50) {
+            last_icon_ms = now_ms;
+            if (icons_tick(1)) {
+                if (taskbar_ctx) {
+                    flyui_render(taskbar_ctx);
+                }
+                wm_mark_dirty();
+            }
+        }
 
         /* Update Taskbar Clock */
         datetime t;

@@ -32,7 +32,7 @@
     "installer:ahci": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 256 -smp 2 -boot order=d -cdrom ../installer/installer.iso -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std",
     "installer:log": "sh -c 'mkdir -p logs && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 1024 -smp 2 -boot order=d -cdrom ../installer/installer.iso -serial stdio -drive file=hdd.img,format=raw,if=ide -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std | tee logs/installer-$(date +%Y%m%d-%H%M%S).log'",
     "//_boot": "Boot from HDD only (no CDROM)",
-    "boot": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 256 -smp 2 -boot order=c -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std",
+    "boot": "clear && qemu-system-i386 -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0 -m 512 -smp 2 -boot order=c -serial stdio -drive file=hdd.img,format=raw,if=none,id=disk0 -device ahci,id=ahci -device ide-hd,drive=disk0,bus=ahci.0 -device piix3-usb-uhci -netdev user,id=net0 -device e1000,netdev=net0 -vga std",
     "//_installer-build": "Build OS + installer ISO",
     "create:boot-iso": "clear && npm run build && make -C ../installer clean && make -C ../installer",
     "//_tpm": "Run with software TPM (swtpm) enabled",

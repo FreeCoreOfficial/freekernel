@@ -35,40 +35,21 @@ static void button_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
     uint32_t bg = w->bg_color;
     uint32_t fg = w->fg_color;
     fly_theme_t* th = theme_get();
-    
-    /* 3D Bevel Logic */
-    uint32_t c_tl = th->color_hi_1;
-    uint32_t c_br = th->color_lo_2;
-    uint32_t c_br_inner = th->color_lo_1;
+    uint32_t border = th->color_lo_2;
+    uint32_t edge = th->color_lo_1;
 
-    if (d && d->pressed) { 
-        /* Invert bevels for pressed state */
-        c_tl = th->color_lo_2;
-        c_br = th->color_hi_1;
-        c_br_inner = th->color_lo_1;
-        /* Shift content slightly */
+    if (d && d->pressed) {
+        /* Slight inset effect */
         x += 1; y += 1;
+        bg = (bg & 0xFEFEFEFE) - 0x00101010; /* darken a bit */
     }
 
     fly_draw_rect_fill(surf, x, y, w->w, w->h, bg);
-    
-    /* Outer Border */
-    fly_draw_rect_outline(surf, x, y, w->w, w->h, 0xFF000000);
-    
-    /* Bevels */
-    /* Top & Left (Highlight) */
-    fly_draw_line(surf, x+1, y+1, x+w->w-2, y+1, c_tl);
-    fly_draw_line(surf, x+1, y+1, x+1, y+w->h-2, c_tl);
-    
-    /* Bottom & Right (Shadow) */
-    fly_draw_line(surf, x+1, y+w->h-2, x+w->w-2, y+w->h-2, c_br);
-    fly_draw_line(surf, x+w->w-2, y+1, x+w->w-2, y+w->h-2, c_br);
-    
-    /* Inner Shadow (Bottom/Right only for classic feel) */
-    if (!d || !d->pressed) {
-        fly_draw_line(surf, x+2, y+w->h-3, x+w->w-3, y+w->h-3, c_br_inner);
-        fly_draw_line(surf, x+w->w-3, y+2, x+w->w-3, y+w->h-3, c_br_inner);
-    }
+    fly_draw_rect_outline(surf, x, y, w->w, w->h, border);
+
+    /* Soft inner edge */
+    fly_draw_line(surf, x+1, y+1, x+w->w-2, y+1, edge);
+    fly_draw_line(surf, x+1, y+1, x+1, y+w->h-2, edge);
     
     /* Draw text centered */
     if (d && d->text) {
@@ -105,7 +86,7 @@ fly_widget_t* fly_button_create(const char* text) {
     }
     w->on_draw = button_draw;
     w->on_event = button_event;
-    w->bg_color = 0xFFC0C0C0; /* Classic Gray */
-    w->fg_color = 0xFF000000;
+    w->bg_color = 0xFFE7E3DB; /* warm button surface */
+    w->fg_color = theme_get()->color_text;
     return w;
 }

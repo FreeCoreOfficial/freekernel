@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include "../../terminal.h"
 #include "../../video/gpu.h"
+#include "../../drivers/mouse.h"
 #include "../flyui/draw.h"
 #include "../flyui/theme.h"
 #include "../../string.h"
@@ -377,7 +378,9 @@ void wm_render(void) {
 
     /* 5. Render */
     serial("[WM] Rendering\n");
+    mouse_blit_start();
     compositor_render_surfaces(render_list, render_count);
+    mouse_blit_end();
     
     wm_dirty = false;
     terminal_clear_dirty();

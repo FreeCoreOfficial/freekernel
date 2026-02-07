@@ -57,6 +57,11 @@ static struct {
 static icon_image_t g_bmp_icons[ICON_COUNT];
 static uint8_t g_bmp_loaded[ICON_COUNT];
 static bool g_use_bmp = false;
+static int g_bmp_cursor = 0;
+
+static icon_image_t g_placeholder_icon;
+static uint32_t g_placeholder_pixels[16 * 16];
+static bool g_placeholder_ready = false;
 
 static const char* g_icon_files[ICON_COUNT] = {
     "start.bmp",
@@ -76,6 +81,23 @@ static const char* g_icon_files[ICON_COUNT] = {
     "x0.bmp",
     "run.bmp",
 };
+
+static const icon_image_t* icon_placeholder(void) {
+    if (!g_placeholder_ready) {
+        for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+                bool border = (x == 0 || y == 0 || x == 15 || y == 15);
+                uint32_t c = border ? 0xFF3A3F45 : 0xFFD6D0C6;
+                g_placeholder_pixels[y * 16 + x] = c;
+            }
+        }
+        g_placeholder_icon.w = 16;
+        g_placeholder_icon.h = 16;
+        g_placeholder_icon.pixels = g_placeholder_pixels;
+        g_placeholder_ready = true;
+    }
+    return &g_placeholder_icon;
+}
 
 static bool load_bmp_from_mem(const uint8_t* data, size_t size, icon_image_t* out) {
     if (!data || size < 54 || !out) return false;
@@ -142,24 +164,37 @@ static bool load_bmp_from_fat(const char* path, icon_image_t* out) {
     return ok;
 }
 
-static bool try_load_bmp_icons(void) {
+static void build_fat_icon_path(char* out, size_t cap, const char* name) {
+    if (!out || cap == 0) return;
+    /* "/system/icons/<name>" */
+    out[0] = '/'; out[1] = 's'; out[2] = 'y'; out[3] = 's';
+    out[4] = 't'; out[5] = 'e'; out[6] = 'm'; out[7] = '/';
+    out[8] = 'i'; out[9] = 'c'; out[10] = 'o'; out[11] = 'n';
+    out[12] = 's'; out[13] = '/';
+    size_t i = 0;
+    while (name[i] && (14 + i) < cap - 1) {
+        out[14 + i] = name[i];
+        i++;
+    }
+    out[14 + i] = 0;
+}
+
+static bool bmp_available(void) {
+    size_t rsize = 0;
+    const void* rdata = ramfs_read_file("start.bmp", &rsize);
+    if (rdata && rsize > 0) return true;
+    if (fat32_get_file_size("/system/icons/start.bmp") > 0) return true;
+    return false;
+}
+
+static bool __attribute__((unused)) try_load_bmp_icons(void) {
     bool any = false;
     for (int i = 0; i < ICON_COUNT; i++) {
         g_bmp_loaded[i] = 0;
         g_bmp_icons[i].pixels = NULL;
         char fat_path[48];
-        /* "/system/icons/<name>" */
-        fat_path[0] = '/'; fat_path[1] = 's'; fat_path[2] = 'y'; fat_path[3] = 's';
-        fat_path[4] = 't'; fat_path[5] = 'e'; fat_path[6] = 'm'; fat_path[7] = '/';
-        fat_path[8] = 'i'; fat_path[9] = 'c'; fat_path[10] = 'o'; fat_path[11] = 'n';
-        fat_path[12] = 's'; fat_path[13] = '/';
         const char* name = g_icon_files[i];
-        int j = 0;
-        while (name[j] && (14 + j) < (int)sizeof(fat_path) - 1) {
-            fat_path[14 + j] = name[j];
-            j++;
-        }
-        fat_path[14 + j] = 0;
+        build_fat_icon_path(fat_path, sizeof(fat_path), name);
 
         /* RAMFS first: try "/<name>" */
         size_t rsize = 0;
@@ -285,11 +320,16 @@ bool icons_init(const char* path) {
     size_t file_size = 0;
     void* data = NULL;
     
-    /* 0. Try BMP icons (preferred) */
+    /* 0. Detect BMP icons (preferred) */
     fat_automount();
-    if (try_load_bmp_icons()) {
+    if (bmp_available()) {
+        for (int i = 0; i < ICON_COUNT; i++) {
+            g_bmp_loaded[i] = 0;
+            g_bmp_icons[i].pixels = NULL;
+        }
+        g_bmp_cursor = 0;
         g_use_bmp = true;
-        serial_printf("[ICONS] Loaded BMP icons.\n");
+        serial_printf("[ICONS] BMP icons available (lazy loading).\n");
         return true;
     }
 
@@ -364,8 +404,11 @@ const icon_image_t* icon_get(uint16_t id) {
     static uint16_t last_id = 0xFFFF;
     static const uint8_t* cached_rgba_src = NULL;
 
-    if (g_use_bmp && id < ICON_COUNT && g_bmp_loaded[id] && g_bmp_icons[id].pixels) {
-        return &g_bmp_icons[id];
+    if (g_use_bmp && id < ICON_COUNT) {
+        if (g_bmp_loaded[id] == 1 && g_bmp_icons[id].pixels) {
+            return &g_bmp_icons[id];
+        }
+        return icon_placeholder();
     }
 
     if (!g_icons.base) {
@@ -411,4 +454,39 @@ const icon_image_t* icon_get(uint16_t id) {
     
     serial_printf("[ICONS] Icon ID %d not found (total: %d)\n", id, g_icons.count);
     return 0;
+}
+
+bool icons_tick(int max_to_load) {
+    if (!g_use_bmp || max_to_load <= 0) return false;
+    bool did_load = false;
+    int loaded = 0;
+    int scanned = 0;
+
+    while (scanned < ICON_COUNT && loaded < max_to_load) {
+        int id = g_bmp_cursor;
+        g_bmp_cursor = (g_bmp_cursor + 1) % ICON_COUNT;
+        scanned++;
+
+        if (g_bmp_loaded[id] != 0) continue;
+
+        const char* name = g_icon_files[id];
+        size_t rsize = 0;
+        const void* rdata = ramfs_read_file(name, &rsize);
+        if (rdata && rsize > 0 && load_bmp_from_mem((const uint8_t*)rdata, rsize, &g_bmp_icons[id])) {
+            g_bmp_loaded[id] = 1;
+            did_load = true;
+        } else {
+            char fat_path[48];
+            build_fat_icon_path(fat_path, sizeof(fat_path), name);
+            if (load_bmp_from_fat(fat_path, &g_bmp_icons[id])) {
+                g_bmp_loaded[id] = 1;
+                did_load = true;
+            } else {
+                g_bmp_loaded[id] = 2;
+            }
+        }
+        loaded++;
+    }
+
+    return did_load;
 }

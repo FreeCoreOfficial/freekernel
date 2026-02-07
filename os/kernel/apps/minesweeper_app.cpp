@@ -9,6 +9,7 @@
 #define GRID_W 15
 #define GRID_H 15
 #define MINES_COUNT 30
+#define MINES_COUNT_GOD 0
 #define CELL_SIZE 20
 #define TITLE_BAR_H 24
 #define HEADER_H 30
@@ -25,6 +26,14 @@
 #define COL_MINE_BG  0xFFFF0000
 #define COL_TITLE_BG 0xFF000080
 #define COL_TITLE_FG 0xFFFFFFFF
+
+#define GOD_COL_BG       0xFFEFE7DD
+#define GOD_COL_LIGHT    0xFFFFFFFF
+#define GOD_COL_SHADOW   0xFF9DA6AE
+#define GOD_COL_TEXT     0xFF1E2429
+#define GOD_COL_REVEALED 0xFFEFE7DD
+#define GOD_COL_TITLE_BG 0xFF1F6F78
+#define GOD_COL_TITLE_FG 0xFFFDF8F0
 
 static void render_all(void);
 
@@ -50,6 +59,8 @@ static cell_t grid[GRID_W * GRID_H];
 static bool game_over = false;
 static bool game_won = false;
 static int score = 0;
+static bool god_mode = false;
+static int mines_count = MINES_COUNT;
 
 static void mine_close(window_t* win) {
     (void)win;
@@ -69,10 +80,13 @@ static void mine_on_resize(window_t* win) {
 /* --- Drawing Helpers --- */
 
 static void draw_bevel(surface_t* s, int x, int y, int w, int h, bool pressed) {
-    uint32_t top = pressed ? COL_SHADOW : COL_LIGHT;
-    uint32_t bot = pressed ? COL_LIGHT : COL_SHADOW;
-    
-    fly_draw_rect_fill(s, x, y, w, h, COL_BG);
+    uint32_t bg = god_mode ? GOD_COL_BG : COL_BG;
+    uint32_t top = pressed ? (god_mode ? GOD_COL_SHADOW : COL_SHADOW)
+                           : (god_mode ? GOD_COL_LIGHT : COL_LIGHT);
+    uint32_t bot = pressed ? (god_mode ? GOD_COL_LIGHT : COL_LIGHT)
+                           : (god_mode ? GOD_COL_SHADOW : COL_SHADOW);
+
+    fly_draw_rect_fill(s, x, y, w, h, bg);
     fly_draw_rect_fill(s, x, y, w, 1, top);
     fly_draw_rect_fill(s, x, y, 1, h, top);
     fly_draw_rect_fill(s, x + w - 1, y, 1, h, bot);
@@ -96,8 +110,10 @@ static void draw_cell(surface_t* s, int cx, int cy) {
         }
     } else {
         /* Revealed */
-        fly_draw_rect_fill(s, x, y, CELL_SIZE, CELL_SIZE, COL_BG);
-        fly_draw_rect_outline(s, x, y, CELL_SIZE, CELL_SIZE, COL_SHADOW);
+        uint32_t cell_bg = god_mode ? GOD_COL_REVEALED : COL_BG;
+        uint32_t cell_edge = god_mode ? GOD_COL_SHADOW : COL_SHADOW;
+        fly_draw_rect_fill(s, x, y, CELL_SIZE, CELL_SIZE, cell_bg);
+        fly_draw_rect_outline(s, x, y, CELL_SIZE, CELL_SIZE, cell_edge);
         
         if (c->is_mine) {
             fly_draw_rect_fill(s, x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2, COL_MINE_BG);
@@ -120,7 +136,7 @@ static void draw_face(surface_t* s) {
     int by = TITLE_BAR_H + 5;
     draw_bevel(s, bx, by, 20, 20, false);
     const char* face = game_over ? (game_won ? ":)" : "X(") : ":)";
-    fly_draw_text(s, bx + 4, by + 2, face, COL_TEXT);
+    fly_draw_text(s, bx + 4, by + 2, face, god_mode ? GOD_COL_TEXT : COL_TEXT);
 }
 
 static void draw_score(surface_t* s) {
@@ -128,9 +144,9 @@ static void draw_score(surface_t* s) {
     itoa_dec(buf, score);
     
     /* Clear score area */
-    fly_draw_rect_fill(s, 5, TITLE_BAR_H + 5, 80, 20, COL_BG);
+    fly_draw_rect_fill(s, 5, TITLE_BAR_H + 5, 80, 20, god_mode ? GOD_COL_BG : COL_BG);
     
-    fly_draw_text(s, 5, TITLE_BAR_H + 8, "Score:", COL_TEXT);
+    fly_draw_text(s, 5, TITLE_BAR_H + 8, "Score:", god_mode ? GOD_COL_TEXT : COL_TEXT);
     fly_draw_text(s, 55, TITLE_BAR_H + 8, buf, 0xFF000080);
 }
 
@@ -139,17 +155,19 @@ static void render_all() {
     surface_t* s = mine_win->surface;
     
     /* Title Bar */
-    fly_draw_rect_fill(s, 0, 0, WIN_W, TITLE_BAR_H, COL_TITLE_BG);
-    fly_draw_text(s, 5, 4, "Minesweeper", COL_TITLE_FG);
+    uint32_t title_bg = god_mode ? GOD_COL_TITLE_BG : COL_TITLE_BG;
+    uint32_t title_fg = god_mode ? GOD_COL_TITLE_FG : COL_TITLE_FG;
+    fly_draw_rect_fill(s, 0, 0, WIN_W, TITLE_BAR_H, title_bg);
+    fly_draw_text(s, 5, 4, god_mode ? "Minesweeper GOD" : "Minesweeper", title_fg);
     
     /* Close Button */
     int bx = WIN_W - 20;
-    fly_draw_rect_fill(s, bx, 4, 16, 16, COL_BG);
-    fly_draw_rect_outline(s, bx, 4, 16, 16, COL_SHADOW);
-    fly_draw_text(s, bx + 4, 4, "X", COL_TEXT);
+    fly_draw_rect_fill(s, bx, 4, 16, 16, god_mode ? GOD_COL_BG : COL_BG);
+    fly_draw_rect_outline(s, bx, 4, 16, 16, god_mode ? GOD_COL_SHADOW : COL_SHADOW);
+    fly_draw_text(s, bx + 4, 4, "X", god_mode ? GOD_COL_TEXT : COL_TEXT);
 
     /* Header */
-    fly_draw_rect_fill(s, 0, TITLE_BAR_H, WIN_W, HEADER_H, COL_BG);
+    fly_draw_rect_fill(s, 0, TITLE_BAR_H, WIN_W, HEADER_H, god_mode ? GOD_COL_BG : COL_BG);
     draw_face(s);
     draw_score(s);
     
@@ -176,12 +194,14 @@ static void init_game() {
     srand(t.second + t.minute * 60 + t.hour * 3600);
 
     /* Place Mines */
-    int mines_placed = 0;
-    while (mines_placed < MINES_COUNT) {
-        int idx = rand() % (GRID_W * GRID_H);
-        if (!grid[idx].is_mine) {
-            grid[idx].is_mine = true;
-            mines_placed++;
+    if (mines_count > 0) {
+        int mines_placed = 0;
+        while (mines_placed < mines_count) {
+            int idx = rand() % (GRID_W * GRID_H);
+            if (!grid[idx].is_mine) {
+                grid[idx].is_mine = true;
+                mines_placed++;
+            }
         }
     }
 
@@ -214,7 +234,7 @@ static void reveal(int x, int y) {
     c->revealed = true;
     score += 10; /* Points for revealing safe cell */
     
-    if (c->neighbors == 0 && !c->is_mine) {
+    if (!god_mode && c->neighbors == 0 && !c->is_mine) {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 if (dx != 0 || dy != 0) reveal(x + dx, y + dy);
@@ -228,7 +248,7 @@ static void check_win() {
     for (int i = 0; i < GRID_W * GRID_H; i++) {
         if (grid[i].revealed) revealed_count++;
     }
-    if (revealed_count == (GRID_W * GRID_H - MINES_COUNT)) {
+    if (revealed_count == (GRID_W * GRID_H - mines_count)) {
         game_over = true;
         game_won = true;
         score += 1000; /* Bonus for winning */
@@ -237,12 +257,15 @@ static void check_win() {
 
 /* --- Public API --- */
 
-void minesweeper_app_create(void) {
+static void minesweeper_create_internal(bool god) {
     if (mine_win) {
         wm_restore_window(mine_win);
         wm_focus_window(mine_win);
         return;
     }
+
+    god_mode = god;
+    mines_count = god ? MINES_COUNT_GOD : MINES_COUNT;
 
     surface_t* s = surface_create(WIN_W, WIN_H);
     if (!s) return;
@@ -252,11 +275,19 @@ void minesweeper_app_create(void) {
     /* Center on screen */
     mine_win = wm_create_window(s, 200, 200);
     if (mine_win) {
-        wm_set_title(mine_win, "Minesweeper");
+        wm_set_title(mine_win, god ? "Minesweeper GOD" : "Minesweeper");
         wm_set_on_close(mine_win, mine_close);
         wm_set_on_resize(mine_win, mine_on_resize);
     }
     render_all();
+}
+
+void minesweeper_app_create(void) {
+    minesweeper_create_internal(false);
+}
+
+void minesweeper_god_app_create(void) {
+    minesweeper_create_internal(true);
 }
 
 window_t* minesweeper_app_get_window(void) {

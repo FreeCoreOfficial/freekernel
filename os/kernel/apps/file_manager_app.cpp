@@ -8,12 +8,15 @@
 #include "app_manager.h"
 #include "notepad_app.h"
 #include "image_viewer_app.h"
+#include "../time/timer.h"
 
 static window_t* fm_win = NULL;
 static char current_path[256] = "/";
 static fat_file_info_t files[32];
 static int file_count = 0;
 static int selected_idx = -1;
+static int last_click_idx = -1;
+static uint64_t last_click_ms = 0;
 
 static void draw_fm(surface_t* s);
 
@@ -288,8 +291,12 @@ bool file_manager_app_handle_event(input_event_t* ev) {
         if (ly >= 66) {
             int idx = (ly - 66) / 20;
             if (idx >= 0 && idx < file_count) {
-                if (selected_idx == idx) {
-                    /* Double Click Simulation (Second click on same item) */
+                uint64_t now_ms = timer_uptime_ms();
+                bool is_double = (idx == last_click_idx) && (now_ms - last_click_ms) <= 350;
+                last_click_idx = idx;
+                last_click_ms = now_ms;
+
+                if (is_double) {
                     /* Open logic */
                     if (files[idx].is_dir) {
                         if (strcmp(files[idx].name, ".") == 0) { /* no-op */ }
@@ -323,6 +330,8 @@ bool file_manager_app_handle_event(input_event_t* ev) {
                             notepad_app_open(fullpath);
                         }
                     }
+                    last_click_idx = -1;
+                    last_click_ms = 0;
                 } else {
                     selected_idx = idx;
                 }
