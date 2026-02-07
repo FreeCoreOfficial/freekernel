@@ -1385,7 +1385,6 @@ extern "C" int fat32_write_file_offset(const char* path, const void* data, uint3
                 }
             }
             memset(buf, 0, 512);
-            uint32_t chunk = 512;
             if (sector_off != 0 || remaining < 512) {
                 if (disk_read_sector(cluster_lba + sector_idx, buf) != 0) {
                     kfree(sector);

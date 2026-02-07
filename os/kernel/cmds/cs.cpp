@@ -258,6 +258,8 @@ static int cs_handle_builtin(char** argv, int argc, int* out_jump) {
 }
 
 static int cs_run_script(const char* path, int argc, char** argv, int depth) {
+    (void)argc;
+    (void)argv;
     if (depth > 4) return -1;
     size_t script_size = 0;
     char* script_data = cs_read_script(path, &script_size);

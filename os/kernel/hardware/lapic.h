@@ -17,6 +17,7 @@ uint32_t lapic_get_id(void);
 
 /* Send an Inter-Processor Interrupt (IPI) */
 void lapic_send_ipi(uint8_t apic_id, uint32_t type, uint8_t vector);
+void lapic_disable(void);
 
 #ifdef __cplusplus
 }

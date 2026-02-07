@@ -130,51 +130,16 @@ static bool load_bmp_from_mem(const uint8_t* data, size_t size, icon_image_t* ou
 static bool load_bmp_from_fat(const char* path, icon_image_t* out) {
     int32_t size = fat32_get_file_size(path);
     if (size <= 0) return false;
-    uint8_t header[54];
-    if (fat32_read_file(path, header, sizeof(header)) < (int)sizeof(header)) return false;
-    BITMAPFILEHEADER* fileHeader = (BITMAPFILEHEADER*)header;
-    BITMAPINFOHEADER* infoHeader = (BITMAPINFOHEADER*)(header + sizeof(BITMAPFILEHEADER));
-    if (fileHeader->bfType != 0x4D42) return false;
-    int32_t width = infoHeader->biWidth;
-    int32_t height = infoHeader->biHeight;
-    uint16_t bpp = infoHeader->biBitCount;
-    if (width <= 0 || height == 0) return false;
-    if (bpp != 24 && bpp != 32) return false;
-
-    int absHeight = (height > 0) ? height : -height;
-    int rowSize = ((width * bpp + 31) / 32) * 4;
-    size_t pixelBytes = (size_t)width * (size_t)absHeight * 4;
-    uint8_t* pixels = (uint8_t*)kmalloc(pixelBytes);
-    if (!pixels) return false;
-
-    uint8_t* rowBuffer = (uint8_t*)kmalloc(rowSize);
-    if (!rowBuffer) { kfree(pixels); return false; }
-
-    for (int i = 0; i < absHeight; i++) {
-        uint32_t filePos = fileHeader->bfOffBits + i * rowSize;
-        if (fat32_read_file_offset(path, rowBuffer, rowSize, filePos) != rowSize) {
-            kfree(rowBuffer);
-            kfree(pixels);
-            return false;
-        }
-        int screenY = (height > 0) ? (absHeight - 1 - i) : i;
-        for (int x = 0; x < width; x++) {
-            uint8_t b = rowBuffer[x * (bpp / 8) + 0];
-            uint8_t g = rowBuffer[x * (bpp / 8) + 1];
-            uint8_t r = rowBuffer[x * (bpp / 8) + 2];
-            uint8_t a = (bpp == 32) ? rowBuffer[x * 4 + 3] : 0xFF;
-            size_t idx = ((size_t)screenY * (size_t)width + (size_t)x) * 4;
-            pixels[idx + 0] = r;
-            pixels[idx + 1] = g;
-            pixels[idx + 2] = b;
-            pixels[idx + 3] = a;
-        }
+    uint8_t* data = (uint8_t*)kmalloc((size_t)size);
+    if (!data) return false;
+    int rd = fat32_read_file(path, data, (uint32_t)size);
+    if (rd < size) {
+        kfree(data);
+        return false;
     }
-    kfree(rowBuffer);
-    out->w = (uint16_t)width;
-    out->h = (uint16_t)absHeight;
-    out->pixels = (const uint32_t*)pixels;
-    return true;
+    bool ok = load_bmp_from_mem(data, (size_t)size, out);
+    kfree(data);
+    return ok;
 }
 
 static bool try_load_bmp_icons(void) {
@@ -196,20 +161,21 @@ static bool try_load_bmp_icons(void) {
         }
         fat_path[14 + j] = 0;
 
-        if (load_bmp_from_fat(fat_path, &g_bmp_icons[i])) {
-            g_bmp_loaded[i] = 1;
-            any = true;
-            continue;
-        }
-
-        /* RAMFS fallback: try "/<name>" */
+        /* RAMFS first: try "/<name>" */
         size_t rsize = 0;
         const void* rdata = ramfs_read_file(name, &rsize);
         if (rdata && rsize > 0) {
             if (load_bmp_from_mem((const uint8_t*)rdata, rsize, &g_bmp_icons[i])) {
                 g_bmp_loaded[i] = 1;
                 any = true;
+                continue;
             }
+        }
+
+        if (load_bmp_from_fat(fat_path, &g_bmp_icons[i])) {
+            g_bmp_loaded[i] = 1;
+            any = true;
+            continue;
         }
     }
     return any;
@@ -313,6 +279,8 @@ static bool load_icons_from_parts(void** out_data, size_t* out_size) {
 }
 
 bool icons_init(const char* path) {
+    if (g_use_bmp) return true;
+    if (g_icons.count > 0 && g_icons.entries) return true;
     const void* file_data = NULL;
     size_t file_size = 0;
     void* data = NULL;

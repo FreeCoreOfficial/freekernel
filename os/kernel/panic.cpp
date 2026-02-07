@@ -26,14 +26,18 @@ static size_t strlen(const char* str) {
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
 
-// === Culori Windows XP BSOD originale ===
-#define XP_BG      1   // Albastru intens (background)
-#define XP_FG      15 // Alb (foreground)
-#define XP_ATTR    ((XP_BG << 4) | (XP_FG & 0x0F))
+// === Chrysalis Panic Palette (distinct from XP) ===
+#define CHR_BG      0   // Black
+#define CHR_FG      15  // White
+#define CHR_ACC_BG  3   // Dark cyan
+#define CHR_ACC_FG  15  // White
+#define CHR_ATTR    ((CHR_BG << 4) | (CHR_FG & 0x0F))
+#define CHR_ACC_ATTR ((CHR_ACC_BG << 4) | (CHR_ACC_FG & 0x0F))
 
 // === Framebuffer Colors (ARGB) ===
-#define FB_BLUE    0x000000AA // Albastru BSOD
-#define FB_WHITE   0x00FFFFFF // Alb
+#define FB_BG       0x0012171D // deep slate
+#define FB_TEXT     0x00F0F3F7 // near white
+#define FB_ACC      0x0028C7B7 // teal accent
 
 // === Serial debug (COM1) ===
 static void serial_print(const char* s) {
@@ -59,7 +63,10 @@ static void check_fb() {
     }
 }
 
-static void fb_draw_char(int x, int y, char c) {
+static uint32_t fb_text_color = FB_TEXT;
+static uint8_t vga_text_attr = CHR_ATTR;
+
+static void fb_draw_char_color(int x, int y, char c, uint32_t color) {
     gpu_device_t* gpu = gpu_get_primary();
     if (!gpu) return;
 
@@ -67,7 +74,7 @@ static void fb_draw_char(int x, int y, char c) {
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 8; j++) {
             if (glyph[i] & (1 << (7-j))) {
-                gpu->ops->putpixel(gpu, x + j, y + i, FB_WHITE);
+                gpu->ops->putpixel(gpu, x + j, y + i, color);
             }
         }
     }
@@ -77,11 +84,11 @@ static void fb_draw_char(int x, int y, char c) {
 static void put_char(int x, int y, char c) {
     if (use_fb) {
         // Pe FB folosim coordonate pixel (8x16 font)
-        fb_draw_char(x * 8, y * 16, c);
+        fb_draw_char_color(x * 8, y * 16, c, fb_text_color);
     } else {
         // Pe VGA folosim coordonate text
         if (x >= 0 && x < VGA_WIDTH && y >= 0 && y < VGA_HEIGHT)
-            VGA_MEM[y * VGA_WIDTH + x] = ((uint16_t)XP_ATTR << 8) | (uint8_t)c;
+            VGA_MEM[y * VGA_WIDTH + x] = ((uint16_t)vga_text_attr << 8) | (uint8_t)c;
     }
 }
 
@@ -89,6 +96,25 @@ static void put_char(int x, int y, char c) {
 static void draw_string(int x, int y, const char* s) {
     while (*s) {
         put_char(x++, y, *s++);
+    }
+}
+
+static void set_text_color(uint32_t fb_color, uint8_t vga_attr) {
+    fb_text_color = fb_color;
+    vga_text_attr = vga_attr;
+}
+
+static void fb_fill_rect(int x, int y, int w, int h, uint32_t color) {
+    gpu_device_t* gpu = gpu_get_primary();
+    if (!gpu) return;
+    if (gpu->ops && gpu->ops->fillrect) {
+        gpu->ops->fillrect(gpu, x, y, w, h, color);
+        return;
+    }
+    for (int yy = 0; yy < h; yy++) {
+        for (int xx = 0; xx < w; xx++) {
+            gpu->ops->putpixel(gpu, x + xx, y + yy, color);
+        }
     }
 }
 
@@ -100,13 +126,13 @@ static void draw_string_center(int y, const char* s) {
 }
 
 // === Umple tot ecranul cu fundal albastru + spații (autentic XP) ===
-static void clear_screen_xp() {
+static void clear_screen_chrysalis() {
     if (use_fb) {
         gpu_device_t* gpu = gpu_get_primary();
-        if (gpu) gpu->ops->clear(gpu, FB_BLUE);
+        if (gpu) gpu->ops->clear(gpu, FB_BG);
     } else {
         for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
-            VGA_MEM[i] = ((uint16_t)XP_ATTR << 8) | ' ';
+            VGA_MEM[i] = ((uint16_t)CHR_ATTR << 8) | ' ';
         }
     }
 }
@@ -142,21 +168,29 @@ static void u32_to_dec(uint32_t value, char* buf) {
 
 extern "C" void panic_render_pretty(const char* msg) {
     check_fb(); // Detectăm modul video
-    clear_screen_xp();
+    clear_screen_chrysalis();
 
-    int line = 1;  // Pornim și mai sus pentru compactitate
-    int indent = 4;  // Indentare mică la stânga (la început)
+    /* Accent header bar */
+    if (use_fb) {
+        fb_fill_rect(0, 0, (int)fb_w, 20, FB_ACC);
+        set_text_color(FB_TEXT, CHR_ATTR);
+    } else {
+        set_text_color(FB_TEXT, CHR_ACC_ATTR);
+        for (int x = 0; x < VGA_WIDTH; x++) {
+            put_char(x, 0, ' ');
+        }
+        set_text_color(FB_TEXT, CHR_ATTR);
+    }
 
-    draw_string(indent, line++, "A problem has been detected and Chrysalis has been");
-    draw_string(indent, line++, "shut down to prevent damage to your computer.");
-    line += 1;  // Spațiu mic
+    int line = 2;
+    int indent = 2;
 
-    draw_string(indent, line++, "KERNEL_SECURITY_CHECK_FAILURE");
-    line += 1;
+    draw_string(indent, line++, "Chrysalis OS - Kernel Panic");
+    line++;
 
-    // Mesaj custom dacă există, împărțit pe linii și aliniat la stânga
+    draw_string(indent, line++, "Reason:");
     if (msg && msg[0]) {
-        char buffer[76];  // Maxim 76 char/linie pentru a nu ieși
+        char buffer[76];
         const char* p = msg;
         while (*p) {
             int i = 0;
@@ -164,26 +198,32 @@ extern "C" void panic_render_pretty(const char* msg) {
                 buffer[i++] = *p++;
             }
             buffer[i] = 0;
-            draw_string(indent, line++, buffer);
+            draw_string(indent + 2, line++, buffer);
             if (*p == '\n') p++;
         }
-        line += 1;
     } else {
-        draw_string(indent, line++, "If this is the first time you've seen this error screen,");
-        draw_string(indent, line++, "restart your computer.");
-        line += 1;
+        draw_string(indent + 2, line++, "Unknown fatal error");
     }
 
-    // Instrucțiuni tehnice - aliniate la stânga, compact
-    draw_string(indent, line++, "Check to make sure any new hardware or software is properly installed.");
-    draw_string(indent, line++, "If problems continue, disable or remove newly installed hardware");
-    draw_string(indent, line++, "or software. Disable BIOS memory options such as caching or shadowing.");
-    line += 1;
+    line++;
+    draw_string(indent, line++, "System:");
+    const char* cpu = panic_sys_cpu_str();
+    draw_string(indent + 2, line, "CPU: ");
+    draw_string(indent + 7, line++, cpu ? cpu : "unknown");
 
-    // Footer
-    draw_string(indent, line++, "Force shutdown the system from the power button.");
-    draw_string(indent, line++, "Chrysalis OS - https://chrysalisos.netlify.app");
-    draw_string(indent, line++, "ChrysOS Version: 0.3");
+    char numbuf[12];
+    draw_string(indent + 2, line, "RAM: ");
+    u32_to_dec(panic_sys_total_ram_kb() / 1024, numbuf);
+    draw_string(indent + 7, line, numbuf);
+    draw_string(indent + 7 + (int)strlen(numbuf), line, " MB");
+    line++;
+
+    draw_string(indent + 2, line, "Uptime: ");
+    u32_to_dec(panic_sys_uptime_seconds(), numbuf);
+    draw_string(indent + 10, line++, numbuf);
+
+    line++;
+    draw_string(indent, line++, "Press M to reboot, or power off to halt.");
 
     // Protecție contra depășire (șterge jos dacă e cazul)
     if (!use_fb) {
@@ -228,11 +268,11 @@ extern "C" void panic_ex(const char *msg, uint32_t eip, uint32_t cs, uint32_t ef
 
     panic_render_pretty(msg);
 
-    // Loop infinit, așteaptă tasta M pentru reboot
+    // Loop infinit, așteaptă tasta M sau R pentru reboot
     for (;;) {
         if (inb(0x64) & 1) {              // key ready
             uint8_t scancode = inb(0x60);
-            if (scancode == 0x32) {      // M key make code
+            if (scancode == 0x32 || scancode == 0x13) {      // M or R
                 try_reboot();
             }
         }

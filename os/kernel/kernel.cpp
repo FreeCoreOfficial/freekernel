@@ -92,6 +92,33 @@
 #include "string.h"
 
 
+static bool g_force_pic = false;
+
+static bool cmdline_has_token(const char* cmdline, const char* tok) {
+    if (!cmdline || !tok) return false;
+    size_t tlen = strlen(tok);
+    const char* p = cmdline;
+    while (*p) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        const char* start = p;
+        while (*p && *p != ' ') p++;
+        size_t len = (size_t)(p - start);
+        if (len == tlen && strncmp(start, tok, tlen) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void parse_cmdline(const char* cmdline) {
+    if (!cmdline || !*cmdline) return;
+    if (cmdline_has_token(cmdline, "apic=off") || cmdline_has_token(cmdline, "noapic")) {
+        g_force_pic = true;
+        apic_set_forced_off(true);
+    }
+}
+
 
 // ===== TASK SUBSYSTEM FALLBACK (in-file, no external headers) =====
 //
@@ -333,6 +360,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     // Check for VirtualBox and panic if detected
     virtualbox_check_or_panic();
 
+    const char* boot_cmdline = NULL;
 
 
 
@@ -342,6 +370,11 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && addr != 0) {
         struct multiboot2_tag *tag = (struct multiboot2_tag*)(addr + 8);
         while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
+            if (tag->type == MULTIBOOT2_TAG_TYPE_CMDLINE) {
+                struct multiboot2_tag_string* cs = (struct multiboot2_tag_string*)tag;
+                boot_cmdline = cs->string;
+                parse_cmdline(boot_cmdline);
+            }
             if (tag->type == MULTIBOOT2_TAG_TYPE_BASIC_MEMINFO) {
                  struct multiboot2_tag_basic_meminfo *mem = (struct multiboot2_tag_basic_meminfo*)tag;
                  // Fallback if MMAP not present (mem_upper is in KB)
@@ -377,6 +410,10 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
         }
     } else if (magic == MULTIBOOT_MAGIC && addr != 0) {
         multiboot_info_t* mb = (multiboot_info_t*)addr;
+        if (mb->flags & (1 << 2)) {
+            boot_cmdline = (const char*)(uintptr_t)mb->cmdline;
+            parse_cmdline(boot_cmdline);
+        }
         if (mb->flags & 1) {
             total_ram_mb = (mb->mem_lower + mb->mem_upper) / 1024;
         }
@@ -679,18 +716,39 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
     /* Initialize HPET (High Precision Event Timer) */
     hpet_init();
 
-    apic_init();
+    if (g_force_pic) {
+        terminal_writestring("[kernel] apic=off: staying on PIC\n");
+    } else {
+        apic_init();
+    }
 
-    // SMP Initialization
-    if (smp_prepare_aps()) {
-        smp_detect_cpus();
-        smp_start_aps();
+    // SMP Initialization (only if APIC is active)
+    if (!g_force_pic && apic_is_active()) {
+        if (smp_prepare_aps()) {
+            smp_detect_cpus();
+            smp_start_aps();
+        }
+    } else {
+        serial("[SMP] Skipped (APIC disabled)\n");
     }
 
     // 14) Now enable interrupts: only do this after driver IRQ handlers are installed.
     // Enabling earlier risks races where an ISR runs before supporting state is ready.
     asm volatile("sti");
     serial("[KERNEL] Interrupts enabled (STI). System alive.\n");
+
+    /* If IRQs are misrouted (common when IOAPIC/ISO overrides go wrong),
+       the timer won't tick. Detect and fallback to PIC. */
+    uint64_t t0 = timer_ticks();
+    for (volatile uint32_t spin = 0; spin < 20000000; spin++) {
+        if (timer_ticks() != t0) break;
+    }
+    if (timer_ticks() == t0) {
+        serial("[KERNEL] IRQs not ticking, falling back to PIC...\n");
+        apic_disable();
+        keyboard_init();
+        mouse_init();
+    }
 
     // 20) Heap test (defensive frees)
     void* heap_a = kmalloc(64);

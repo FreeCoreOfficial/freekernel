@@ -275,6 +275,7 @@ void *block_get(int device, uint32_t sector) {
 
 /* Misc */
 void panic(const char *msg) {
+  (void)msg;
   // serial("PANIC: %s\n", msg);
   while (1)
     asm volatile("hlt");

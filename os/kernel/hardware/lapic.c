@@ -57,3 +57,8 @@ void lapic_send_ipi(uint8_t apic_id, uint32_t type, uint8_t vector) {
     // Scrie Low DWORD (Type, Vector, Level, etc.)
     lapic_write(LAPIC_ICR_LO, type | vector);
 }
+
+void lapic_disable(void) {
+    uint32_t svr = lapic_read(LAPIC_SVR);
+    lapic_write(LAPIC_SVR, svr & ~0x100); /* clear enable bit */
+}

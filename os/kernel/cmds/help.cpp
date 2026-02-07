@@ -45,6 +45,7 @@ static const help_entry_t help_entries[] = {
     { "pkg", "pkg <cmd>", "Package manager" },
     { "play", "play <file>", "Play audio (basic)" },
     { "rm", "rm <file>", "Delete file" },
+    { "reboot", "reboot", "Reboot system" },
     { "shutdown", "shutdown", "Shutdown system" },
     { "sysfetch", "sysfetch", "Show system summary" },
     { "ticks", "ticks", "Show PIT ticks" },
@@ -146,7 +147,7 @@ static void list_all_long(void) {
     }
 }
 
-static void list_all_short(void) {
+__attribute__((unused)) static void list_all_short(void) {
     for (unsigned i = 0; i < sizeof(help_entries) / sizeof(help_entries[0]); ++i) {
         print_entry_short(&help_entries[i]);
     }

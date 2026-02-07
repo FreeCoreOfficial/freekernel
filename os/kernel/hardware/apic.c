@@ -7,9 +7,18 @@
 #include "../drivers/pic.h" // For PIC disable/enable
 
 static bool apic_active = false;
+static bool apic_forced_off = false;
 
 bool apic_is_active(void) {
     return apic_active;
+}
+
+void apic_set_forced_off(bool off) {
+    apic_forced_off = off;
+}
+
+bool apic_is_forced_off(void) {
+    return apic_forced_off;
 }
 
 static void pic_disable(void) {
@@ -24,6 +33,15 @@ static void pic_enable(void) {
     outb(0x21, 0x00);
     outb(0xA1, 0x00);
     serial_printf("[apic] PIC re-enabled\n");
+}
+
+void apic_disable(void) {
+    if (!apic_active) return;
+    serial_printf("[apic] Disabling APIC, falling back to PIC\n");
+    ioapic_mask_all();
+    lapic_disable();
+    pic_enable();
+    apic_active = false;
 }
 
 void apic_init(void) {
@@ -83,9 +101,18 @@ void apic_init(void) {
     // 5. Map standard ISA IRQs (0-15) to vectors 0x20-0x2F
     // This is CRITICAL for keyboard, PIT, and other legacy devices.
     for (int i = 0; i < 16; i++) {
-        // Use overrides if present, otherwise default mapping
-        // For now, we just map them directly.
-        ioapic_enable_irq(i);
+        uint32_t gsi = (uint32_t)i;
+        uint16_t flags = 0;
+        for (int j = 0; j < apic_info.override_count; j++) {
+            if (apic_info.overrides[j].bus == 0 && apic_info.overrides[j].irq == (uint8_t)i) {
+                gsi = apic_info.overrides[j].gsi;
+                flags = apic_info.overrides[j].flags;
+                serial_printf("[apic] ISO override IRQ %d -> GSI %u (flags=0x%x)\n",
+                              i, (unsigned)gsi, flags);
+                break;
+            }
+        }
+        ioapic_enable_irq_gsi((uint8_t)i, gsi, flags);
     }
 
     apic_active = true;

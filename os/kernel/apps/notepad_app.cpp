@@ -186,6 +186,7 @@ void notepad_app_open(const char* path) {
 }
 
 static int notepad_index_from_xy(int x, int y, int w, int h) {
+    (void)h;
     if (x < 10 || y < 60) return 0;
     int col = (x - 15) / 8;
     int row = (y - 65) / 16;

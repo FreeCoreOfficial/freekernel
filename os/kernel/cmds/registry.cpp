@@ -5,7 +5,7 @@
 #include "registry.h"
 
 #include "clear.h"
-//#include "reboot.h"
+#include "reboot.h"
 #include "shutdown.h"
 #include "ls.h"
 #include "cat.h"
@@ -128,7 +128,7 @@ static int wrap_cmd_echo(int argc, char **argv)      { return wrap_old_style(cmd
 static int wrap_cmd_fortune(int argc, char **argv)   { return wrap_old_style(cmd_fortune,   argc, argv); }
 static int wrap_cmd_help(int argc, char **argv)      { return wrap_old_style(cmd_help,      argc, argv); }
 static int wrap_cmd_play(int argc, char **argv)      { return wrap_old_style(cmd_play,      argc, argv); }
-//static int wrap_cmd_reboot(int argc, char **argv)    { return wrap_old_style(cmd_reboot,    argc, argv); }
+static int wrap_cmd_reboot(int argc, char **argv)    { return wrap_old_style(cmd_reboot,    argc, argv); }
 static int wrap_cmd_shutdown(int argc, char **argv)  { return wrap_old_style(cmd_shutdown,  argc, argv); }
 static int wrap_cmd_sysfetch(int argc, char **argv)  { return wrap_old_style(cmd_sysfetch,  argc, argv); }
 static int wrap_cmd_ticks(int argc, char **argv)     { return wrap_old_style(cmd_ticks,     argc, argv); }
@@ -220,7 +220,7 @@ Command command_table[] = {
     { "pkg",       wrap_cmd_pkg },
     { "play",      wrap_cmd_play },
     { "pwd",       wrap_cmd_pwd },
-   // { "reboot",    wrap_cmd_reboot },
+    { "reboot",    wrap_cmd_reboot },
     { "rm",        wrap_cmd_rm },
     { "size",      wrap_cmd_size },
     { "sleep",     wrap_cmd_sleep },

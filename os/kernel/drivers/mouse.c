@@ -346,6 +346,10 @@ void mouse_init(void) {
     uint8_t mask = inb(0xA1);
     outb(0xA1, mask & ~(1 << 4));
 
+    /* Ensure IRQ2 (cascade) is unmasked on PIC master so slave IRQs work */
+    uint8_t mask_master = inb(0x21);
+    outb(0x21, mask_master & ~(1 << 2));
+
     serial("[MOUSE] PS/2 mouse detected and enabled\n");
 
     /* Center cursor initially */

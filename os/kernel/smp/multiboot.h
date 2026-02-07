@@ -9,6 +9,7 @@ extern "C" {
 #define MULTIBOOT2_BOOTLOADER_MAGIC 0x36d76289
 
 #define MULTIBOOT2_TAG_TYPE_END 0
+#define MULTIBOOT2_TAG_TYPE_CMDLINE 1
 #define MULTIBOOT2_TAG_TYPE_MODULE 3
 #define MULTIBOOT2_TAG_TYPE_BASIC_MEMINFO 4
 #define MULTIBOOT2_TAG_TYPE_MMAP 6
@@ -70,6 +71,11 @@ typedef struct {
 struct multiboot2_tag {
     uint32_t type;
     uint32_t size;
+} __attribute__((packed));
+
+struct multiboot2_tag_string {
+    struct multiboot2_tag common;
+    char string[0];
 } __attribute__((packed));
 
 struct multiboot2_tag_framebuffer {

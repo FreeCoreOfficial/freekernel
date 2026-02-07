@@ -27,7 +27,7 @@ static void demo_on_resize(window_t* win) {
 /* Vertices of a cube centered at 0,0,0 */
 typedef struct { int x, y, z; } vec3_t;
 
-static vec3_t cube_verts[8] = {
+static vec3_t cube_verts[8] __attribute__((unused)) = {
     {-50, -50, -50}, {50, -50, -50}, {50, 50, -50}, {-50, 50, -50},
     {-50, -50, 50}, {50, -50, 50}, {50, 50, 50}, {-50, 50, 50}
 };
@@ -128,6 +128,8 @@ void demo3d_app_update(void) {
     
     /* Center */
     int cx = 150, cy = 160;
+    (void)cx;
+    (void)cy;
     
     /* Project and Draw */
     /* Simple rotation around Y: x' = x*cos - z*sin, z' = x*sin + z*cos */

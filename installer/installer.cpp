@@ -182,6 +182,7 @@ static void build_mbr(uint8_t *mbr, const uint8_t *boot_img, uint32_t start_lba,
 }
 
 extern "C" void installer_main(uint32_t magic, uint32_t addr) {
+  (void)magic;
   serial_init();
   serial("\n\n[INSTALLER] Starting Chrysalis OS Installer...\n");
 
@@ -433,6 +434,10 @@ mod_done:
                          "set default=0\n"
                          "menuentry \"Chrysalis OS\" {\n"
                          "  multiboot2 /boot/chrysalis/kernel.bin\n"
+                         "  boot\n"
+                         "}\n"
+                         "menuentry \"Chrysalis OS (PIC Safe)\" {\n"
+                         "  multiboot2 /boot/chrysalis/kernel.bin apic=off\n"
                          "  boot\n"
                          "}\n";
   serial("[INSTALLER] Writing GRUB configuration...\n");

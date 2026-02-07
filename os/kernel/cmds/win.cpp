@@ -24,6 +24,7 @@
 #include "../include/stdio.h"
 #include "../mem/kmalloc.h"
 #include "../apps/icons/icons.h"
+#include "../hardware/apic.h"
 
 extern "C" void serial(const char *fmt, ...);
 
@@ -901,6 +902,11 @@ extern "C" int cmd_launch_exit(int argc, char** argv) {
 
 extern "C" int cmd_launch(int argc, char** argv) {
     (void)argc; (void)argv;
+
+    if (apic_is_forced_off()) {
+        terminal_writestring("GUI disabled: APIC forced off (apic=off). Use text mode.\n");
+        return 1;
+    }
     
     if (is_gui_running) {
         terminal_writestring("GUI is already running.\n");

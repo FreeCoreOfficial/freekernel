@@ -80,8 +80,8 @@ uint32_t dns_resolve(const char* domain) {
     const char* s = domain;
     while (*s) {
         const char* next = strchr(s, '.');
-        int label_len = next ? (next - s) : strlen(s);
-        *q++ = label_len;
+        size_t label_len = next ? (size_t)(next - s) : strlen(s);
+        *q++ = (uint8_t)label_len;
         memcpy(q, s, label_len);
         q += label_len;
         if (next) s = next + 1;
