@@ -421,8 +421,8 @@ extern "C" void kernel_main(uint32_t magic, uint32_t addr) {
 
     serial("[RAM] Detected: %u MB\n", (uint32_t)total_ram_mb);
 
-    if (total_ram_mb < 20) {
-        panic_if_fatal("Insufficient RAM (detected < 20 MB). Check bootloader/QEMU memory.");
+    if (total_ram_mb < 256) {
+        panic_if_fatal("Insufficient RAM (detected < 256 MB). Check bootloader/QEMU memory.");
     }
 
     // 9) Physical Memory Manager (PMM) - MOVED UP

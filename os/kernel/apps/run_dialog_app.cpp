@@ -3,6 +3,7 @@
 #include "minesweeper_app.h"
 #include "../ui/wm/wm.h"
 #include "../ui/flyui/draw.h"
+#include "../ui/flyui/theme.h"
 #include "../string.h"
 #include "../shell/shell.h"
 
@@ -46,23 +47,27 @@ static void secret_on_resize(window_t* win) {
 }
 
 static void draw_run(surface_t* s) {
-    fly_draw_rect_fill(s, 0, 0, 300, 120, 0xFFE0E0E0);
-    fly_draw_rect_fill(s, 0, 0, 300, 24, 0xFF000080);
-    fly_draw_text(s, 5, 4, "Run", 0xFFFFFFFF);
-    fly_draw_rect_fill(s, 280, 4, 16, 16, 0xFFC0C0C0);
-    fly_draw_text(s, 284, 4, "X", 0xFF000000);
+    fly_theme_t* th = theme_get();
+    fly_draw_rect_fill(s, 0, 0, 300, 120, th->win_bg);
+    uint32_t top = th->win_title_active_bg;
+    uint32_t bot = (th->win_title_active_bg & 0xFEFEFEFE) - 0x00121212;
+    fly_draw_rect_vgradient(s, 0, 0, 300, 24, top, bot);
+    fly_draw_text(s, 8, 4, "Run", th->win_title_active_fg);
+    fly_draw_rect_fill(s, 280, 4, 16, 16, 0xFFC44747);
+    fly_draw_rect_outline(s, 280, 4, 16, 16, th->color_lo_2);
+    fly_draw_text(s, 284, 4, "X", 0xFFFFFFFF);
 
-    fly_draw_text(s, 10, 35, "Type the name of a program to open:", 0xFF000000);
+    fly_draw_text(s, 10, 35, "Type the name of a program to open:", th->color_text);
     
     /* Input Box */
     fly_draw_rect_fill(s, 10, 55, 280, 20, 0xFFFFFFFF);
-    fly_draw_rect_outline(s, 10, 55, 280, 20, 0xFF000000);
-    fly_draw_text(s, 15, 57, cmd_buf, 0xFF000000);
+    fly_draw_rect_outline(s, 10, 55, 280, 20, th->color_lo_2);
+    fly_draw_text(s, 15, 57, cmd_buf, th->color_text);
 
     /* OK Button */
-    fly_draw_rect_fill(s, 200, 85, 80, 25, 0xFFC0C0C0);
-    fly_draw_rect_outline(s, 200, 85, 80, 25, 0xFF000000);
-    fly_draw_text(s, 225, 90, "Run", 0xFF000000);
+    fly_draw_rect_vgradient(s, 200, 85, 80, 25, 0xFFF7F9FC, 0xFFD7DEE7);
+    fly_draw_rect_outline(s, 200, 85, 80, 25, th->color_lo_2);
+    fly_draw_text(s, 225, 90, "Run", th->color_text);
 }
 
 static char secret_title[48];
@@ -70,16 +75,19 @@ static char secret_line1[80];
 static char secret_line2[80];
 
 static void draw_secret(surface_t* s) {
-    fly_draw_rect_fill(s, 0, 0, 320, 120, 0xFFF2EFEA);
-    fly_draw_rect_fill(s, 0, 0, 320, 24, 0xFF1F6F78);
-    fly_draw_text(s, 8, 4, secret_title, 0xFFFDF8F0);
-    fly_draw_rect_fill(s, 296, 4, 16, 16, 0xFFE7E3DB);
-    fly_draw_rect_outline(s, 296, 4, 16, 16, 0xFF3A3F45);
-    fly_draw_text(s, 300, 4, "X", 0xFF1E2429);
+    fly_theme_t* th = theme_get();
+    fly_draw_rect_fill(s, 0, 0, 320, 120, th->win_bg);
+    uint32_t top = th->win_title_active_bg;
+    uint32_t bot = (th->win_title_active_bg & 0xFEFEFEFE) - 0x00121212;
+    fly_draw_rect_vgradient(s, 0, 0, 320, 24, top, bot);
+    fly_draw_text(s, 8, 4, secret_title, th->win_title_active_fg);
+    fly_draw_rect_fill(s, 296, 4, 16, 16, 0xFFC44747);
+    fly_draw_rect_outline(s, 296, 4, 16, 16, th->color_lo_2);
+    fly_draw_text(s, 300, 4, "X", 0xFFFFFFFF);
 
-    fly_draw_text(s, 12, 42, secret_line1, 0xFF1E2429);
+    fly_draw_text(s, 12, 42, secret_line1, th->color_text);
     if (secret_line2[0]) {
-        fly_draw_text(s, 12, 62, secret_line2, 0xFF1E2429);
+        fly_draw_text(s, 12, 62, secret_line2, th->color_text);
     }
 }
 

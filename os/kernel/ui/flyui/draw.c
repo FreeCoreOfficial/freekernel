@@ -34,6 +34,42 @@ void fly_draw_rect_outline(surface_t* surf, int x, int y, int w, int h, uint32_t
     fly_draw_rect_fill(surf, x + w - 1, y, 1, h, color);
 }
 
+void fly_draw_rect_vgradient(surface_t* surf, int x, int y, int w, int h, uint32_t top, uint32_t bottom) {
+    if (!surf) return;
+    if (h <= 0 || w <= 0) return;
+
+    /* Clip */
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > (int)surf->width) w = (int)surf->width - x;
+    if (y + h > (int)surf->height) h = (int)surf->height - y;
+    if (w <= 0 || h <= 0) return;
+
+    uint8_t a1 = (top >> 24) & 0xFF;
+    uint8_t r1 = (top >> 16) & 0xFF;
+    uint8_t g1 = (top >> 8) & 0xFF;
+    uint8_t b1 = top & 0xFF;
+
+    uint8_t a2 = (bottom >> 24) & 0xFF;
+    uint8_t r2 = (bottom >> 16) & 0xFF;
+    uint8_t g2 = (bottom >> 8) & 0xFF;
+    uint8_t b2 = bottom & 0xFF;
+
+    int denom = (h > 1) ? (h - 1) : 1;
+
+    for (int j = 0; j < h; j++) {
+        int t = (j * 255) / denom;
+        uint8_t a = (uint8_t)(a1 + ((int)(a2 - a1) * t) / 255);
+        uint8_t r = (uint8_t)(r1 + ((int)(r2 - r1) * t) / 255);
+        uint8_t g = (uint8_t)(g1 + ((int)(g2 - g1) * t) / 255);
+        uint8_t b = (uint8_t)(b1 + ((int)(b2 - b1) * t) / 255);
+        uint32_t color = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+        for (int i = 0; i < w; i++) {
+            surf->pixels[(y + j) * surf->width + (x + i)] = color;
+        }
+    }
+}
+
 static void draw_char(surface_t* surf, int x, int y, char c, uint32_t color) {
     const uint8_t* glyph = &font8x16[(uint8_t)c * 16];
     for (int i = 0; i < 16; i++) {

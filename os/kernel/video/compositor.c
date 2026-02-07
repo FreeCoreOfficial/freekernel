@@ -83,7 +83,6 @@ void compositor_render_surfaces(surface_t** surfaces, int count) {
     }
     
     kfree(scanline);
-
     /* Unlock and redraw cursor on top of new frame */
     mouse_blit_end();
 }

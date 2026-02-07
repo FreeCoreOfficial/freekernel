@@ -30,7 +30,7 @@
 extern "C" void serial(const char *fmt, ...);
 
 /* Window control metrics */
-#define WM_TITLEBAR_H 24
+#define WM_TITLEBAR_H 28
 #define WM_BTN_SIZE 16
 #define WM_BTN_PAD 4
 #define WM_RESIZE_GRIP 12
@@ -46,6 +46,7 @@ static window_t* start_menu_win = NULL;
 static flyui_context_t* start_menu_ctx = NULL;
 static bool is_gui_running = false;
 static int taskbar_last_min = -1;
+static bool start_menu_just_toggled = false;
 
 #define TASKBAR_H 36
 
@@ -75,24 +76,56 @@ static void fly_draw_line(surface_t* surf, int x0, int y0, int x1, int y1, uint3
     }
 }
 
+static uint32_t shade_color(uint32_t c, int delta) {
+    int a = (c >> 24) & 0xFF;
+    int r = (c >> 16) & 0xFF;
+    int g = (c >> 8) & 0xFF;
+    int b = c & 0xFF;
+    r += delta; g += delta; b += delta;
+    if (r < 0) r = 0; if (r > 255) r = 255;
+    if (g < 0) g = 0; if (g > 255) g = 255;
+    if (b < 0) b = 0; if (b > 255) b = 255;
+    return ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+}
+
+static void start_menu_bg_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
+    (void)x; (void)y;
+    fly_theme_t* th = theme_get();
+    uint32_t top = shade_color(th->win_bg, 12);
+    uint32_t bot = shade_color(th->win_bg, -8);
+    fly_draw_rect_vgradient(surf, 0, 0, w->w, w->h, top, bot);
+    fly_draw_rect_outline(surf, 0, 0, w->w, w->h, th->color_lo_2);
+}
+
+static void start_menu_header_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
+    (void)x; (void)y;
+    fly_theme_t* th = theme_get();
+    uint32_t top = shade_color(th->win_title_active_bg, 18);
+    uint32_t bot = shade_color(th->win_title_active_bg, -14);
+    fly_draw_rect_vgradient(surf, 0, 0, w->w, w->h, top, bot);
+    fly_draw_rect_fill(surf, 0, w->h - 1, w->w, 1, shade_color(th->win_title_active_bg, -40));
+}
+
+static void start_menu_side_draw(fly_widget_t* w, surface_t* surf, int x, int y) {
+    (void)x; (void)y;
+    uint32_t top = 0xFF2E5D8A;
+    uint32_t bot = 0xFF1D3652;
+    fly_draw_rect_vgradient(surf, 0, 0, w->w, w->h, top, bot);
+}
+
 static void taskbar_btn_draw(fly_widget_t* w, surface_t* s, int x, int y) {
     icon_btn_data_t* d = (icon_btn_data_t*)w->internal_data;
     uint32_t bg = w->bg_color;
     fly_theme_t* th = theme_get();
     
-    /* Draw button background */
-    if (d && d->pressed) bg = th->color_hi_1; /* Inverted look when pressed */
-    
-    fly_draw_rect_fill(s, x, y, w->w, w->h, bg);
-    
-    /* 3D Bevel for Taskbar Buttons */
-    uint32_t c_tl = d->pressed ? th->color_lo_1 : th->color_hi_1;
-    uint32_t c_br = d->pressed ? th->color_hi_1 : th->color_lo_1;
-    
-    fly_draw_line(s, x, y, x+w->w-1, y, c_tl);
-    fly_draw_line(s, x, y, x, y+w->h-1, c_tl);
-    fly_draw_line(s, x, y+w->h-1, x+w->w-1, y+w->h-1, c_br);
-    fly_draw_line(s, x+w->w-1, y, x+w->w-1, y+w->h-1, c_br);
+    uint32_t base = bg;
+    if (d && d->pressed) base = shade_color(bg, -20);
+    uint32_t top = shade_color(base, 18);
+    uint32_t bot = shade_color(base, -18);
+    uint32_t border = th->color_lo_2;
+
+    fly_draw_rect_vgradient(s, x, y, w->w, w->h, top, bot);
+    fly_draw_rect_outline(s, x, y, w->w, w->h, border);
 
     const icon_image_t* ic = icon_get(d->icon_type);
     
@@ -688,47 +721,61 @@ static void create_start_menu() {
         wm_destroy_window(start_menu_win);
         start_menu_win = NULL;
         start_menu_ctx = NULL;
+        start_menu_just_toggled = true;
         wm_mark_dirty();
         return;
     }
 
     fly_theme_t* th = theme_get();
-    int w = 170;
-    int h = 320;
+    int w = 210;
+    int h = 340;
+    int header_h = 36;
+    int side_w = 36;
     surface_t* s = surface_create(w, h);
     if (!s) return;
-    surface_clear(s, th->win_bg);
-    
-    /* Draw 3D border */
-    fly_draw_rect_outline(s, 0, 0, w, h, th->color_hi_1);
-    fly_draw_rect_outline(s, 0, 0, w-1, h-1, th->color_lo_2);
 
     start_menu_ctx = flyui_init(s);
-    fly_widget_t* root = fly_panel_create(w, h);
+    fly_widget_t* root = fly_widget_create();
+    root->w = w;
+    root->h = h;
+    root->bg_color = th->win_bg;
+    root->on_draw = start_menu_bg_draw;
     root->bg_color = th->win_bg;
     flyui_set_root(start_menu_ctx, root);
     
+    /* Header */
+    fly_widget_t* header = fly_widget_create();
+    header->x = 0; header->y = 0; header->w = w; header->h = header_h;
+    header->on_draw = start_menu_header_draw;
+    fly_widget_add(root, header);
+
+    fly_widget_t* title = fly_label_create("Chrysalis");
+    title->x = 12; title->y = 10;
+    title->fg_color = 0xFFFFFFFF;
+    fly_widget_add(root, title);
+
     /* Side bar */
-    fly_widget_t* side = fly_panel_create(24, h-4);
-    side->x = 2; side->y = 2;
-    side->bg_color = 0xFF000080; /* Dark Blue */
+    fly_widget_t* side = fly_widget_create();
+    side->x = 0; side->y = header_h;
+    side->w = side_w; side->h = h - header_h;
+    side->on_draw = start_menu_side_draw;
     fly_widget_add(root, side);
 
-    int y = 5;
-    int bh = 25;
-    int bx = 30;
-    int bw = w - 35;
+    int y = header_h + 8;
+    int bh = 28;
+    int bx = side_w + 8;
+    int bw = w - bx - 8;
     
     /* Menu Items */
     fly_widget_t* btn;
     
-    btn = fly_button_create("Terminal"); btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = terminal_btn_event; fly_widget_add(root, btn); y += bh + 2;
-    btn = fly_button_create("Files");    btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = files_btn_event;    fly_widget_add(root, btn); y += bh + 2;
-    btn = fly_button_create("Notepad");  btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = note_btn_event;     fly_widget_add(root, btn); y += bh + 2;
-    btn = fly_button_create("Paint");    btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = paint_btn_event;    fly_widget_add(root, btn); y += bh + 2;
-    btn = fly_button_create("Calc");     btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = calc_btn_event;     fly_widget_add(root, btn); y += bh + 2;
-    btn = fly_button_create("Run...");   btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = run_btn_event;      fly_widget_add(root, btn); y += bh + 2;
-    btn = fly_button_create("X and 0");  btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = xo_btn_event;       fly_widget_add(root, btn); y += bh + 2;
+    btn = fly_button_create("Terminal"); btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = terminal_btn_event; fly_widget_add(root, btn); y += bh + 6;
+    btn = fly_button_create("Files");    btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = files_btn_event;    fly_widget_add(root, btn); y += bh + 6;
+    btn = fly_button_create("Notepad");  btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = note_btn_event;     fly_widget_add(root, btn); y += bh + 6;
+    btn = fly_button_create("Paint");    btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = paint_btn_event;    fly_widget_add(root, btn); y += bh + 6;
+    btn = fly_button_create("Calc");     btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = calc_btn_event;     fly_widget_add(root, btn); y += bh + 6;
+    btn = fly_button_create("Run...");   btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = run_btn_event;      fly_widget_add(root, btn); y += bh + 6;
+    btn = fly_button_create("X and 0");  btn->x = bx; btn->y = y; btn->w = bw; btn->h = bh; btn->on_event = xo_btn_event;       fly_widget_add(root, btn); y += bh + 6;
     
     y += 5;
     /* Separator */
@@ -748,6 +795,7 @@ static void create_start_menu() {
         wm_set_window_flags(start_menu_win, WIN_FLAG_NO_DECOR | WIN_FLAG_NO_RESIZE);
         wm_set_title(start_menu_win, "Start");
     }
+    start_menu_just_toggled = true;
 }
 
 static bool start_btn_event(fly_widget_t* w, fly_event_t* e) {
@@ -769,7 +817,7 @@ static fly_widget_t* create_taskbar_btn(int x, int y, int w, int h, int icon, bo
     d->event_cb = cb;
     
     btn->internal_data = d;
-    btn->bg_color = theme_get()->win_bg;
+    btn->bg_color = 0xFF253341; /* taskbar button base */
     btn->on_draw = taskbar_btn_draw;
     
     /* Generic Event Wrapper */
@@ -801,8 +849,10 @@ static void create_taskbar() {
     surface_t* s = surface_create(w, h);
     if (!s) return;
     
-    /* Gray background */
-    surface_clear(s, th->win_bg);
+    /* Aero-like taskbar background */
+    uint32_t tb_top = shade_color(0xFF2A3A4B, 10);
+    uint32_t tb_bot = shade_color(0xFF1D2833, -5);
+    fly_draw_rect_vgradient(s, 0, 0, w, h, tb_top, tb_bot);
     /* Top highlight line */
     fly_draw_line(s, 0, 0, w, 0, th->color_hi_1);
     /* Bottom shadow line */
@@ -813,7 +863,7 @@ static void create_taskbar() {
     
     /* 3. Create Widgets */
     fly_widget_t* root = fly_panel_create(w, h);
-    root->bg_color = th->win_bg;
+    root->bg_color = tb_bot;
     flyui_set_root(taskbar_ctx, root);
 
     int x = 6;
@@ -875,7 +925,7 @@ static void create_taskbar() {
     fly_widget_t* sys_clock = fly_panel_create(110, h);
     sys_clock->x = w - 115; /* 5px margin from right */
     sys_clock->y = 0;
-    sys_clock->bg_color = th->win_bg;
+    sys_clock->bg_color = 0xFF1D2833;
     sys_clock->on_draw = taskbar_clock_draw;
     fly_widget_add(root, sys_clock);
 
@@ -1046,28 +1096,9 @@ extern "C" int cmd_launch(int argc, char** argv) {
                                 int rel_y = ev.mouse_y - target->y;
 
                                 if (target != taskbar_win && wm_window_is_decorated(target)) {
-                                    int bw = WM_BTN_SIZE;
-                                    int pad = WM_BTN_PAD;
-                                    int bx_close = target->w - pad - bw;
-                                    int bx_max = bx_close - pad - bw;
-                                    int bx_min = bx_max - pad - bw;
-                                    int by = 4;
-
-                                    if (rel_y >= 0 && rel_y < WM_TITLEBAR_H) {
-                                        if (rel_x >= bx_close && rel_x < bx_close + bw && rel_y >= by && rel_y < by + bw) {
-                                            if (target->on_close) target->on_close(target);
-                                            else wm_destroy_window(target);
-                                            wm_mark_dirty();
-                                            continue;
-                                        }
-                                        if (rel_x >= bx_max && rel_x < bx_max + bw && rel_y >= by && rel_y < by + bw) {
-                                            wm_toggle_maximize(target);
-                                            wm_mark_dirty();
-                                            continue;
-                                        }
-                                        if (rel_x >= bx_min && rel_x < bx_min + bw && rel_y >= by && rel_y < by + bw) {
-                                            wm_minimize_window(target);
-                                            wm_mark_dirty();
+                                    int title_h = theme_get()->title_height;
+                                    if (rel_y >= 0 && rel_y < title_h) {
+                                        if (wm_chrome_handle_event(target, rel_x, rel_y, ev.pressed)) {
                                             continue;
                                         }
                                     }
@@ -1086,7 +1117,7 @@ extern "C" int cmd_launch(int argc, char** argv) {
                                 }
 
                                 /* Check for Title Bar Hit (0-24px relative to window) */
-                                if (rel_y >= 0 && rel_y < WM_TITLEBAR_H && target != taskbar_win) { /* Fix: Don't drag taskbar */
+                                if (rel_y >= 0 && rel_y < theme_get()->title_height && target != taskbar_win) { /* Fix: Don't drag taskbar */
                                     drag_win = target;
                                     drag_off_x = ev.mouse_x - target->x;
                                     drag_off_y = ev.mouse_y - target->y;
@@ -1094,6 +1125,12 @@ extern "C" int cmd_launch(int argc, char** argv) {
                             }
                         }
                     } else {
+                        window_t* chrome_target = target ? target : wm_get_focused();
+                        if (chrome_target && chrome_target != taskbar_win && wm_window_is_decorated(chrome_target)) {
+                            int rel_x = ev.mouse_x - chrome_target->x;
+                            int rel_y = ev.mouse_y - chrome_target->y;
+                            wm_chrome_handle_event(chrome_target, rel_x, rel_y, false);
+                        }
                         /* Mouse Up: Stop Dragging */
                         drag_win = NULL;
                         resize_win = NULL;
@@ -1270,6 +1307,17 @@ extern "C" int cmd_launch(int argc, char** argv) {
                     if (ev.type == INPUT_MOUSE_CLICK && ev.pressed) {
                         wm_mark_dirty();
                     }
+                }
+
+                /* Close start menu when clicking outside it */
+                if (ev.type == INPUT_MOUSE_CLICK && ev.pressed) {
+                    if (start_menu_win && !start_menu_just_toggled && target != start_menu_win) {
+                        wm_destroy_window(start_menu_win);
+                        start_menu_win = NULL;
+                        start_menu_ctx = NULL;
+                        wm_mark_dirty();
+                    }
+                    start_menu_just_toggled = false;
                 }
             }
         }
