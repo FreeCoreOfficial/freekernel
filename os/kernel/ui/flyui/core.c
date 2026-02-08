@@ -24,7 +24,7 @@ void flyui_set_root(flyui_context_t *ctx, fly_widget_t *root) {
 
 static void render_widget_recursive(fly_widget_t *w, surface_t *surf, int x_off,
                                     int y_off) {
-  if (!w)
+  if (!w || !w->visible)
     return;
 
   /* Calculate absolute position */
@@ -58,7 +58,7 @@ void flyui_render(flyui_context_t *ctx) {
 /* Hit test recursive */
 static fly_widget_t *hit_test(fly_widget_t *w, int mx, int my, int x_off,
                               int y_off) {
-  if (!w)
+  if (!w || !w->visible)
     return NULL;
 
   int abs_x = x_off + w->x;

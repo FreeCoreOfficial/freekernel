@@ -39,6 +39,7 @@ typedef struct fly_widget {
   int x, y, w, h;
   uint32_t bg_color;
   uint32_t fg_color;
+  bool visible;
 
   struct fly_widget *parent;
   struct fly_widget *first_child;

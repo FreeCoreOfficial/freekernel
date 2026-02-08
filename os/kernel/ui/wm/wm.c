@@ -151,27 +151,30 @@ static void chrome_layout(wm_chrome_t *c) {
   int btn = 16;
   int pad = 4;
   int by = (title_h - btn) / 2;
-  int bx_close = ww - pad - btn;
-  int bx_max = bx_close - pad - btn;
-  int bx_min = bx_max - pad - btn;
+  int current_bx = ww - pad - btn;
 
-  if (c->btn_min) {
-    c->btn_min->x = bx_min;
-    c->btn_min->y = by;
-    c->btn_min->w = btn;
-    c->btn_min->h = btn;
-  }
-  if (c->btn_max) {
-    c->btn_max->x = bx_max;
-    c->btn_max->y = by;
-    c->btn_max->w = btn;
-    c->btn_max->h = btn;
-  }
   if (c->btn_close) {
-    c->btn_close->x = bx_close;
+    c->btn_close->x = current_bx;
     c->btn_close->y = by;
     c->btn_close->w = btn;
     c->btn_close->h = btn;
+    current_bx -= (pad + btn);
+  }
+
+  if (c->btn_max && c->btn_max->visible) {
+    c->btn_max->x = current_bx;
+    c->btn_max->y = by;
+    c->btn_max->w = btn;
+    c->btn_max->h = btn;
+    current_bx -= (pad + btn);
+  }
+
+  if (c->btn_min && c->btn_min->visible) {
+    c->btn_min->x = current_bx;
+    c->btn_min->y = by;
+    c->btn_min->w = btn;
+    c->btn_min->h = btn;
+    current_bx -= (pad + btn);
   }
 
   c->last_w = ww;
@@ -203,17 +206,24 @@ static wm_chrome_t *wm_chrome_get(window_t *win) {
   c->btn_max = fly_button_create("[]");
   c->btn_close = fly_button_create("X");
 
+  c->btn_min->visible = (win->flags & WIN_FLAG_NO_RESIZE) == 0;
+  c->btn_max->visible = (win->flags & WIN_FLAG_NO_MAXIMIZE) == 0 &&
+                        (win->flags & WIN_FLAG_NO_RESIZE) == 0;
+
   fly_button_set_callback(c->btn_min, wm_chrome_on_min);
   fly_button_set_callback(c->btn_max, wm_chrome_on_max);
   fly_button_set_callback(c->btn_close, wm_chrome_on_close);
 
   fly_widget_add(c->root, c->title_label);
-  fly_widget_add(c->root, c->btn_min);
-  fly_widget_add(c->root, c->btn_max);
+  if (c->btn_min->visible)
+    fly_widget_add(c->root, c->btn_min);
+  if (c->btn_max->visible)
+    fly_widget_add(c->root, c->btn_max);
   fly_widget_add(c->root, c->btn_close);
 
   flyui_set_root(c->ctx, c->root);
   chrome_layout(c);
+
   win->userdata = c;
   return c;
 }
@@ -273,7 +283,7 @@ void wm_init(void) {
 
 void wm_mark_dirty(void) { wm_dirty = true; }
 
-bool wm_is_dirty(void) { return wm_dirty; }
+bool wm_is_dirty(void) { return wm_dirty || terminal_is_dirty(); }
 
 void wm_set_reserved_bottom(int pixels) {
   if (pixels < 0)
@@ -512,8 +522,8 @@ void wm_focus_window(window_t *win) {
   window_t *old = focused_window;
   focused_window = win;
 
-  /* Move focused window to front (head of list) */
-  if (win && windows_list != win) {
+  /* Move focused window to front (head of list) if not STAY_BOTTOM */
+  if (win && windows_list != win && (win->flags & WIN_FLAG_STAY_BOTTOM) == 0) {
     window_t *cur = windows_list;
     window_t *prev = NULL;
     while (cur && cur != win) {

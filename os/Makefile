@@ -198,6 +198,8 @@ OBJS = \
 	$(BUILD)/ui/flyui/widgets/label.o \
 	$(BUILD)/ui/flyui/widgets/button.o \
 	$(BUILD)/ui/flyui/widgets/panel.o \
+	$(BUILD)/ui/flyui/widgets/image.o \
+	$(BUILD)/ui/flyui/widgets/icon_button.o \
 	$(BUILD)/apps/clock_app.o \
 	$(BUILD)/apps/calculator_app.o \
 	$(BUILD)/apps/notepad_app.o \
@@ -859,6 +861,14 @@ $(BUILD)/ui/flyui/widgets/button.o: kernel/ui/flyui/widgets/button.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui/flyui/widgets/panel.o: kernel/ui/flyui/widgets/panel.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/widgets/image.o: kernel/ui/flyui/widgets/image.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui/flyui/widgets/icon_button.o: kernel/ui/flyui/widgets/icon_button.c | dirs
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

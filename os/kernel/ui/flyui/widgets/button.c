@@ -7,9 +7,9 @@
 extern void serial(const char *fmt, ...);
 
 typedef struct {
-  char *text;
-  bool pressed;
   fly_on_click_t on_click;
+  bool pressed;
+  char *text;
 } button_data_t;
 
 static uint32_t shade_color(uint32_t c, int delta) {
