@@ -6,13 +6,17 @@ extern syscall_dispatch
 section .text
 syscall_handler:
     cli
-
-    push ebx        ; arg1 (pointer la string)
-    push eax        ; syscall number
+    ; ABI: eax=num, ebx=arg1, ecx=arg2, edx=arg3, esi=arg4, edi=arg5
+    push edi
+    push esi
+    push edx
+    push ecx
+    push ebx
+    push eax
 
     call syscall_dispatch
 
-    add esp, 8
+    add esp, 24
 
     sti
     iretd

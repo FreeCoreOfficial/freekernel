@@ -1,0 +1,27 @@
+/* kernel/include/chrysalis/syscall_nums.h */
+#ifndef SYSCALL_NUMS_H
+#define SYSCALL_NUMS_H
+
+#define SYS_EXIT 0
+#define SYS_WRITE 1
+#define SYS_READ 2
+#define SYS_MALLOC 3
+#define SYS_FREE 4
+
+/* Window Manager Syscalls */
+#define SYS_WM_CREATE_WINDOW 10
+#define SYS_WM_DESTROY_WINDOW 11
+#define SYS_WM_MARK_DIRTY 12
+#define SYS_WM_SET_TITLE 13
+#define SYS_WM_GET_POS 14
+
+/* Drawing Syscalls (FlyUI Backend) */
+#define SYS_FLY_DRAW_RECT_FILL 20
+#define SYS_FLY_DRAW_TEXT 21
+#define SYS_FLY_DRAW_SURFACE 22
+
+/* Event Syscalls */
+#define SYS_GET_EVENT 30
+#define SYS_SLEEP 31
+
+#endif

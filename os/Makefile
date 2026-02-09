@@ -19,6 +19,7 @@ ISO = iso
 KERNEL = kernel.bin
 
 OBJS = \
+	$(BUILD)/user/libpetal.o \
 	build/arch/i386/multiboot2_header.o \
 	$(BUILD)/boot.o \
 	$(BUILD)/gdt_flush.o \
@@ -200,21 +201,21 @@ OBJS = \
 	$(BUILD)/ui/flyui/widgets/panel.o \
 	$(BUILD)/ui/flyui/widgets/image.o \
 	$(BUILD)/ui/flyui/widgets/icon_button.o \
-	$(BUILD)/apps/clock_app.o \
+	$(BUILD)/apps/app_manager.o \
 	$(BUILD)/apps/calculator_app.o \
-	$(BUILD)/apps/notepad_app.o \
 	$(BUILD)/apps/calendar_app.o \
+	$(BUILD)/apps/clock_app.o \
+	$(BUILD)/apps/demo3d_app.o \
 	$(BUILD)/apps/file_manager_app.o \
 	$(BUILD)/apps/image_viewer_app.o \
-	$(BUILD)/apps/sysinfo_app.o \
-	$(BUILD)/apps/run_dialog_app.o \
-	$(BUILD)/apps/task_manager_app.o \
+	$(BUILD)/apps/minesweeper_app.o \
+	$(BUILD)/apps/notepad_app.o \
 	$(BUILD)/apps/paint_app.o \
-	$(BUILD)/apps/demo3d_app.o \
+	$(BUILD)/apps/run_dialog_app.o \
+	$(BUILD)/apps/sysinfo_app.o \
+	$(BUILD)/apps/task_manager_app.o \
 	$(BUILD)/apps/tic_tac_toe_app.o \
 	$(BUILD)/apps/icons/icons.o \
-	$(BUILD)/apps/app_manager.o \
-	$(BUILD)/apps/minesweeper_app.o \
 	$(BUILD)/ethernet/net.o \
 	$(BUILD)/ethernet/net_device.o \
 	$(BUILD)/ethernet/eth.o \
@@ -263,6 +264,8 @@ dirs: $(BUILD)
 	mkdir -p ${BUILD}/ethernet/drivers
 	mkdir -p ${BUILD}/crypto
 	mkdir -p ${BUILD}/chryspkg
+	mkdir -p ${BUILD}/user
+	mkdir -p $(ISO)/system/apps
 
 
 
@@ -567,8 +570,8 @@ $(BUILD)/arch/syscall_asm.o: kernel/arch/i386/syscall.S | dirs
 $(BUILD)/arch/isr_default.o: kernel/arch/i386/isr_default.S | dirs
 	$(AS) $(ASFLAGS) $< -o $@
 
-$(BUILD)/arch/syscall_dispatch.o: kernel/arch/i386/syscall_dispatch.c | dirs
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/arch/syscall_dispatch.o: kernel/arch/i386/syscall_dispatch.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/elf.o: kernel/elf/elf.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -798,6 +801,23 @@ $(BUILD)/vt.o: kernel/vt/vt.c | dirs
 $(BUILD)/colors/cl.o: kernel/colors/cl.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# -------------------------
+# USERLAND (LibPetal & Apps)
+# -------------------------
+
+$(BUILD)/user/libpetal.o: user/libpetal/src/libpetal.c | dirs
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+PETAL_APPS_SRC = $(wildcard kernel/apps/*.cpp)
+PETAL_APPS = $(patsubst kernel/apps/%.cpp, $(ISO)/system/apps/%.petal, $(PETAL_APPS_SRC))
+
+$(ISO)/system/apps/%.petal: kernel/apps/%.cpp $(BUILD)/user/libpetal.o | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -static -nostdlib -e _start $< $(BUILD)/user/libpetal.o -o $@
+
+petal_apps: $(PETAL_APPS)
+
 $(BUILD)/surface.o: kernel/video/surface.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -872,65 +892,13 @@ $(BUILD)/ui/flyui/widgets/icon_button.o: kernel/ui/flyui/widgets/icon_button.c |
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/apps/clock_app.o: kernel/apps/clock_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/calculator_app.o: kernel/apps/calculator_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/notepad_app.o: kernel/apps/notepad_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/calendar_app.o: kernel/apps/calendar_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/file_manager_app.o: kernel/apps/file_manager_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/image_viewer_app.o: kernel/apps/image_viewer_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/sysinfo_app.o: kernel/apps/sysinfo_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/run_dialog_app.o: kernel/apps/run_dialog_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/task_manager_app.o: kernel/apps/task_manager_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/tic_tac_toe_app.o: kernel/apps/tic_tac_toe_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/minesweeper_app.o: kernel/apps/minesweeper_app.cpp | dirs
+$(BUILD)/apps/%.o: kernel/apps/%.cpp | dirs
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/apps/icons/icons.o: kernel/apps/icons/icons.c | dirs
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/apps/paint_app.o: kernel/apps/paint_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/demo3d_app.o: kernel/apps/demo3d_app.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD)/apps/app_manager.o: kernel/apps/app_manager.cpp | dirs
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/ethernet/%.o: kernel/ethernet/%.c | dirs
 	@mkdir -p $(dir $@)
