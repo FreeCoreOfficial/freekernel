@@ -58,6 +58,11 @@ void fat32_set_mounted(uint32_t lba, char letter);
 int fat32_read_directory(const char *path, fat_file_info_t *out,
                          int max_entries);
 int32_t fat32_get_file_size(const char *path);
+void terminal_clear(void);
+void terminal_putentryat(char c, uint8_t color, int x, int y);
+void terminal_putchar(char c);
+void terminal_set_color(uint8_t color);
+void terminal_printf(const char *fmt, ...);
 int fat32_create_file_alloc(const char *path, uint32_t size);
 int fat32_write_file_offset(const char *path, const void *data, uint32_t size,
                             uint32_t offset, int verify);
@@ -79,53 +84,50 @@ void ata_set_allow_mbr_write(int allow);
 
 /* Icon filenames (BMP) */
 #define ICON_COUNT 16
-static const char* g_icon_files[ICON_COUNT] = {
-    "start.bmp",
-    "term.bmp",
-    "files.bmp",
-    "img.bmp",
-    "note.bmp",
-    "paint.bmp",
-    "calc.bmp",
-    "clock.bmp",
-    "calc.bmp",
-    "task.bmp",
-    "info.bmp",
-    "3D.bmp",
-    "mine.bmp",
-    "net.bmp",
-    "x0.bmp",
-    "run.bmp",
+static const char *g_icon_files[ICON_COUNT] = {
+    "start.bmp", "term.bmp",  "files.bmp", "img.bmp",  "note.bmp", "paint.bmp",
+    "calc.bmp",  "clock.bmp", "calc.bmp",  "task.bmp", "info.bmp", "3D.bmp",
+    "mine.bmp",  "net.bmp",   "x0.bmp",    "run.bmp",
 };
 
-static void normalize_module_name_len(const char* cmdline, size_t cmdline_len, char* out, size_t out_sz) {
-  if (!out || out_sz == 0) return;
+static void normalize_module_name_len(const char *cmdline, size_t cmdline_len,
+                                      char *out, size_t out_sz) {
+  if (!out || out_sz == 0)
+    return;
   out[0] = 0;
-  if (!cmdline) return;
+  if (!cmdline)
+    return;
 
-  const char* s = cmdline;
-  const char* end = cmdline + cmdline_len;
-  while (s < end && (unsigned char)*s <= ' ') s++;
-  while (end > s && (unsigned char)end[-1] <= ' ') end--;
-  while (end > s && (unsigned char)end[-1] <= ' ') end--;
+  const char *s = cmdline;
+  const char *end = cmdline + cmdline_len;
+  while (s < end && (unsigned char)*s <= ' ')
+    s++;
+  while (end > s && (unsigned char)end[-1] <= ' ')
+    end--;
+  while (end > s && (unsigned char)end[-1] <= ' ')
+    end--;
 
-  const char* token = s;
-  for (const char* p = s; p < end; ++p) {
-    if (*p == ' ') token = p + 1;
+  const char *token = s;
+  for (const char *p = s; p < end; ++p) {
+    if (*p == ' ')
+      token = p + 1;
   }
 
   if (*token == '\'' || *token == '"') {
     char q = *token++;
-    if (end > token && end[-1] == q) end--;
+    if (end > token && end[-1] == q)
+      end--;
   }
 
-  const char* last = token;
-  for (const char* p = token; p < end; ++p) {
-    if (*p == '/') last = p + 1;
+  const char *last = token;
+  for (const char *p = token; p < end; ++p) {
+    if (*p == '/')
+      last = p + 1;
   }
 
   size_t n = (size_t)(end - last);
-  if (n >= out_sz) n = out_sz - 1;
+  if (n >= out_sz)
+    n = out_sz - 1;
   memcpy(out, last, n);
   out[n] = 0;
 }
@@ -181,93 +183,134 @@ static void build_mbr(uint8_t *mbr, const uint8_t *boot_img, uint32_t start_lba,
   mbr[511] = 0xAA;
 }
 
+/* Keyboard polling for menu */
+static uint8_t kbd_getscancode() {
+  while (!(inb(0x64) & 1))
+    ; // wait for output buffer full
+  return inb(0x60);
+}
+
+static char kbd_getchar() {
+  uint8_t scancode = kbd_getscancode();
+  if (scancode & 0x80)
+    return 0; // ignore release
+  static const char map[] = {
+      0,   27,  '1',  '2',  '3',  '4', '5', '6',  '7', '8', '9', '0',
+      '-', '=', '\b', '\t', 'q',  'w', 'e', 'r',  't', 'y', 'u', 'i',
+      'o', 'p', '[',  ']',  '\n', 0,   'a', 's',  'd', 'f', 'g', 'h',
+      'j', 'k', 'l',  ';',  '\'', '`', 0,   '\\', 'z', 'x', 'c', 'v',
+      'b', 'n', 'm',  ',',  '.',  '/', 0,   '*',  0,   ' '};
+  if (scancode < sizeof(map))
+    return map[scancode];
+  return 0;
+}
+
 extern "C" void installer_main(uint32_t magic, uint32_t addr) {
   (void)magic;
+  kmalloc_init();
+
+  terminal_set_color(0x1F); // Blue background, White text
+  terminal_clear();
+
   serial_init();
   serial("\n\n[INSTALLER] Starting Chrysalis OS Installer...\n");
+
+  /* 0. Welcome Menu */
+  terminal_set_color(0x1F);
+  terminal_clear();
+
+  // Header bar
+  terminal_set_color(0x70); // Black on Light Grey
+  for (int x = 0; x < 80; x++)
+    terminal_putentryat(' ', 0x70, x, 0);
+  terminal_printf(" Chrysalis OS Setup v1.0                                    "
+                  "       [Installer]");
+
+  terminal_set_color(0x1F);
+  terminal_printf("\n\n\n");
+  terminal_printf(
+      "    ************************************************************\n");
+  terminal_printf(
+      "    *                                                          *\n");
+  terminal_printf(
+      "    *              Welcome to Chrysalis OS Setup               *\n");
+  terminal_printf(
+      "    *                                                          *\n");
+  terminal_printf(
+      "    ************************************************************\n\n");
+
+  terminal_printf("    This program will install or upgrade Chrysalis OS on "
+                  "your computer.\n\n");
+  terminal_printf("    Please choose an option:\n\n");
+  terminal_printf(
+      "    [1] Fresh Install  - Wipes the disk and installs a new system.\n");
+  terminal_printf("    [2] Upgrade        - Keeps your files and updates "
+                  "system components.\n\n");
+  terminal_printf("\n\n\n\n\n\n\n\n\n\n\n");
+
+  // Footer bar
+  terminal_set_color(0x70);
+  for (int x = 0; x < 80; x++)
+    terminal_putentryat(' ', 0x70, x, 24);
+  terminal_printf(" [1,2] Select Option    [F3] Exit");
+
+  terminal_set_color(0x1F);
+
+  char choice = 0;
+  while (choice != '1' && choice != '2') {
+    choice = kbd_getchar();
+  }
+  serial("> Choice: %c selected.\n\n", choice);
+
+  bool upgrade_mode = (choice == '2');
+
+  // Clear for progress
+  terminal_clear();
+  terminal_set_color(0x70);
+  for (int x = 0; x < 80; x++)
+    terminal_putentryat(' ', 0x70, x, 0);
+  terminal_printf(" Chrysalis OS %s in progress...",
+                  upgrade_mode ? "Upgrade" : "Installation");
+  terminal_set_color(0x1F);
+  terminal_printf("\n\n");
 
   /* 1. Initialize Subsystems */
   kmalloc_init();
 
-    serial("[INSTALLER] initializing ATA...\n");
-    ata_init();
-    /* Keep cache flush enabled for verified writes */
-    ata_set_skip_cache_flush(0);
+  serial("[INSTALLER] Initializing ATA...\n");
+  ata_init();
+  /* Keep cache flush enabled for verified writes */
+  ata_set_skip_cache_flush(0);
 
-  /* 2. Format Target Disk (Primary Master) */
-  serial("[INSTALLER] Preparing target disk...\n");
+  /* 2. Format / Prepare Target Disk */
   ata_set_allow_mbr_write(1);
 
-  // Quick & Dirty Partitioning:
-  // 1. Get Capacity (using a fixed large size if identify fails or just assume
-  // 128MB+ for qemu) Real ata_identify returns sectors. Let's try to just
-  // assume a partition at 2048.
-
-  // Create MBR - Skipped for now, relying on raw device or pre-existing
-  // partition table for simple tests. uint8_t* mbr = (uint8_t*)kmalloc(512);
-  // ... clear ...
-  // ... write partition 1 entry at offset 446 ...
-  //   type 0x0C (FAT32 LBA)
-  //   start 2048
-  //   size = 200000 (approx 100MB dummy) or we need real size.
-  //   active = 0x80
-
-  // Actually, let's skip MBR creation for now and just format the "loop" device
-  // or assumed partition logic? OS uses partitions. If I overwrite MBR, I need
-  // to be careful. For specific task: "Standalone Installer". I will replace
-  // `disk_format_fat32(0)` with `fat32_format(0, 0, ...)` if I format FLOPPY
-  // style? No, HDD. I will use `disk_format_fat32(0)` if I assume that function
-  // DID the partitioning. Since `disk_format_fat32` is missing, I'll replace it
-  // with `fat32_format`. I'll define `fat32_format` external.
-
-  /* 2. Format Disk */
-  serial("[INSTALLER] Formatting Setup...\n");
-  // We will treat the whole disk as one FAT32 volume starting at sector 0
-  // (Superfloppy) OR partition 1. Let's go with Partition 1 at LBA 2048 for
-  // better compatibility.
   uint32_t start_lba = 2048;
   uint32_t total_sectors = disk_get_capacity();
   if (total_sectors == 0)
     total_sectors = 262144; // Default 128MB
-  if (total_sectors <= start_lba + 4096) {
-    serial("[INSTALLER] ERROR: Disk too small (%u sectors)\n", total_sectors);
-    return;
-  }
 
-  serial("[INSTALLER] Creating FAT32 Filesystem on Partition 1 (LBA %d)...\n",
-         start_lba);
-  if (fat32_format(start_lba, total_sectors - start_lba, "CHRYSALIS") != 0) {
-    serial("[INSTALLER] ERROR: Formatting failed!\n");
-    return;
-  }
-  /* Validate VBR */
-  uint8_t *vbr = (uint8_t *)kmalloc(512);
-  if (vbr) {
-    if (disk_read_sector(start_lba, vbr) != 0) {
-      serial("[INSTALLER] ERROR: VBR read failed at LBA %d\n", start_lba);
-      kfree(vbr);
+  if (!upgrade_mode) {
+    serial("[INSTALLER] Action: Formatting Partition 1 (LBA %d)...\n",
+           start_lba);
+    if (fat32_format(start_lba, total_sectors - start_lba, "CHRYSALIS") != 0) {
+      serial("[INSTALLER] ERROR: Formatting failed!\n");
       return;
     }
-    uint16_t bps = *(uint16_t *)(vbr + 11);
-    if (vbr[510] != 0x55 || vbr[511] != 0xAA || bps != 512) {
-      serial("[INSTALLER] ERROR: VBR invalid (bps=%d sig=%x%x)\n", (int)bps,
-             vbr[510], vbr[511]);
-      serial("[INSTALLER] VBR dump: %02x %02x %02x %02x %02x %02x %02x %02x "
-             "%02x %02x %02x %02x %02x %02x %02x %02x\n",
-             vbr[0], vbr[1], vbr[2], vbr[3], vbr[4], vbr[5], vbr[6], vbr[7],
-             vbr[8], vbr[9], vbr[10], vbr[11], vbr[12], vbr[13], vbr[14],
-             vbr[15]);
-      kfree(vbr);
-      return;
-    }
-    kfree(vbr);
+    serial("[INSTALLER] Format Complete.\n");
+  } else {
+    serial("[INSTALLER] Action: UPGRADE (Verifying existing Filesystem at LBA "
+           "%d)...\n",
+           start_lba);
   }
-  serial("[INSTALLER] Format Complete. Mounting FAT32...\n");
 
+  serial("[INSTALLER] Mounting FAT32...\n");
   if (fat32_init(0, start_lba) != 0) {
-    serial("[INSTALLER] mount failed at LBA %d, trying LBA 0\n", start_lba);
+    serial("[INSTALLER] Search failed at LBA %d, checking LBA 0...\n",
+           start_lba);
     if (fat32_init(0, 0) != 0) {
-      serial("[INSTALLER] ERROR: Failed to mount FAT32.\n");
+      serial("[INSTALLER] ERROR: No FAT32 filesystem found. You must use [1] "
+             "Fresh Install.\n");
       return;
     }
     fat32_set_mounted(0, 'a');
@@ -282,11 +325,9 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
     uint32_t fat_start = start_lba + bpb->reserved_sectors;
     uint32_t data_start =
         fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
-    serial("[INSTALLER] BPB: total_sectors=%u reserved=%u fats=%u spf=%u spc=%u\n",
-           bpb->total_sectors_32, bpb->reserved_sectors, bpb->fats_count,
-           bpb->sectors_per_fat_32, bpb->sectors_per_cluster);
-    serial("[INSTALLER] BPB: fat_start=%u data_start=%u\n",
-           fat_start, data_start);
+    serial(
+        "[INSTALLER] BPB: total_sectors=%u spc=%u fat_start=%u data_start=%u\n",
+        bpb->total_sectors_32, bpb->sectors_per_cluster, fat_start, data_start);
     kfree(bpb_dbg);
   } else if (bpb_dbg) {
     kfree(bpb_dbg);
@@ -299,31 +340,33 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
                          'r', 'y', 's', 'a', 'l', 'i', 's', 0};
   char grub_path[11] = {'/', 'b', 'o', 'o', 't', '/', 'g', 'r', 'u', 'b', 0};
   char system_path[8] = {'/', 's', 'y', 's', 't', 'e', 'm', 0};
-  char icons_dir[14] = {'/', 's', 'y', 's', 't', 'e', 'm', '/', 'i', 'c', 'o',
-                        'n', 's', 0};
+  char icons_dir[14] = {'/', 's', 'y', 's', 't', 'e', 'm',
+                        '/', 'i', 'c', 'o', 'n', 's', 0};
 
   int mr = fat32_create_directory_verified(boot_path, 1);
-  if (mr != 0) {
+  if (mr != 0 && !upgrade_mode) {
     serial("[INSTALLER] ERROR: mkdir /boot failed (err=%d)\n", mr);
     return;
   }
   mr = fat32_create_directory_verified(chrys_path, 1);
-  if (mr != 0) {
+  if (mr != 0 && !upgrade_mode) {
     serial("[INSTALLER] ERROR: mkdir /boot/chrysalis failed (err=%d)\n", mr);
     return;
   }
   mr = fat32_create_directory_verified(grub_path, 1);
-  if (mr != 0) {
+  if (mr != 0 && !upgrade_mode) {
     serial("[INSTALLER] ERROR: mkdir /boot/grub failed (err=%d)\n", mr);
     return;
   }
   mr = fat32_create_directory_verified(system_path, 1);
-  if (mr != 0) {
+  if (mr != 0 && !upgrade_mode) {
     serial("[INSTALLER] WARN: mkdir /system failed (err=%d), continuing\n", mr);
   }
   mr = fat32_create_directory_verified(icons_dir, 1);
-  if (mr != 0) {
-    serial("[INSTALLER] WARN: mkdir /system/icons failed (err=%d), continuing\n", mr);
+  if (mr != 0 && !upgrade_mode) {
+    serial(
+        "[INSTALLER] WARN: mkdir /system/icons failed (err=%d), continuing\n",
+        mr);
   }
 
   /* Directory listings disabled to reduce stack usage and avoid instability */
@@ -339,7 +382,7 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
   size_t icon_sizes[ICON_COUNT] = {0};
 
   /* Scan multidoob tags (parsed manually here as we need raw addresses) */
-  struct multiboot2_tag *tag = (struct multiboot2_tag *)(addr + 8);
+  struct multiboot2_tag *tag = (struct multiboot2_tag *)(uintptr_t)(addr + 8);
   while (tag->type != MULTIBOOT2_TAG_TYPE_END) {
     if (tag->type == MULTIBOOT2_TAG_TYPE_MODULE) {
       struct multiboot2_tag_module *mod = (struct multiboot2_tag_module *)tag;
@@ -368,22 +411,22 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
                m_kernel, m_boot, m_core);
 
         if (m_kernel == 0) {
-          kernel_data = (void *)mod->mod_start;
+          kernel_data = (void *)(uintptr_t)mod->mod_start;
           kernel_size = mod->mod_end - mod->mod_start;
           serial("[INSTALLER] Assigned to kernel.bin\n");
         } else if (m_boot == 0) {
-          boot_img = (void *)mod->mod_start;
+          boot_img = (void *)(uintptr_t)mod->mod_start;
           boot_img_size = mod->mod_end - mod->mod_start;
           serial("[INSTALLER] Assigned to boot.img\n");
         } else if (m_core == 0) {
-          core_img = (void *)mod->mod_start;
+          core_img = (void *)(uintptr_t)mod->mod_start;
           core_img_size = mod->mod_end - mod->mod_start;
           serial("[INSTALLER] Assigned to core.img\n");
         } else {
           /* Try BMP icons */
           for (int i = 0; i < ICON_COUNT; i++) {
             if (strcmp(mod_name, g_icon_files[i]) == 0) {
-              icon_data[i] = (void *)mod->mod_start;
+              icon_data[i] = (void *)(uintptr_t)mod->mod_start;
               icon_sizes[i] = mod->mod_end - mod->mod_start;
               serial("[INSTALLER] Assigned to %s\n", g_icon_files[i]);
               goto mod_done;
@@ -392,8 +435,7 @@ extern "C" void installer_main(uint32_t magic, uint32_t addr) {
           serial("[INSTALLER] Module '%s' did not match any expected file.\n",
                  cmdline);
         }
-mod_done:
-        ;
+      mod_done:;
       }
     }
     tag = (struct multiboot2_tag *)((uint8_t *)tag + ((tag->size + 7) & ~7));
@@ -401,8 +443,8 @@ mod_done:
 
   /* 4.1 Install GRUB boot code + core.img */
   serial("[INSTALLER] GRUB assets: boot_img=%x size=%d core_img=%x size=%d\n",
-         (uint32_t)boot_img, (int)boot_img_size, (uint32_t)core_img,
-         (int)core_img_size);
+         (uint32_t)(uintptr_t)boot_img, (int)boot_img_size,
+         (uint32_t)(uintptr_t)core_img, (int)core_img_size);
   if (!boot_img || boot_img_size < 446 || !core_img || core_img_size == 0) {
     serial(
         "[INSTALLER] ERROR: GRUB boot/core images missing in installer ISO.\n");
@@ -463,14 +505,19 @@ mod_done:
     uint32_t offset = 0;
     while (offset < kernel_size) {
       uint32_t n = kernel_size - offset;
-      if (n > chunk) n = chunk;
-      int wr = fat32_write_file_offset("/boot/chrysalis/kernel.bin", kp + offset, n, offset, 0);
+      if (n > chunk)
+        n = chunk;
+      int wr = fat32_write_file_offset("/boot/chrysalis/kernel.bin",
+                                       kp + offset, n, offset, 0);
       if (wr != 0) {
-        serial("[INSTALLER] ERROR: kernel.bin chunk write failed (off=%d err=%d)\n", (int)offset, wr);
+        serial("[INSTALLER] ERROR: kernel.bin chunk write failed (off=%d "
+               "err=%d)\n",
+               (int)offset, wr);
         return;
       }
       offset += n;
-      serial("[INSTALLER] kernel.bin progress %d/%d\n", (int)offset, (int)kernel_size);
+      serial("[INSTALLER] kernel.bin progress %d/%d\n", (int)offset,
+             (int)kernel_size);
     }
     serial("[INSTALLER] Kernel Installed OK.\n");
     int32_t ksz = fat32_get_file_size("/boot/chrysalis/kernel.bin");
@@ -488,14 +535,25 @@ mod_done:
   serial("[INSTALLER] Installing Icons (BMP)...\n");
   int icons_written = 0;
   for (int i = 0; i < ICON_COUNT; i++) {
-    if (!icon_data[i] || icon_sizes[i] == 0) continue;
+    if (!icon_data[i] || icon_sizes[i] == 0)
+      continue;
     char path[48];
     /* "/system/icons/<name>" */
-    path[0] = '/'; path[1] = 's'; path[2] = 'y'; path[3] = 's';
-    path[4] = 't'; path[5] = 'e'; path[6] = 'm'; path[7] = '/';
-    path[8] = 'i'; path[9] = 'c'; path[10] = 'o'; path[11] = 'n';
-    path[12] = 's'; path[13] = '/';
-    const char* nm = g_icon_files[i];
+    path[0] = '/';
+    path[1] = 's';
+    path[2] = 'y';
+    path[3] = 's';
+    path[4] = 't';
+    path[5] = 'e';
+    path[6] = 'm';
+    path[7] = '/';
+    path[8] = 'i';
+    path[9] = 'c';
+    path[10] = 'o';
+    path[11] = 'n';
+    path[12] = 's';
+    path[13] = '/';
+    const char *nm = g_icon_files[i];
     int j = 0;
     while (nm[j] && (14 + j) < (int)sizeof(path) - 1) {
       path[14 + j] = nm[j];
@@ -503,9 +561,10 @@ mod_done:
     }
     path[14 + j] = 0;
 
-    serial("[INSTALLER] icon %s (%d bytes) -> %s\n",
-           nm, (int)icon_sizes[i], path);
-    int r = fat32_create_file_verified(path, icon_data[i], (uint32_t)icon_sizes[i], 0);
+    serial("[INSTALLER] icon %s (%d bytes) -> %s\n", nm, (int)icon_sizes[i],
+           path);
+    int r = fat32_create_file_verified(path, icon_data[i],
+                                       (uint32_t)icon_sizes[i], 0);
     if (r != 0) {
       serial("[INSTALLER] ERROR: icon write failed (%s err=%d)\n", nm, r);
       return;
@@ -528,14 +587,107 @@ mod_done:
            c_entries[i].size);
   }
 
-  serial("\n[INSTALLER] Installation Complete. Rebooting in 5s...\n");
-  // Busy wait
-  for (volatile int i = 0; i < 50000000; i++)
-    ;
+  serial("\n[INSTALLER] Installation Complete.\n");
 
-  outb(0x64, 0xFE); // Reboot
-  while (1)
-    asm volatile("hlt");
+  /* 8. Success Screen */
+  while (true) {
+    terminal_clear();
+    terminal_set_color(0x70);
+    for (int x = 0; x < 80; x++)
+      terminal_putentryat(' ', 0x70, x, 0);
+    terminal_printf(" Chrysalis OS %s Complete                                 "
+                    "        [Success]",
+                    upgrade_mode ? "Upgrade" : "Installation");
+
+    terminal_set_color(0x1F);
+    terminal_printf("\n\n\n");
+    terminal_printf(
+        "    ************************************************************\n");
+    terminal_printf(
+        "    *                                                          *\n");
+    terminal_printf(
+        "    *             ChrysalisOS installed successfully            *\n");
+    terminal_printf(
+        "    *                                                          *\n");
+    terminal_printf(
+        "    ************************************************************\n\n");
+
+    terminal_printf("    Version  = 0.2\n");
+    terminal_printf("    Website  = https://chrysalisos.netlify.app\n\n");
+    terminal_printf(
+        "    The installation has finished. Please choose how to proceed:\n\n");
+
+    terminal_printf("    [M] Shutdown  - Safely turn off the computer.\n");
+    terminal_printf("    [R] Reboot    - Restart to boot into Chrysalis OS.\n");
+    terminal_printf(
+        "    [S] Shell     - Drop into a minimal recovery shell.\n\n");
+
+    terminal_printf("\n\n\n\n\n\n");
+
+    // Footer bar
+    terminal_set_color(0x70);
+    for (int x = 0; x < 80; x++)
+      terminal_putentryat(' ', 0x70, x, 24);
+    terminal_printf(" [M,R,S] Select Action");
+    terminal_set_color(0x1F);
+
+    bool back_to_menu = false;
+    while (!back_to_menu) {
+      char fc = kbd_getchar();
+      if (fc == 'm' || fc == 'M') {
+        serial("[INSTALLER] Shutdown requested.\n");
+        outw(0x604, 0x2000);  // QEMU
+        outw(0x4004, 0x3400); // VBox
+        outw(0xB004, 0x2000); // Bochs
+      } else if (fc == 'r' || fc == 'R') {
+        serial("[INSTALLER] Rebooting...\n");
+        outb(0x64, 0xFE);
+      } else if (fc == 's' || fc == 'S') {
+        // Simple shell placeholder
+        terminal_clear();
+        terminal_set_color(0x07);
+        terminal_printf("Chrysalis OS Installer Minimal Recovery Shell\n");
+        terminal_printf(
+            "Type 'reboot' to restart, or 'exit' to return to menu.\n\n# ");
+
+        char line[64];
+        int pos = 0;
+        bool in_shell = true;
+        while (in_shell) {
+          char c = kbd_getchar();
+          if (c == '\n') {
+            line[pos] = 0;
+            terminal_printf("\n");
+            if (pos > 0) {
+              if (strcmp(line, "reboot") == 0)
+                outb(0x64, 0xFE);
+              else if (strcmp(line, "exit") == 0)
+                in_shell = false;
+              else if (strcmp(line, "help") == 0)
+                terminal_printf(
+                    "Available commands: help, reboot, exit, version\n");
+              else if (strcmp(line, "version") == 0)
+                terminal_printf("Chrysalis OS Installer v1.0 (Kernel 0.2)\n");
+              else
+                terminal_printf("Unknown command: %s\n", line);
+            }
+            if (in_shell)
+              terminal_printf("# ");
+            pos = 0;
+          } else if (c == '\b') {
+            if (pos > 0) {
+              pos--;
+              terminal_printf("\b \b");
+            }
+          } else if (c >= 32 && pos < 63) {
+            line[pos++] = c;
+            terminal_putchar(c);
+          }
+        }
+        back_to_menu = true;
+      }
+    }
+  }
 }
 
 // String functions provided by string.cpp

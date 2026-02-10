@@ -111,6 +111,7 @@ static void chrome_root_draw(fly_widget_t *w, surface_t *surf, int x, int y) {
       c->focused ? th->win_title_active_bg : th->win_title_inactive_bg;
   uint32_t title_fg =
       c->focused ? th->win_title_active_fg : th->win_title_inactive_fg;
+  (void)title_fg;
   uint32_t top = wm_shade_color(title_bg, 24);
   uint32_t bot = wm_shade_color(title_bg, -18);
 
@@ -280,6 +281,8 @@ void wm_init(void) {
   wm_dirty = true;
   serial("[WM] Initialized\n");
 }
+
+extern bool terminal_is_dirty(void);
 
 void wm_mark_dirty(void) { wm_dirty = true; }
 

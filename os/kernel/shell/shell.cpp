@@ -55,6 +55,7 @@ static void shell_render_line() {
   char buf[SHELL_BUF_SIZE + 64];
   buf[0] = '\r';
   buf[1] = 0;
+  (void)buf; /* Planned optimization */
 
   /* Render prompt and current line content */
   terminal_putchar('\r');

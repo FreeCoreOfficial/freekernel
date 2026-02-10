@@ -1,4 +1,5 @@
 #pragma once
+#include "../fs/vfs/vfs.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -9,35 +10,36 @@ extern "C" {
 #define TASK_STACK_SIZE 4096
 
 typedef enum {
-    TASK_UNUSED = 0,
-    TASK_READY,
-    TASK_RUNNING,
-    TASK_SLEEPING,
-    TASK_ZOMBIE
+  TASK_UNUSED = 0,
+  TASK_READY,
+  TASK_RUNNING,
+  TASK_SLEEPING,
+  TASK_ZOMBIE
 } task_state_t;
 
 /* Primary task function type used by the scheduler implementation:
  * takes a single void* argument (can be NULL).
  */
-typedef void (*task_fn_t)(void* arg);
+typedef void (*task_fn_t)(void *arg);
 
 /* For convenience, also define the common no-arg form */
 typedef void (*task_fn_noarg_t)(void);
 
 typedef struct {
-    uint32_t *esp;                /* saved stack pointer (for context switch) */
-    uint8_t stack[TASK_STACK_SIZE];
-    task_state_t state;
-    uint32_t tid;
-    task_fn_t entry;
-    void* arg;
-    uint32_t ticks_remaining;     /* quantum remaining (in ticks) */
+  uint32_t *esp; /* saved stack pointer (for context switch) */
+  uint8_t stack[TASK_STACK_SIZE];
+  task_state_t state;
+  uint32_t tid;
+  task_fn_t entry;
+  void *arg;
+  uint32_t ticks_remaining; /* quantum remaining (in ticks) */
+  file_t *files[MAX_FILES_PER_PROCESS];
 } pcb_t;
 
 /* API used by scheduler (C linkage) */
 void pcb_init_all(void);
-int pcb_create(task_fn_t entry, void* arg);
-pcb_t* pcb_get_current(void);
+int pcb_create(task_fn_t entry, void *arg);
+pcb_t *pcb_get_current(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -52,13 +54,13 @@ pcb_t* pcb_get_current(void);
    provide small C++ wrappers that forward/cast to the C API.
    These wrappers are only available in C++ translation units.
 */
-inline int pcb_create(task_fn_noarg_t entry, void* arg) {
-    return pcb_create((task_fn_t)entry, arg);
+inline int pcb_create(task_fn_noarg_t entry, void *arg) {
+  return pcb_create((task_fn_t)entry, arg);
 }
 
 /* If you prefer calling without providing arg (NULL by default): */
 inline int pcb_create(task_fn_noarg_t entry) {
-    return pcb_create(entry, (void*)0);
+  return pcb_create(entry, (void *)0);
 }
 
 #endif /* __cplusplus */

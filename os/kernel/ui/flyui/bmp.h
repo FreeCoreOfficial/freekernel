@@ -7,7 +7,8 @@ extern "C" {
 
 /* Încarcă un fișier BMP de la calea specificată și îl desenează pe suprafață.
    Returnează 0 la succes, -1 la eroare. */
-int fly_load_bmp_to_surface(surface_t* surf, const char* path);
+int fly_load_bmp_to_surface(surface_t *surf, const char *path);
+surface_t *fly_load_bmp(const char *path);
 
 #ifdef __cplusplus
 }

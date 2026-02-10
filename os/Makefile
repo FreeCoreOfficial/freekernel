@@ -72,6 +72,7 @@ OBJS = \
 	$(BUILD)/fat_fs.o \
 	$(BUILD)/cmd_fat.o \
 	$(BUILD)/vfs.o \
+	$(BUILD)/vfs_extra.o \
 	$(BUILD)/ramfs.o \
 	$(BUILD)/ramfs_add.o \
 	$(BUILD)/cmd_vfs.o \
@@ -149,6 +150,7 @@ OBJS = \
 	$(BUILD)/cmds/sha256.o \
 	$(BUILD)/cmds/sleep.o \
 	$(BUILD)/cmds/which.o \
+	$(BUILD)/cmds/gcc.o \
 	$(BUILD)/cmds/size.o \
 	$(BUILD)/chryspkg/chryspkg.o \
 	$(BUILD)/hardware/pci.o \
@@ -201,6 +203,7 @@ OBJS = \
 	$(BUILD)/ui/flyui/widgets/panel.o \
 	$(BUILD)/ui/flyui/widgets/image.o \
 	$(BUILD)/ui/flyui/widgets/icon_button.o \
+	$(BUILD)/toolchain/cc.o \
 	$(BUILD)/apps/app_manager.o \
 	$(BUILD)/apps/calculator_app.o \
 	$(BUILD)/apps/calendar_app.o \
@@ -259,6 +262,7 @@ dirs: $(BUILD)
 	mkdir -p ${BUILD}/colors
 	mkdir -p $(BUILD)/ui/wm
 	mkdir -p $(BUILD)/ui/flyui
+	mkdir -p $(BUILD)/toolchain
 	mkdir -p $(BUILD)/apps
 	mkdir -p ${BUILD}/ethernet
 	mkdir -p ${BUILD}/ethernet/drivers
@@ -429,6 +433,9 @@ $(BUILD)/cmd_fat.o: kernel/cmds/fat.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/vfs.o: kernel/fs/vfs/vfs.c | dirs
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/vfs_extra.o: kernel/fs/vfs/vfs_extra.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ramfs.o: kernel/fs/ramfs/ramfs.c | dirs
@@ -672,6 +679,9 @@ $(BUILD)/cmds/which.o: kernel/cmds/which.cpp | dirs
 $(BUILD)/cmds/size.o: kernel/cmds/size.cpp | dirs
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(BUILD)/cmds/gcc.o: kernel/cmds/gcc.cpp | dirs
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(BUILD)/chryspkg/chryspkg.o: kernel/chryspkg/chryspkg.c | dirs
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -891,6 +901,10 @@ $(BUILD)/ui/flyui/widgets/image.o: kernel/ui/flyui/widgets/image.c | dirs
 $(BUILD)/ui/flyui/widgets/icon_button.o: kernel/ui/flyui/widgets/icon_button.c | dirs
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/toolchain/%.o: kernel/toolchain/%.cpp | dirs
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD)/apps/%.o: kernel/apps/%.cpp | dirs
 	@mkdir -p $(dir $@)

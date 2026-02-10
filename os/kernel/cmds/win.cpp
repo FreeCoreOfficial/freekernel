@@ -2,10 +2,13 @@
 #include "../apps/app_manager.h"
 #include "../apps/apps.h"
 #include "../apps/icons/icons.h"
+#include "../drivers/keyboard.h"
+#include "../ethernet/net.h"
 #include "../ethernet/net_device.h"
 #include "../hardware/apic.h"
 #include "../input/input.h"
 #include "../shell/shell.h"
+#include "../storage/io_sched.h"
 #include "../string.h"
 #include "../terminal.h"
 #include "../time/clock.h"
@@ -15,6 +18,7 @@
 #include "../ui/flyui/theme.h"
 #include "../ui/flyui/widgets/widgets.h"
 #include "../ui/wm/wm.h"
+#include "../usb/usb_core.h"
 #include "../video/compositor.h"
 #include "../video/gpu.h"
 
@@ -989,6 +993,12 @@ extern "C" int cmd_launch(int argc, char **argv) {
 
   uint64_t last_icon_ms = 0;
   while (is_gui_running) {
+    /* Update Subsystems (Missing Pollers) */
+    usb_poll();
+    io_sched_poll();
+    net_poll();
+    ps2_controller_watchdog();
+
     /* Update Apps */
     clock_app_update();
     demo3d_app_update();

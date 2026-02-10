@@ -253,7 +253,7 @@ void file_manager_app_create(void) {
   surface_t *s = surface_create(300, 400);
   fm_win = wm_create_window(s, 50, 50);
   if (fm_win) {
-    wm_set_title(fm_win, "File Manager");
+    wm_set_title(fm_win, "File Manager (Debug)");
     wm_set_on_close(fm_win, fm_close);
     wm_set_on_resize(fm_win, fm_on_resize);
   }

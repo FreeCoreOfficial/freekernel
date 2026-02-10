@@ -93,7 +93,8 @@ static void term_window_scroll() {
   row = total_rows - 1;
 }
 
-static void term_window_putpixel(int x, int y, uint32_t color) {
+static void __attribute__((unused)) term_window_putpixel(int x, int y,
+                                                         uint32_t color) {
   if (!term_surface)
     return;
   int px = term_x + x;

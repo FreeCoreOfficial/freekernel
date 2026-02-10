@@ -100,7 +100,8 @@ static void draw_pixel(gpu_device_t *dev, int x, int y, uint32_t color) {
   }
 }
 
-static void restore_cursor_background(gpu_device_t *dev) {
+static void __attribute__((unused))
+restore_cursor_background(gpu_device_t *dev) {
   if (!cursor_drawn)
     return;
 
@@ -114,7 +115,8 @@ static void restore_cursor_background(gpu_device_t *dev) {
   cursor_drawn = false;
 }
 
-static void save_cursor_background(gpu_device_t *dev, int mx, int my) {
+static void __attribute__((unused)) save_cursor_background(gpu_device_t *dev,
+                                                           int mx, int my) {
   for (int y = 0; y < 16; y++) {
     for (int x = 0; x < 16; x++) {
       int px = mx + x;
@@ -124,7 +126,8 @@ static void save_cursor_background(gpu_device_t *dev, int mx, int my) {
   }
 }
 
-static void draw_cursor_sprite(gpu_device_t *dev, int mx, int my) {
+static void __attribute__((unused)) draw_cursor_sprite(gpu_device_t *dev,
+                                                       int mx, int my) {
   for (int y = 0; y < 16; y++) {
     for (int x = 0; x < 16; x++) {
       uint8_t type = cursor_bitmap[y * 16 + x];
@@ -167,6 +170,8 @@ const uint8_t *mouse_get_cursor_bitmap(void) { return cursor_bitmap; }
 /* --- Interrupt Handler --- */
 void mouse_handler(registers_t *regs) {
   (void)regs;
+  extern void ps2_update_activity(void);
+  ps2_update_activity();
 
   /* Loop to handle all pending mouse packets */
   int loops = 0;

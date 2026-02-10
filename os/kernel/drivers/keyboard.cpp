@@ -54,7 +54,7 @@ static bool shift_pressed = false;
 static bool alt_pressed = false;
 static bool e0_prefix = false;
 static bool caps_lock = false;
-static uint32_t last_kbd_ms = 0;
+static uint32_t last_ps2_activity_ms = 0;
 static uint32_t last_reset_ms = 0;
 
 static void handle_scancode(uint8_t scancode) {
@@ -157,6 +157,10 @@ static void handle_scancode(uint8_t scancode) {
   }
 }
 
+extern "C" void ps2_update_activity(void) {
+  last_ps2_activity_ms = timer_uptime_ms();
+}
+
 /* Helpers pentru sincronizare PS/2 */
 static void kbd_wait_write() {
   int timeout = 100000;
@@ -178,6 +182,7 @@ static void kbd_wait_read() {
 
 extern "C" void keyboard_handler(registers_t *regs) {
   (void)regs;
+  ps2_update_activity();
 
   /* Safety limit to prevent infinite loops in ISR */
   int loops = 0;
@@ -202,7 +207,7 @@ extern "C" void keyboard_handler(registers_t *regs) {
 
     /* Read Scancode */
     uint8_t scancode = inb(PS2_DATA);
-    last_kbd_ms = timer_uptime_ms();
+    last_ps2_activity_ms = timer_uptime_ms();
 
     /* Allow PS/2 even if USB is active to avoid total input loss */
 
@@ -309,12 +314,8 @@ void ps2_controller_watchdog(void) {
     handle_scancode(scancode);
   }
 
-  /* If no keyboard scancodes seen for a while, re-init PS/2 */
-  if (!input_is_usb_keyboard_active()) {
-    if ((now - last_kbd_ms) > 5000 && (now - last_reset_ms) > 5000) {
-      serial("[PS/2] Watchdog: No scancodes, reinitializing...\n");
-      last_reset_ms = now;
-      keyboard_init();
-    }
-  }
+  /* If output buffer is full but no IRQ fired for a long time, we might need a
+     reset handled above in the watchdog_stuck_count logic.
+     The 'No scancodes' re-init was too aggressive and killed the mouse.
+     We removed it to ensure stability while only using the mouse. */
 }

@@ -7,6 +7,10 @@
 #define SYS_READ 2
 #define SYS_MALLOC 3
 #define SYS_FREE 4
+#define SYS_OPEN 5
+#define SYS_CLOSE 6
+#define SYS_STAT 7
+#define SYS_COMPILE_AND_RUN 8
 
 /* Window Manager Syscalls */
 #define SYS_WM_CREATE_WINDOW 10

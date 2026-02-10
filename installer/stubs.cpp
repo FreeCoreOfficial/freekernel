@@ -58,36 +58,61 @@ void terminal_writestring(const char *s) {
 
 void terminal_set_color(uint8_t c) { terminal_color = c; }
 
-/* Also redirect generic printf to VGA + Serial */
+void terminal_clear(void) {
+  for (int y = 0; y < VGA_HEIGHT; y++) {
+    for (int x = 0; x < VGA_WIDTH; x++) {
+      terminal_putentryat(' ', terminal_color, x, y);
+    }
+  }
+  terminal_row = 0;
+  terminal_column = 0;
+}
+
 void terminal_printf(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  // Print to serial (if needed, but serial() does that)
-  // We duplicate logic or just use a helper buffer?
-  // Simplified printf logic for VGA:
-
-  // Note: We can reuse the logic from serial() if we factor it out,
-  // or just implement a minimal one here directly.
-
   while (*fmt) {
     if (*fmt != '%') {
       terminal_putchar(*fmt++);
       continue;
     }
     fmt++;
+    // Skip length/width
+    while (*fmt == 'l' || *fmt == 'h' || *fmt == 'z' ||
+           (*fmt >= '0' && *fmt <= '9') || *fmt == '.')
+      fmt++;
+
     switch (*fmt) {
-    case 's':
-      terminal_writestring(va_arg(args, const char *));
-      break;
+    case 's': {
+      const char *s = va_arg(args, const char *);
+      terminal_writestring(s ? s : "(null)");
+    } break;
     case 'c':
       terminal_putchar((char)va_arg(args, int));
       break;
-    case 'd': {
+    case 'd':
+    case 'i': {
       int v = va_arg(args, int);
       if (v < 0) {
         terminal_putchar('-');
         v = -v;
       }
+      if (v == 0)
+        terminal_putchar('0');
+      else {
+        char buf[12];
+        int i = 0;
+        uint32_t val = (uint32_t)v;
+        while (val) {
+          buf[i++] = '0' + (val % 10);
+          val /= 10;
+        }
+        while (i--)
+          terminal_putchar(buf[i]);
+      }
+    } break;
+    case 'u': {
+      uint32_t v = va_arg(args, uint32_t);
       if (v == 0)
         terminal_putchar('0');
       else {
@@ -101,6 +126,7 @@ void terminal_printf(const char *fmt, ...) {
           terminal_putchar(buf[i]);
       }
     } break;
+    case 'p':
     case 'x': {
       uint32_t v = va_arg(args, uint32_t);
       terminal_writestring("0x");
@@ -109,15 +135,14 @@ void terminal_printf(const char *fmt, ...) {
         terminal_putchar(d < 10 ? '0' + d : 'a' + d - 10);
       }
     } break;
+    case '%':
+      terminal_putchar('%');
+      break;
     }
     fmt++;
   }
-
   va_end(args);
 }
-
-/* Wrapper for serial() expected by other modules - C Linkage */
-extern "C" {
 
 extern void serial_write(char c);
 extern void serial_write_string(const char *s);
@@ -142,6 +167,10 @@ void serial(const char *fmt, ...) {
     f1++;
     if (!*f1)
       break;
+    while (*f1 == 'l' || *f1 == 'h' || *f1 == 'z' ||
+           (*f1 >= '0' && *f1 <= '9') || *f1 == '.')
+      f1++;
+
     switch (*f1) {
     case 's': {
       const char *s = va_arg(args_serial, const char *);
@@ -204,6 +233,10 @@ void serial(const char *fmt, ...) {
     f2++;
     if (!*f2)
       break;
+    while (*f2 == 'l' || *f2 == 'h' || *f2 == 'z' ||
+           (*f2 >= '0' && *f2 <= '9') || *f2 == '.')
+      f2++;
+
     switch (*f2) {
     case 's': {
       const char *s = va_arg(args_vga, const char *);
@@ -252,32 +285,6 @@ void serial(const char *fmt, ...) {
     f2++;
   }
   va_end(args_vga);
-
   va_end(args);
-}
-
-} /* End extern "C" */
-
-/* Block Cache Stubs - We don't use cache in installer */
-/* Assuming block_get returns a buffer or something. disk_read_sector calls it?
- */
-/* Wait, disk.cpp uses block_get. We need to check its signature.
-   Likely: void* block_get(int device, uint32_t sector);
-*/
-void *block_get(int device, uint32_t sector) {
-  (void)device;
-  (void)sector;
-  return NULL;
-}
-
-/* ATA Stubs if needed */
-// void ata_set_allow_mbr_write(int allow) { (void)allow; }
-
-/* Misc */
-void panic(const char *msg) {
-  (void)msg;
-  // serial("PANIC: %s\n", msg);
-  while (1)
-    asm volatile("hlt");
 }
 }

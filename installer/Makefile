@@ -6,7 +6,7 @@ CXX = g++
 AS = nasm
 LD = ld
 
-CFLAGS = -fno-builtin -Wall -Wextra -ffreestanding -O2 -m32 -I../os/kernel/include
+CFLAGS = -fno-builtin -Wall -Wextra -ffreestanding -O2 -m32 -I../os/kernel/include -DNO_FRAMEBUFFER
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = -f elf32
 LDFLAGS = -nostdlib -m elf_i386 -T ../os/linker.ld

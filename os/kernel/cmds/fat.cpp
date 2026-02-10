@@ -1200,27 +1200,35 @@ static int fat32_create_file_impl(const char *path, const void *data,
 
   /* 1. Read BPB */
   disk_read_sector(current_lba, sector);
-  struct fat_bpb *bpb = (struct fat_bpb *)sector;
+  struct fat_bpb *bpb_ptr = (struct fat_bpb *)sector;
 
-  if (bpb->bytes_per_sector == 0) {
+  if (bpb_ptr->bytes_per_sector == 0) {
     terminal_writestring("Error: Invalid FAT32 BPB (bytes_per_sector=0).\n");
     kfree(sector);
     return -1;
   }
 
-  uint32_t fat_start = current_lba + bpb->reserved_sectors;
-  uint32_t data_start = fat_start + (bpb->fats_count * bpb->sectors_per_fat_32);
-  uint32_t root_cluster = bpb->root_cluster;
-  uint8_t spc = bpb->sectors_per_cluster;
-  uint32_t sectors_per_fat = bpb->sectors_per_fat_32;
+  /* Copy essential values before buffer is reused */
+  uint16_t b_bps = bpb_ptr->bytes_per_sector;
+  uint8_t b_spc = bpb_ptr->sectors_per_cluster;
+  uint32_t b_res = bpb_ptr->reserved_sectors;
+  uint8_t b_fats = bpb_ptr->fats_count;
+  uint32_t b_spf = bpb_ptr->sectors_per_fat_32;
+  uint32_t b_root = bpb_ptr->root_cluster;
+
+  uint32_t fat_start = current_lba + b_res;
+  uint32_t data_start = fat_start + (b_fats * b_spf);
+  uint32_t root_cluster = b_root;
+  uint8_t spc = b_spc;
+  uint32_t sectors_per_fat = b_spf;
+  uint16_t bps = b_bps;
 
   /* 2. Resolve Parent Directory */
   uint32_t parent_cluster;
   const char *fname;
   int fname_len;
-  if (resolve_parent(path, root_cluster, data_start, fat_start, spc,
-                     bpb->bytes_per_sector, &parent_cluster, &fname,
-                     &fname_len) != 0) {
+  if (resolve_parent(path, root_cluster, data_start, fat_start, spc, bps,
+                     &parent_cluster, &fname, &fname_len) != 0) {
     serial("[FAT] create_file: resolve_parent failed for %s\n", path);
     kfree(sector);
     return -1;
@@ -1250,8 +1258,8 @@ static int fat32_create_file_impl(const char *path, const void *data,
   /* Check for existing entry by long/short name */
   bool is_dir = false;
   if (find_in_cluster(parent_cluster, fname, fname_len, data_start, fat_start,
-                      spc, bpb->bytes_per_sector, &file_cluster, NULL,
-                      &entry_sector_lba, &entry_offset, &is_dir) == 0) {
+                      spc, bps, &file_cluster, NULL, &entry_sector_lba,
+                      &entry_offset, &is_dir) == 0) {
     if (is_dir) {
       kfree(sector);
       return -1;
@@ -1260,9 +1268,9 @@ static int fat32_create_file_impl(const char *path, const void *data,
   }
 
   if (!found_existing) {
-    if (!dir_find_free_run(parent_cluster, data_start, fat_start, spc,
-                           bpb->bytes_per_sector, need_entries,
-                           &entry_sector_lba, &entry_offset, &free_run_start)) {
+    if (!dir_find_free_run(parent_cluster, data_start, fat_start, spc, bps,
+                           need_entries, &entry_sector_lba, &entry_offset,
+                           &free_run_start)) {
       /* Extend directory by one cluster and retry */
       uint32_t new_cluster = 0;
       uint8_t *fatbuf = (uint8_t *)kmalloc(512);
@@ -1273,8 +1281,7 @@ static int fat32_create_file_impl(const char *path, const void *data,
       uint32_t current = parent_cluster;
       int cluster_index = 0;
       while (true) {
-        uint32_t next = fat_get_next_cluster(current, fat_start,
-                                             bpb->bytes_per_sector, fatbuf);
+        uint32_t next = fat_get_next_cluster(current, fat_start, bps, fatbuf);
         if (next >= 0x0FFFFFF8)
           break;
         current = next;
@@ -1287,10 +1294,8 @@ static int fat32_create_file_impl(const char *path, const void *data,
         kfree(sector);
         return -1;
       }
-      fat_set_next_cluster(current, new_cluster, fat_start,
-                           bpb->bytes_per_sector, fatbuf);
-      fat_set_next_cluster(new_cluster, 0x0FFFFFFF, fat_start,
-                           bpb->bytes_per_sector, fatbuf);
+      fat_set_next_cluster(current, new_cluster, fat_start, bps, fatbuf);
+      fat_set_next_cluster(new_cluster, 0x0FFFFFFF, fat_start, bps, fatbuf);
 
       /* zero new dir cluster */
       memset(sector, 0, 512);
@@ -1305,8 +1310,7 @@ static int fat32_create_file_impl(const char *path, const void *data,
       free_run_start = (cluster_index + 1) * entries_per_cluster;
       uint32_t short_idx = free_run_start + need_entries - 1;
       if (!dir_locate_entry(parent_cluster, short_idx, data_start, fat_start,
-                            spc, bpb->bytes_per_sector, &entry_sector_lba,
-                            &entry_offset)) {
+                            spc, bps, &entry_sector_lba, &entry_offset)) {
         serial("[FAT] create_file: dir_locate_entry failed\n");
         kfree(sector);
         return -1;
@@ -1319,16 +1323,14 @@ static int fat32_create_file_impl(const char *path, const void *data,
   if (found_existing && file_cluster != 0) {
     uint32_t current = file_cluster;
     while (current < 0x0FFFFFF8 && current != 0) {
-      uint32_t next = fat_get_next_cluster(current, fat_start,
-                                           bpb->bytes_per_sector, sector);
-      fat_set_next_cluster(current, 0, fat_start, bpb->bytes_per_sector,
-                           sector);
+      uint32_t next = fat_get_next_cluster(current, fat_start, bps, sector);
+      fat_set_next_cluster(current, 0, fat_start, bps, sector);
       current = next;
     }
     file_cluster = 0;
   }
 
-  uint32_t cluster_bytes = spc * bpb->bytes_per_sector;
+  uint32_t cluster_bytes = spc * bps;
   uint32_t need_clusters = (size + cluster_bytes - 1) / cluster_bytes;
   if (need_clusters == 0)
     need_clusters = 1;
@@ -1354,24 +1356,21 @@ static int fat32_create_file_impl(const char *path, const void *data,
       /* free allocated chain */
       uint32_t cur = file_cluster;
       while (cur < 0x0FFFFFF8 && cur != 0) {
-        uint32_t nxt =
-            fat_get_next_cluster(cur, fat_start, bpb->bytes_per_sector, sector);
-        fat_set_next_cluster(cur, 0, fat_start, bpb->bytes_per_sector, sector);
+        uint32_t nxt = fat_get_next_cluster(cur, fat_start, bps, sector);
+        fat_set_next_cluster(cur, 0, fat_start, bps, sector);
         cur = nxt;
       }
       kfree(sector);
       return -2;
     }
-    fat_set_next_cluster(current_cluster, next_cluster, fat_start,
-                         bpb->bytes_per_sector, sector);
+    fat_set_next_cluster(current_cluster, next_cluster, fat_start, bps, sector);
     current_cluster = next_cluster;
     if ((i % 512) == 0) {
       serial("[FAT] create_file: allocated %d/%d clusters\n", (int)i,
              (int)need_clusters);
     }
   }
-  fat_set_next_cluster(current_cluster, 0x0FFFFFFF, fat_start,
-                       bpb->bytes_per_sector, sector);
+  fat_set_next_cluster(current_cluster, 0x0FFFFFFF, fat_start, bps, sector);
 
   /* Prepare short name */
   if (found_existing) {
@@ -1386,7 +1385,7 @@ static int fat32_create_file_impl(const char *path, const void *data,
       while (suffix <= 9999) {
         make_short_alias(name_buf, short_name, suffix);
         if (!short_name_exists_in_dir(parent_cluster, data_start, fat_start,
-                                      spc, bpb->bytes_per_sector, short_name))
+                                      spc, bps, short_name))
           break;
         suffix++;
       }
@@ -1468,8 +1467,7 @@ static int fat32_create_file_impl(const char *path, const void *data,
     }
     if (written >= size)
       break;
-    data_cluster = fat_get_next_cluster(data_cluster, fat_start,
-                                        bpb->bytes_per_sector, sector);
+    data_cluster = fat_get_next_cluster(data_cluster, fat_start, bps, sector);
     clusters_written++;
     if (clusters_written > need_clusters + 2) {
       serial("[FAT] create_file: cluster chain too long\n");
@@ -1507,8 +1505,7 @@ static int fat32_create_file_impl(const char *path, const void *data,
       uint32_t lfn_sector;
       uint32_t lfn_offset;
       if (!dir_locate_entry(parent_cluster, entry_idx, data_start, fat_start,
-                            spc, bpb->bytes_per_sector, &lfn_sector,
-                            &lfn_offset)) {
+                            spc, bps, &lfn_sector, &lfn_offset)) {
         serial("[FAT] create_file: dir_locate_entry failed for LFN\n");
         kfree(sector);
         return -1;
